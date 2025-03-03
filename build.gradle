@@ -1,0 +1,74 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+    
+    // Removed toolchain requirement to use current Java version
+    // with compatibility settings
+}
+
+application {
+    mainClass = 'AppletLauncher'
+}
+
+jar {
+    manifest {
+        attributes(
+            'Main-Class': 'AppletLauncher',
+            'Permissions': 'all-permissions',
+            'Application-Name': 'vNES'
+        )
+    }
+    
+    from {
+        configurations.runtimeClasspath.collect { 
+            it.isDirectory() ? it : zipTree(it) 
+        }
+    }
+}
+
+task runApplet(type: Exec) {
+    dependsOn jar
+    description = 'Runs the applet using appletviewer'
+    
+    doFirst {
+        println "Attempting to run applet with appletviewer..."
+        println "If this fails, you can manually run: appletviewer -J-Djava.security.policy=all.policy build/applet.html"
+        println "Or use a Java 8 compatible browser with the applet plugin enabled."
+    }
+    
+    // Try to use appletviewer if available
+    executable 'sh'
+    args '-c', 'command -v appletviewer >/dev/null 2>&1 && appletviewer -J-Djava.security.policy=all.policy build/applet.html || echo "appletviewer not found. Please install Java 8 JDK or use a compatible browser."'
+    
+    // Ignore failures so the build doesn't fail if appletviewer is not available
+    ignoreExitValue = true
+}
+
+task createAppletHtml {
+    dependsOn jar
+    doLast {
+        def jarPath = jar.archiveFile.get().asFile.absolutePath
+        def htmlContent = """
+<html>
+<head>
+<title>vNES - NES Emulator</title>
+</head>
+<body>
+<applet code="vNES.class" archive="${jarPath}" width="512" height="480">
+Your browser does not support Java applets.
+</applet>
+</body>
+</html>
+"""
+        file('build/applet.html').text = htmlContent
+        println "Created applet HTML file at: build/applet.html"
+        println "You can run it with: appletviewer -J-Djava.security.policy=all.policy build/applet.html"
+    }
+}
+
+runApplet.finalizedBy createAppletHtml

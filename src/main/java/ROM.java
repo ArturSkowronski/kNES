@@ -180,6 +180,7 @@ public class ROM {
     public void load(String fileName) {
 
         this.fileName = fileName;
+        System.out.println(fileName);
         FileLoader loader = new FileLoader();
         short[] b = loader.loadFile(fileName, nes.getGui());
 
