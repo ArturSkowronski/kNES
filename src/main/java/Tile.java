@@ -223,7 +223,7 @@ public class Tile {
 
             for (int y = 0; y < 8; y++) {
                 for (int x = 0; x < 8; x++) {
-                    fWriter.write(Misc.hex8(pix[(y << 3) + x]).substring(1));
+                    fWriter.write(vnes.Misc.hex8(pix[(y << 3) + x]).substring(1));
                 }
                 fWriter.write("\r\n");
             }

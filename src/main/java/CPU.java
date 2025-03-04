@@ -1260,7 +1260,7 @@ public final class CPU implements Runnable{
 					if(!crash){
 						crash = true;
 						stopRunning = true;
-						nes.gui.showErrorMsg("Game crashed, invalid opcode at address $"+Misc.hex16(opaddr));
+						nes.gui.showErrorMsg("Game crashed, invalid opcode at address $"+vnes.Misc.hex16(opaddr));
 					}
 					break;
 
