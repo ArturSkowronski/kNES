@@ -1,8 +1,15 @@
+/*
+ * kNES - A Kotlin NES fork of vNES emulator
+ * Copyright (C) 2025 Artur Skowronski
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
 package vnes
 
-/**
- * Kotlin implementation of the Misc utility class
- */
 object Misc {
     @JvmField
     var debug: Boolean = true // Hardcoded for simplicity
