@@ -18,9 +18,8 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import java.awt.*;
 
-import BufferView;
-import HiResTimer;
-import InputHandler;
+import vnes.HiResTimer;
+import vnes.InputHandler;
 
 /**
  * Legacy UI interface that extends the platform-agnostic NESUICore.
