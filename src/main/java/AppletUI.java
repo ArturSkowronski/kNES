@@ -15,33 +15,63 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-public class AppletUI implements UI {
+import java.awt.Point;
 
-    vNES applet;
-    NES nes;
-    KbInputHandler kbJoy1;
-    KbInputHandler kbJoy2;
-    ScreenView vScreen;
-    HiResTimer timer;
-    long t1, t2;
-    int sleepTime;
+import vnes.ui.AbstractNESUI;
+import vnes.ui.BufferViewAdapter;
+import vnes.ui.DisplayBuffer;
+import vnes.ui.UI;
 
+/**
+ * AWT-specific implementation of the UI interface.
+ * This class extends AbstractNESUI to provide common functionality
+ * and implements the UI interface for backward compatibility.
+ */
+public class AppletUI extends AbstractNESUI implements UI {
+
+    private vNES applet;
+    private KbInputHandler kbJoy1;
+    private KbInputHandler kbJoy2;
+    private ScreenView vScreen;
+    private BufferViewAdapter screenAdapter;
+    private HiResTimer timer;
+    private long t1, t2;
+    private int sleepTime;
+
+    /**
+     * Create a new AppletUI for the specified applet.
+     * 
+     * @param applet The vNES applet
+     */
     public AppletUI(vNES applet) {
-
+        super(null); // We'll set the NES instance later
+        
         timer = new HiResTimer();
         this.applet = applet;
+        
+        // Create the NES instance with this UI
         nes = new NES(this);
     }
 
+    @Override
     public void init(boolean showGui) {
-
+        // Create the screen view
         vScreen = new ScreenView(nes, 256, 240);
         vScreen.setBgColor(applet.bgColor.getRGB());
         vScreen.init();
         vScreen.setNotifyImageReady(true);
-
+        
+        // Create the buffer adapter
+        screenAdapter = new BufferViewAdapter(vScreen);
+        displayBuffer = screenAdapter;
+        
+        // Create the input handlers
         kbJoy1 = new KbInputHandler(nes, 0);
         kbJoy2 = new KbInputHandler(nes, 1);
+        
+        // Set the input handlers
+        inputHandlers[0] = kbJoy1;
+        inputHandlers[1] = kbJoy2;
 
         // Grab Controller Setting for Player 1:
         kbJoy1.mapKey(InputHandler.KEY_A, (Integer) Globals.keycodes.get(Globals.controls.get("p1_a")));
@@ -65,13 +95,17 @@ public class AppletUI implements UI {
         kbJoy2.mapKey(InputHandler.KEY_RIGHT, (Integer) Globals.keycodes.get(Globals.controls.get("p2_right")));
         vScreen.addKeyListener(kbJoy2);
     }
+    
+    @Override
+    public void initDisplay(int width, int height) {
+        init(true);
+    }
 
+    @Override
     public void imageReady(boolean skipFrame) {
-
         // Sound stuff:
         int tmp = nes.getPapu().bufferIndex;
         if (Globals.enableSound && Globals.timeEmulation && tmp > 0) {
-
             int min_avail = nes.getPapu().line.getBufferSize() - 4 * tmp;
 
             long timeToSleep = nes.papu.getMillisToAvailableAbove(min_avail);
@@ -83,22 +117,18 @@ public class AppletUI implements UI {
             } while ((timeToSleep = nes.papu.getMillisToAvailableAbove(min_avail)) > 0);
 
             nes.getPapu().writeBuffer();
-
         }
 
         // Sleep a bit if sound is disabled:
         if (Globals.timeEmulation && !Globals.enableSound) {
-
             sleepTime = Globals.frameTime;
             if ((t2 = timer.currentMicros()) - t1 < sleepTime) {
                 timer.sleepMicros(sleepTime - (t2 - t1));
             }
-
         }
 
         // Update timer:
         t1 = t2;
-
     }
 
     public int getRomFileSize() {
@@ -115,89 +145,100 @@ public class AppletUI implements UI {
 
     }
 
+    @Override
     public void destroy() {
-
-        if (vScreen != null) {
-            vScreen.destroy();
-        }
-        if (kbJoy1 != null) {
-            kbJoy1.destroy();
-        }
-        if (kbJoy2 != null) {
-            kbJoy2.destroy();
-        }
-
-        nes = null;
+        // Call the parent destroy method
+        super.destroy();
+        
+        // Clean up additional resources
         applet = null;
-        kbJoy1 = null;
-        kbJoy2 = null;
         vScreen = null;
+        screenAdapter = null;
         timer = null;
-
     }
 
-    public NES getNES() {
-        return nes;
-    }
-
+    @Override
     public InputHandler getJoy1() {
         return kbJoy1;
     }
 
+    @Override
     public InputHandler getJoy2() {
         return kbJoy2;
     }
 
+    @Override
     public BufferView getScreenView() {
         return vScreen;
     }
 
+    @Override
     public BufferView getPatternView() {
         return null;
     }
 
+    @Override
     public BufferView getSprPalView() {
         return null;
     }
 
+    @Override
     public BufferView getNameTableView() {
         return null;
     }
 
+    @Override
     public BufferView getImgPalView() {
         return null;
     }
 
+    @Override
     public HiResTimer getTimer() {
         return timer;
     }
 
+    @Override
     public String getWindowCaption() {
         return "";
     }
 
+    @Override
     public void setWindowCaption(String s) {
+        // Not implemented for applet
     }
 
+    @Override
     public void setTitle(String s) {
+        // Not implemented for applet
     }
 
-    public java.awt.Point getLocation() {
-        return new java.awt.Point(0, 0);
+    @Override
+    public Point getLocation() {
+        return new Point(0, 0);
     }
 
+    @Override
     public int getWidth() {
         return applet.getWidth();
     }
 
+    @Override
     public int getHeight() {
         return applet.getHeight();
     }
 
+    @Override
     public void println(String s) {
+        // Not implemented for applet
     }
 
+    @Override
     public void showErrorMsg(String msg) {
         System.out.println(msg);
+    }
+    
+    @Override
+    public DisplayBuffer getDisplayBuffer() {
+        return screenAdapter;
     }
 }

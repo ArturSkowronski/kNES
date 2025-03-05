@@ -15,9 +15,11 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import vnes.ui.UI;
+
 public class NES {
 
-    public AppletUI gui;
+    public UI gui;
     public CPU cpu;
     public PPU ppu;
     public PAPU papu;
@@ -32,7 +34,7 @@ public class NES {
     boolean isRunning = false;
 
     // Creates the NES system.
-    public NES(AppletUI gui) {
+    public NES(UI gui) {
 
         Globals.nes = this;
         this.gui = gui;
