@@ -40,13 +40,13 @@ java {
 }
 
 application {
-    mainClass = 'AppletLauncher'
+    mainClass = 'vnes.AppletLauncher'
 }
 
 jar {
     manifest {
         attributes(
-            'Main-Class': 'AppletLauncher',
+            'Main-Class': 'vnes.AppletLauncher',
             'Permissions': 'all-permissions',
             'Application-Name': 'vNES'
         )
