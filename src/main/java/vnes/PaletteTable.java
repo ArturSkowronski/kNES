@@ -30,11 +30,13 @@ public class PaletteTable {
 
     // Load the NTSC palette:
     public boolean loadNTSCPalette() {
+        System.out.println("PaletteTable: Loading NTSC Palette.");
         return loadPalette("palettes/ntsc.txt");
     }
 
     // Load the PAL palette:
     public boolean loadPALPalette() {
+        System.out.println("PaletteTable: Loading PAL Palette.");
         return loadPalette("palettes/pal.txt");
     }
 
@@ -48,7 +50,7 @@ public class PaletteTable {
             if (file.toLowerCase().endsWith("pal")) {
 
                 // Read binary palette file.
-                InputStream fStr = getClass().getResourceAsStream(file);
+                InputStream fStr = getClass().getResourceAsStream("/" + file);
                 byte[] tmp = new byte[64 * 3];
 
                 int n = 0;
@@ -70,10 +72,10 @@ public class PaletteTable {
 
             } else {
 
-                // Read text file with hex codes.
-                InputStream fStr = getClass().getResourceAsStream(file);
-                InputStreamReader isr = new InputStreamReader(fStr);
-                BufferedReader br = new BufferedReader(isr);
+            // Read text file with hex codes.
+            InputStream fStr = getClass().getResourceAsStream("/" + file);
+            InputStreamReader isr = new InputStreamReader(fStr);
+            BufferedReader br = new BufferedReader(isr);
 
                 String line = br.readLine();
                 String hexR, hexG, hexB;
@@ -105,6 +107,7 @@ public class PaletteTable {
             return true;
 
         } catch (Exception e) {
+            System.out.println(e.getStackTrace().toString());
 
             // Unable to load palette.
             System.out.println("PaletteTable: Internal Palette Loaded.");
