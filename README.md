@@ -1,5 +1,9 @@
 # vNES - NES Emulator
 
+[![Java CI](https://github.com/USER_NAME/REPO_NAME/actions/workflows/build.yml/badge.svg)](https://github.com/USER_NAME/REPO_NAME/actions/workflows/build.yml)
+
+> Note: Replace USER_NAME/REPO_NAME with your actual GitHub username and repository name to make the badge work.
+
 ## Building with Gradle
 
 This project uses Gradle to build and run the NES emulator as a Java applet.
@@ -70,6 +74,17 @@ To use the emulator, you need to provide NES ROM files:
      // In AppletStubImpl constructor
      parameters.put("ROM", "your-rom-filename.nes");
      ```
+
+### Continuous Integration
+
+This project uses GitHub Actions for continuous integration. The workflow:
+
+- Runs on every push and pull request
+- Builds the project with Gradle
+- Runs tests to verify functionality
+- Uses Java 8 (JDK 1.8) for compatibility
+
+You can see the build status at the top of this README.
 
 ### Notes
 
