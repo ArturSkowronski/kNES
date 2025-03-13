@@ -22,6 +22,8 @@ emulator. During emulation, this is run in a loop that decodes and executes
 instructions and invokes emulation of the PPU and pAPU.
 */
 
+import vnes.mappers.MemoryMapper;
+
 public final class CPU implements Runnable{
 
 
