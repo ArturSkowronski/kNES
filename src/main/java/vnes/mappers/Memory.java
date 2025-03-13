@@ -1,4 +1,7 @@
-package vnes;
+package vnes.mappers;
+
+import vnes.ByteBuffer;
+import vnes.NES;
 
 import java.io.*;
 
