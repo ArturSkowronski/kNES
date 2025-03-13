@@ -394,96 +394,96 @@ public class ROM {
                 case 0: {
                     return new MapperDefault();
                 }
-                case 1: {
-                    return new Mapper001();
-                }
-                case 2: {
-                    return new Mapper002();
-                }
-                case 3: {
-                    return new Mapper003();
-                }
-                case 4: {
-                    return new Mapper004();
-                }
-                case 7: {
-                    return new Mapper007();
-                }
-                case 9: {
-                    return new Mapper009();
-                }
-                case 10: {
-                    return new Mapper010();
-                }
-                case 11: {
-                    return new Mapper011();
-                }
-                case 15: {
-                    return new Mapper015();
-                }
-                case 18: {
-                    return new Mapper018();
-                }
-                case 21: {
-                    return new Mapper021();
-                }
-                case 22: {
-                    return new Mapper022();
-                }
-                case 23: {
-                    return new Mapper023();
-                }
-                case 32: {
-                    return new Mapper032();
-                }
-                case 33: {
-                    return new Mapper033();
-                }
-                case 34: {
-                    return new Mapper034();
-                }
-                case 48: {
-                    return new Mapper048();
-                }
-                case 64: {
-                    return new Mapper064();
-                }
-                case 66: {
-                    return new Mapper066();
-                }
-                case 68: {
-                    return new Mapper068();
-                }
-                case 71: {
-                    return new Mapper071();
-                }
-                case 72: {
-                    return new Mapper072();
-                }
-                case 75: {
-                    return new Mapper075();
-                }
-                case 78: {
-                    return new Mapper078();
-                }
-                case 79: {
-                    return new Mapper079();
-                }
-                case 87: {
-                    return new Mapper087();
-                }
-                case 94: {
-                    return new Mapper094();
-                }
-                case 105: {
-                    return new Mapper105();
-                }
-                case 140: {
-                    return new Mapper140();
-                }
-                case 182: {
-                    return new Mapper182();
-                }
+//                case 1: {
+//                    return new Mapper001();
+//                }
+//                case 2: {
+//                    return new Mapper002();
+//                }
+//                case 3: {
+//                    return new Mapper003();
+//                }
+//                case 4: {
+//                    return new Mapper004();
+//                }
+//                case 7: {
+//                    return new Mapper007();
+//                }
+//                case 9: {
+//                    return new Mapper009();
+//                }
+//                case 10: {
+//                    return new Mapper010();
+//                }
+//                case 11: {
+//                    return new Mapper011();
+//                }
+//                case 15: {
+//                    return new Mapper015();
+//                }
+//                case 18: {
+//                    return new Mapper018();
+//                }
+//                case 21: {
+//                    return new Mapper021();
+//                }
+//                case 22: {
+//                    return new Mapper022();
+//                }
+//                case 23: {
+//                    return new Mapper023();
+//                }
+//                case 32: {
+//                    return new Mapper032();
+//                }
+//                case 33: {
+//                    return new Mapper033();
+//                }
+//                case 34: {
+//                    return new Mapper034();
+//                }
+//                case 48: {
+//                    return new Mapper048();
+//                }
+//                case 64: {
+//                    return new Mapper064();
+//                }
+//                case 66: {
+//                    return new Mapper066();
+//                }
+//                case 68: {
+//                    return new Mapper068();
+//                }
+//                case 71: {
+//                    return new Mapper071();
+//                }
+//                case 72: {
+//                    return new Mapper072();
+//                }
+//                case 75: {
+//                    return new Mapper075();
+//                }
+//                case 78: {
+//                    return new Mapper078();
+//                }
+//                case 79: {
+//                    return new Mapper079();
+//                }
+//                case 87: {
+//                    return new Mapper087();
+//                }
+//                case 94: {
+//                    return new Mapper094();
+//                }
+//                case 105: {
+//                    return new Mapper105();
+//                }
+//                case 140: {
+//                    return new Mapper140();
+//                }
+//                case 182: {
+//                    return new Mapper182();
+//                }
 
             }
         }
