@@ -20,6 +20,7 @@ import java.io.*;
 import java.util.zip.*;
 
 import vnes.ui.UI;
+import vnes.utils.Globals;
 
 public class FileLoader {
 

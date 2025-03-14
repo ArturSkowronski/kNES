@@ -17,8 +17,10 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import vnes.buffer.ByteBuffer;
+import vnes.emulator.CPU;
 import vnes.mappers.Memory;
 import vnes.ui.BufferView;
+import vnes.utils.Globals;
 import vnes.utils.HiResTimer;
 import vnes.utils.NameTable;
 
@@ -346,7 +348,7 @@ public class PPU {
         // Start VBlank period:
         // Do VBlank.
         if (Globals.debug) {
-            Globals.println("VBlank occurs!");
+            nes.getGui().println("VBlank occurs!");
         }
 
         // Do NMI:

@@ -17,11 +17,13 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import vnes.buffer.ByteBuffer;
+import vnes.emulator.CPU;
 import vnes.mappers.Memory;
 import vnes.channels.ChannelDM;
 import vnes.channels.ChannelNoise;
 import vnes.channels.ChannelSquare;
 import vnes.channels.ChannelTriangle;
+import vnes.utils.Globals;
 
 import javax.sound.sampled.*;
 
@@ -30,7 +32,7 @@ public final class PAPU {
     public NES nes;
     Memory cpuMem;
     Mixer mixer;
-    SourceDataLine line;
+    public SourceDataLine line;
     ChannelSquare square1;
     ChannelSquare square2;
     ChannelTriangle triangle;
@@ -49,7 +51,7 @@ public final class PAPU {
     short channelEnableValue;
     byte b1, b2, b3, b4;
     int bufferSize = 2048;
-    int bufferIndex;
+    public int bufferIndex;
     int sampleRate = 44100;
     boolean frameIrqEnabled;
     boolean frameIrqActive;

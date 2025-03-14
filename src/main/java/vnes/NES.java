@@ -17,10 +17,12 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import vnes.buffer.ByteBuffer;
+import vnes.emulator.CPU;
 import vnes.input.InputHandler;
 import vnes.mappers.Memory;
 import vnes.mappers.MemoryMapper;
 import vnes.ui.UI;
+import vnes.utils.Globals;
 import vnes.utils.PaletteTable;
 
 public class NES {
@@ -42,7 +44,6 @@ public class NES {
     // Creates the NES system.
     public NES(UI gui) {
 
-        Globals.nes = this;
         this.gui = gui;
 
         // Create memory:

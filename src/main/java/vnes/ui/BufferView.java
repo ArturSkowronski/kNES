@@ -25,7 +25,7 @@ import vnes.Scale;
 
 public class BufferView extends JPanel {
 
-    // Scale modes:
+    // vnes.Scale modes:
     public static final int SCALE_NONE = 0;
     public static final int SCALE_HW2X = 1;
     public static final int SCALE_HW3X = 2;
