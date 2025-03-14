@@ -21,13 +21,13 @@ import vnes.emulator.CPU;
 import vnes.input.InputHandler;
 import vnes.mappers.Memory;
 import vnes.mappers.MemoryMapper;
-import vnes.ui.UI;
+import vnes.applet.NotYetAbstractUI;
 import vnes.utils.Globals;
 import vnes.utils.PaletteTable;
 
 public class NES {
 
-    public UI gui;
+    public NotYetAbstractUI gui;
     public CPU cpu;
     public PPU ppu;
     public PAPU papu;
@@ -42,7 +42,7 @@ public class NES {
     boolean isRunning = false;
 
     // Creates the NES system.
-    public NES(UI gui) {
+    public NES(NotYetAbstractUI gui) {
 
         this.gui = gui;
 
@@ -243,7 +243,7 @@ public class NES {
     }
 
     // Returns the GUI.
-    public UI getGui() {
+    public NotYetAbstractUI getGui() {
         return gui;
     }
 

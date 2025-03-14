@@ -19,9 +19,9 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 import java.applet.*;
 import java.awt.*;
 
-import vnes.ui.AppletUI;
-import vnes.ui.BufferView;
-import vnes.ui.ScreenView;
+import vnes.applet.AppletUI;
+import vnes.applet.BufferView;
+import vnes.applet.ScreenView;
 import vnes.utils.Globals;
 
 public class vNES extends Applet implements Runnable {

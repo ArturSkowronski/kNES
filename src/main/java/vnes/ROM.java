@@ -17,6 +17,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import vnes.mappers.*;
+import vnes.utils.FileLoader;
 
 import java.io.*;
 
@@ -77,7 +78,7 @@ public class ROM {
         this.fileName = fileName;
         System.out.println(fileName);
         FileLoader loader = new FileLoader();
-        short[] b = loader.loadFile(fileName, nes.getGui());
+        short[] b = loader.loadFile(fileName, nes.getGui()::showLoadProgress);
 
         if (b == null || b.length == 0) {
 

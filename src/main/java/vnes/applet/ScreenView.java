@@ -1,4 +1,4 @@
-package vnes.ui;
+package vnes.applet;
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project

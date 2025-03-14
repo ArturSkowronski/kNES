@@ -1,4 +1,4 @@
-package vnes.ui;
+package vnes.applet;
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project
@@ -16,8 +16,7 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import java.awt.Point;
-
+import vnes.ui.*;
 import vnes.utils.Globals;
 import vnes.NES;
 import vnes.input.InputHandler;
@@ -30,7 +29,7 @@ import vnes.vNES;
  * This class extends AbstractNESUI to provide common functionality
  * and implements the UI interface for backward compatibility.
  */
-public class AppletUI extends AbstractNESUI implements UI {
+public class AppletUI extends AbstractNESUI implements NotYetAbstractUI {
 
     private vNES applet;
     private KbInputHandler kbJoy1;
@@ -108,10 +107,6 @@ public class AppletUI extends AbstractNESUI implements UI {
         vScreen.addKeyListener(kbJoy2);
     }
     
-    @Override
-    public void initDisplay(int width, int height) {
-        init(true);
-    }
 
     @Override
     public void imageReady(boolean skipFrame) {
@@ -210,26 +205,6 @@ public class AppletUI extends AbstractNESUI implements UI {
     }
 
     @Override
-    public String getWindowCaption() {
-        return "";
-    }
-
-    @Override
-    public void setWindowCaption(String s) {
-        // Not implemented for applet
-    }
-
-    @Override
-    public void setTitle(String s) {
-        // Not implemented for applet
-    }
-
-    @Override
-    public Point getLocation() {
-        return new Point(0, 0);
-    }
-
-    @Override
     public int getWidth() {
         return applet.getWidth();
     }
@@ -247,10 +222,5 @@ public class AppletUI extends AbstractNESUI implements UI {
     @Override
     public void showErrorMsg(String msg) {
         System.out.println(msg);
-    }
-    
-    @Override
-    public DisplayBuffer getDisplayBuffer() {
-        return screenAdapter;
     }
 }

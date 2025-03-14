@@ -27,44 +27,6 @@ import vnes.NES;
  */
 public interface NESUICore {
     /**
-     * Initialize the display with the specified dimensions.
-     * 
-     * @param width The width of the display in pixels
-     * @param height The height of the display in pixels
-     */
-    void initDisplay(int width, int height);
-    
-    /**
-     * Get the display buffer for this UI.
-     * 
-     * @return The display buffer
-     */
-    DisplayBuffer getDisplayBuffer();
-    
-    /**
-     * Render a frame to the display.
-     * 
-     * @param skipFrame Whether this frame should be skipped
-     */
-    void renderFrame(boolean skipFrame);
-    
-    /**
-     * Register an input callback for this UI.
-     * 
-     * @param callback The input callback to register
-     * @param playerIndex The player index (0 for player 1, 1 for player 2)
-     */
-    void registerInputCallback(InputCallback callback, int playerIndex);
-    
-    /**
-     * Set the input handler for this UI (legacy method).
-     * 
-     * @param handler The input handler to use
-     * @param playerIndex The player index (0 for player 1, 1 for player 2)
-     */
-    void setInputHandler(InputHandler handler, int playerIndex);
-    
-    /**
      * Get the NES instance associated with this UI.
      * 
      * @return The NES instance
