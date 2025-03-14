@@ -1,4 +1,4 @@
-package vnes;
+package vnes.input;
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project
@@ -20,8 +20,6 @@ import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.util.HashMap;
 import java.util.Map;
-
-import vnes.ui.InputCallback;
 
 /**
  * Adapter class that bridges the gap between InputCallback and InputHandler.

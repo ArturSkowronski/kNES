@@ -16,7 +16,8 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.InputHandler;
+import vnes.input.InputCallback;
+import vnes.input.InputHandler;
 import vnes.NES;
 
 /**
