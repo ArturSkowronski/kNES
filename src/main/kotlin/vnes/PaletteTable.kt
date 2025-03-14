@@ -18,7 +18,6 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import java.awt.Color
 import java.io.BufferedReader
-import java.io.InputStream
 import java.io.InputStreamReader
 
 class PaletteTable {
