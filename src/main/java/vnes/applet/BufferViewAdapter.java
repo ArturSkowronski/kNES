@@ -1,4 +1,4 @@
-package vnes.ui;
+package vnes.applet;
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project
@@ -15,6 +15,8 @@ PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
+import vnes.ui.DisplayBuffer;
 
 /**
  * Adapter class that bridges the gap between BufferView and DisplayBuffer.

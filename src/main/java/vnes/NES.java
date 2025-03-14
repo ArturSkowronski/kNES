@@ -16,14 +16,18 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import vnes.buffer.ByteBuffer;
+import vnes.emulator.CPU;
 import vnes.input.InputHandler;
 import vnes.mappers.Memory;
 import vnes.mappers.MemoryMapper;
-import vnes.ui.UI;
+import vnes.applet.NotYetAbstractUI;
+import vnes.utils.Globals;
+import vnes.utils.PaletteTable;
 
 public class NES {
 
-    public UI gui;
+    public NotYetAbstractUI gui;
     public CPU cpu;
     public PPU ppu;
     public PAPU papu;
@@ -38,9 +42,8 @@ public class NES {
     boolean isRunning = false;
 
     // Creates the NES system.
-    public NES(UI gui) {
+    public NES(NotYetAbstractUI gui) {
 
-        Globals.nes = this;
         this.gui = gui;
 
         // Create memory:
@@ -240,7 +243,7 @@ public class NES {
     }
 
     // Returns the GUI.
-    public UI getGui() {
+    public NotYetAbstractUI getGui() {
         return gui;
     }
 

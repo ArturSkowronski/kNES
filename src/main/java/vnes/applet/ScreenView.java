@@ -1,4 +1,4 @@
-package vnes.ui;
+package vnes.applet;
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project
@@ -18,7 +18,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import java.awt.event.*;
 
-import vnes.Globals;
+import vnes.utils.Globals;
 import vnes.NES;
 
 public class ScreenView extends BufferView {

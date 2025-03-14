@@ -1,4 +1,4 @@
-package vnes
+package vnes.utils
 
 class HiResTimer {
     fun currentMicros(): Long {

@@ -19,8 +19,10 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 import java.applet.*;
 import java.awt.*;
 
-import vnes.ui.BufferView;
-import vnes.ui.ScreenView;
+import vnes.applet.AppletUI;
+import vnes.applet.BufferView;
+import vnes.applet.ScreenView;
+import vnes.utils.Globals;
 
 public class vNES extends Applet implements Runnable {
 
@@ -32,14 +34,14 @@ public class vNES extends Applet implements Runnable {
     boolean timeemulation;
     boolean showsoundbuffer;
     int samplerate;
-    int romSize;
+    public int romSize;
     int progress;
     AppletUI gui;
     NES nes;
     ScreenView panelScreen;
     String rom = "";
     Font progressFont;
-    Color bgColor = Color.black.darker().darker();
+    public Color bgColor = Color.black.darker().darker();
     boolean started = false;
 
     public void init() {

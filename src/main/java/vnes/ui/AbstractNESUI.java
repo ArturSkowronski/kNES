@@ -32,37 +32,6 @@ public abstract class AbstractNESUI implements NESUICore {
     }
     
     @Override
-    public DisplayBuffer getDisplayBuffer() {
-        return displayBuffer;
-    }
-    
-    @Override
-    public void renderFrame(boolean skipFrame) {
-        if (displayBuffer != null) {
-            displayBuffer.render(skipFrame);
-        }
-    }
-    
-    @Override
-    public void registerInputCallback(InputCallback callback, int playerIndex) {
-        if (playerIndex >= 0 && playerIndex < inputCallbacks.length) {
-            inputCallbacks[playerIndex] = callback;
-            
-            // Create an adapter for the callback if needed
-            if (callback != null && inputHandlers[playerIndex] == null) {
-                inputHandlers[playerIndex] = new InputHandlerAdapter(callback, playerIndex);
-            }
-        }
-    }
-    
-    @Override
-    public void setInputHandler(InputHandler handler, int playerIndex) {
-        if (playerIndex >= 0 && playerIndex < inputHandlers.length) {
-            inputHandlers[playerIndex] = handler;
-        }
-    }
-    
-    @Override
     public void destroy() {
         // Clean up resources
         if (displayBuffer != null) {
