@@ -20,11 +20,7 @@ import java.awt.Point;
 
 import vnes.input.InputHandler;
 import vnes.input.KbInputHandler;
-import vnes.ui.AbstractNESUI;
-import vnes.ui.BufferView;
-import vnes.ui.BufferViewAdapter;
-import vnes.ui.DisplayBuffer;
-import vnes.ui.UI;
+import vnes.ui.*;
 
 /**
  * AWT-specific implementation of the UI interface.
