@@ -22,7 +22,9 @@ emulator. During emulation, this is run in a loop that decodes and executes
 instructions and invokes emulation of the PPU and pAPU.
 */
 
+import vnes.buffer.ByteBuffer;
 import vnes.mappers.MemoryMapper;
+import vnes.utils.Misc;
 
 public final class CPU implements Runnable{
 
@@ -1263,7 +1265,7 @@ public final class CPU implements Runnable{
 					if(!crash){
 						crash = true;
 						stopRunning = true;
-						nes.gui.showErrorMsg("Game crashed, invalid opcode at address $"+vnes.Misc.hex16(opaddr));
+						nes.gui.showErrorMsg("Game crashed, invalid opcode at address $"+ Misc.hex16(opaddr));
 					}
 					break;
 

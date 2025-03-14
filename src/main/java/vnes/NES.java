@@ -16,10 +16,12 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import vnes.buffer.ByteBuffer;
 import vnes.input.InputHandler;
 import vnes.mappers.Memory;
 import vnes.mappers.MemoryMapper;
 import vnes.ui.UI;
+import vnes.utils.PaletteTable;
 
 public class NES {
 

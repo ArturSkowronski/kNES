@@ -1,6 +1,6 @@
 package vnes.mappers;
 
-import vnes.ByteBuffer;
+import vnes.buffer.ByteBuffer;
 import vnes.NES;
 
 import java.io.*;

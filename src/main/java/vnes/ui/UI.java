@@ -18,7 +18,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import java.awt.*;
 
-import vnes.HiResTimer;
+import vnes.utils.HiResTimer;
 import vnes.input.InputCallback;
 import vnes.input.InputHandler;
 

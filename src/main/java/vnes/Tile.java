@@ -16,6 +16,9 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import vnes.buffer.ByteBuffer;
+import vnes.utils.Misc;
+
 import java.io.*;
 
 public class Tile {
@@ -224,7 +227,7 @@ public class Tile {
 
             for (int y = 0; y < 8; y++) {
                 for (int x = 0; x < 8; x++) {
-                    fWriter.write(vnes.Misc.hex8(pix[(y << 3) + x]).substring(1));
+                    fWriter.write(Misc.hex8(pix[(y << 3) + x]).substring(1));
                 }
                 fWriter.write("\r\n");
             }

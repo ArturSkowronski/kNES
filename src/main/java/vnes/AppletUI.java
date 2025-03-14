@@ -21,6 +21,7 @@ import java.awt.Point;
 import vnes.input.InputHandler;
 import vnes.input.KbInputHandler;
 import vnes.ui.*;
+import vnes.utils.HiResTimer;
 
 /**
  * AWT-specific implementation of the UI interface.

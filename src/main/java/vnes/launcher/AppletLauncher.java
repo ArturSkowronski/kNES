@@ -1,7 +1,8 @@
-package vnes;
+package vnes.launcher;
+import vnes.vNES;
+
 import java.applet.*;
 import java.awt.*;
-import java.awt.event.*;
 import java.io.*;
 import java.net.*;
 import java.util.*;
