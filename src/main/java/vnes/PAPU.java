@@ -17,10 +17,10 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import vnes.mappers.Memory;
-import vnes.papu.ChannelDM;
-import vnes.papu.ChannelNoise;
-import vnes.papu.ChannelSquare;
-import vnes.papu.ChannelTriangle;
+import vnes.channels.ChannelDM;
+import vnes.channels.ChannelNoise;
+import vnes.channels.ChannelSquare;
+import vnes.channels.ChannelTriangle;
 
 import javax.sound.sampled.*;
 

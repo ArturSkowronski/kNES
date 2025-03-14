@@ -1,4 +1,4 @@
-package vnes.papu;
+package vnes.channels;
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project
