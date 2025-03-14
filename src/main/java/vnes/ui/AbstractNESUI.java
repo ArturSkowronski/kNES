@@ -1,7 +1,8 @@
 package vnes.ui;
 
-import vnes.InputHandler;
-import vnes.InputHandlerAdapter;
+import vnes.input.InputCallback;
+import vnes.input.InputHandler;
+import vnes.input.InputHandlerAdapter;
 import vnes.NES;
 
 /**

@@ -17,12 +17,16 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import vnes.mappers.Memory;
+import vnes.channels.ChannelDM;
+import vnes.channels.ChannelNoise;
+import vnes.channels.ChannelSquare;
+import vnes.channels.ChannelTriangle;
 
 import javax.sound.sampled.*;
 
 public final class PAPU {
 
-    NES nes;
+    public NES nes;
     Memory cpuMem;
     Mixer mixer;
     SourceDataLine line;

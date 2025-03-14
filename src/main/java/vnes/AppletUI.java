@@ -18,11 +18,9 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import java.awt.Point;
 
-import vnes.ui.AbstractNESUI;
-import vnes.ui.BufferView;
-import vnes.ui.BufferViewAdapter;
-import vnes.ui.DisplayBuffer;
-import vnes.ui.UI;
+import vnes.input.InputHandler;
+import vnes.input.KbInputHandler;
+import vnes.ui.*;
 
 /**
  * AWT-specific implementation of the UI interface.
@@ -55,6 +53,15 @@ public class AppletUI extends AbstractNESUI implements UI {
         nes = new NES(this);
     }
 
+    private void menuListener() {
+        if (nes.isRunning()) {
+            nes.stopEmulation();
+            nes.reset();
+            nes.reloadRom();
+            nes.startEmulation();
+        }
+    }
+
     @Override
     public void init(boolean showGui) {
         // Create the screen view
@@ -66,10 +73,10 @@ public class AppletUI extends AbstractNESUI implements UI {
         // Create the buffer adapter
         screenAdapter = new BufferViewAdapter(vScreen);
         displayBuffer = screenAdapter;
-        
+
         // Create the input handlers
-        kbJoy1 = new KbInputHandler(nes, 0);
-        kbJoy2 = new KbInputHandler(nes, 1);
+        kbJoy1 = new KbInputHandler(this::menuListener, 0);
+        kbJoy2 = new KbInputHandler(this::menuListener, 1);
         
         // Set the input handlers
         inputHandlers[0] = kbJoy1;

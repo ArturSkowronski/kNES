@@ -20,6 +20,7 @@ import java.applet.*;
 import java.awt.*;
 
 import vnes.ui.BufferView;
+import vnes.ui.ScreenView;
 
 public class vNES extends Applet implements Runnable {
 

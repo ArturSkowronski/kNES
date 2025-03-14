@@ -1,4 +1,4 @@
-package vnes.ui;
+package vnes.channels;
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project
@@ -16,23 +16,15 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/**
- * Platform-agnostic interface for handling input events.
- * This interface defines callbacks for button press and release events
- * without dependencies on specific UI frameworks.
- */
-public interface InputCallback {
-    /**
-     * Called when a button is pressed.
-     * 
-     * @param buttonCode The code of the button that was pressed
-     */
-    void buttonDown(int buttonCode);
-    
-    /**
-     * Called when a button is released.
-     * 
-     * @param buttonCode The code of the button that was released
-     */
-    void buttonUp(int buttonCode);
+public interface PapuChannel {
+
+    public void writeReg(int address, int value);
+
+    public void setEnabled(boolean value);
+
+    public boolean isEnabled();
+
+    public void reset();
+
+    public int getLengthStatus();
 }
