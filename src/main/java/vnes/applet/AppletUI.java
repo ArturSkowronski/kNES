@@ -31,6 +31,11 @@ import vnes.vNES;
  */
 public class AppletUI extends AbstractNESUI implements NotYetAbstractUI {
 
+    public NES getNES() {
+        return nes;
+    }
+
+    private NES nes;
     private vNES applet;
     private KbInputHandler kbJoy1;
     private KbInputHandler kbJoy2;
@@ -46,22 +51,13 @@ public class AppletUI extends AbstractNESUI implements NotYetAbstractUI {
      * @param applet The vNES applet
      */
     public AppletUI(vNES applet) {
-        super(null); // We'll set the NES instance later
-        
+        super(); // We'll set the NES instance later
+
         timer = new HiResTimer();
         this.applet = applet;
-        
+
         // Create the NES instance with this UI
         nes = new NES(this);
-    }
-
-    private void menuListener() {
-        if (nes.isRunning()) {
-            nes.stopEmulation();
-            nes.reset();
-            nes.reloadRom();
-            nes.startEmulation();
-        }
     }
 
     @Override
@@ -71,14 +67,14 @@ public class AppletUI extends AbstractNESUI implements NotYetAbstractUI {
         vScreen.setBgColor(applet.bgColor.getRGB());
         vScreen.init();
         vScreen.setNotifyImageReady(true);
-        
+
         // Create the buffer adapter
         screenAdapter = new BufferViewAdapter(vScreen);
         displayBuffer = screenAdapter;
 
         // Create the input handlers
-        kbJoy1 = new KbInputHandler(this::menuListener, 0);
-        kbJoy2 = new KbInputHandler(this::menuListener, 1);
+        kbJoy1 = new KbInputHandler(nes::menuListener, 0);
+        kbJoy2 = new KbInputHandler(nes::menuListener, 1);
         
         // Set the input handlers
         inputHandlers[0] = kbJoy1;
@@ -202,16 +198,6 @@ public class AppletUI extends AbstractNESUI implements NotYetAbstractUI {
     @Override
     public HiResTimer getTimer() {
         return timer;
-    }
-
-    @Override
-    public int getWidth() {
-        return applet.getWidth();
-    }
-
-    @Override
-    public int getHeight() {
-        return applet.getHeight();
     }
 
     @Override

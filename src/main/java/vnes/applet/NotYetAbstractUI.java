@@ -17,10 +17,8 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 
-import vnes.input.InputCallback;
 import vnes.input.InputHandler;
-import vnes.ui.DisplayBuffer;
-import vnes.ui.NESUICore;
+import vnes.ui.UiInfoMessageBus;
 import vnes.utils.HiResTimer;
 
 /**
@@ -28,7 +26,7 @@ import vnes.utils.HiResTimer;
  * This interface maintains backward compatibility with AWT-specific implementations
  * while providing a bridge to the new platform-agnostic interface.
  */
-public interface NotYetAbstractUI extends NESUICore {
+public interface NotYetAbstractUI extends UiInfoMessageBus {
 
     // AWT-specific methods
     InputHandler getJoy1();

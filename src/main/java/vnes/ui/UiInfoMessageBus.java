@@ -16,53 +16,13 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.input.InputCallback;
-import vnes.input.InputHandler;
-import vnes.NES;
-
 /**
  * Platform-agnostic UI interface for the NES emulator.
  * This interface defines the core functionality required by any UI implementation,
  * without dependencies on specific UI frameworks like AWT or Compose.
  */
-public interface NESUICore {
-    /**
-     * Get the NES instance associated with this UI.
-     * 
-     * @return The NES instance
-     */
-    NES getNES();
-    
-    /**
-     * Get the width of the UI component.
-     * 
-     * @return The width in pixels
-     */
-    int getWidth();
-    
-    /**
-     * Get the height of the UI component.
-     * 
-     * @return The height in pixels
-     */
-    int getHeight();
-    
-    /**
-     * Show an error message to the user.
-     * 
-     * @param message The error message to display
-     */
+public interface UiInfoMessageBus {
     void showErrorMsg(String message);
-    
-    /**
-     * Show the ROM loading progress.
-     * 
-     * @param percentComplete The percentage of loading completed
-     */
     void showLoadProgress(int percentComplete);
-    
-    /**
-     * Clean up resources used by this UI.
-     */
     void destroy();
 }

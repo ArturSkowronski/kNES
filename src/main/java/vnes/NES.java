@@ -18,8 +18,9 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import vnes.buffer.ByteBuffer;
 import vnes.emulator.CPU;
+import vnes.emulator.ROM;
 import vnes.input.InputHandler;
-import vnes.mappers.Memory;
+import vnes.emulator.Memory;
 import vnes.mappers.MemoryMapper;
 import vnes.applet.NotYetAbstractUI;
 import vnes.utils.Globals;
@@ -41,16 +42,16 @@ public class NES {
     public String romFile;
     boolean isRunning = false;
 
+
     // Creates the NES system.
     public NES(NotYetAbstractUI gui) {
 
         this.gui = gui;
 
         // Create memory:
-        cpuMem = new Memory(this, 0x10000);	// Main memory (internal to CPU)
-        ppuMem = new Memory(this, 0x8000);	// VRAM memory (internal to PPU)
-        sprMem = new Memory(this, 0x100);	// Sprite RAM  (internal to PPU)
-
+        cpuMem = new Memory( 0x10000); // Main memory (internal to CPU)
+        ppuMem = new Memory( 0x8000);	// VRAM memory (internal to PPU)
+        sprMem = new Memory( 0x100);	// Sprite RAM  (internal to PPU)
 
         // Create system units:
         cpu = new CPU(this);
@@ -264,7 +265,7 @@ public class NES {
         {
             // Load ROM file:
 
-            rom = new ROM(this);
+            rom = new ROM(gui::showLoadProgress, gui::showErrorMsg);
             rom.load(file);
             if (rom.isValid()) {
 
@@ -346,6 +347,15 @@ public class NES {
         Globals.frameTime = 1000000 / rate;
         papu.setSampleRate(papu.getSampleRate(), false);
 
+    }
+
+    public void menuListener() {
+        if (isRunning()) {
+            stopEmulation();
+            reset();
+            reloadRom();
+            startEmulation();
+        }
     }
 
     public void destroy() {

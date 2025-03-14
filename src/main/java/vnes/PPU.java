@@ -18,7 +18,8 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import vnes.buffer.ByteBuffer;
 import vnes.emulator.CPU;
-import vnes.mappers.Memory;
+import vnes.emulator.ROM;
+import vnes.emulator.Memory;
 import vnes.applet.BufferView;
 import vnes.utils.Globals;
 import vnes.utils.HiResTimer;

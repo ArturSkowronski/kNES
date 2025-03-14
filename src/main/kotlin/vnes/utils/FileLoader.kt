@@ -9,7 +9,7 @@ import java.util.zip.ZipInputStream
 
 class FileLoader {
     // Load a file.
-    fun loadFile(fileName: String, loadProgress: Consumer<Int?>?): ShortArray? {
+    fun loadFile(fileName: String, loadProgress: Consumer<Int>): ShortArray? {
         val flen: Int
         var tmp = ByteArray(2048)
 

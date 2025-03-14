@@ -18,7 +18,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import vnes.buffer.ByteBuffer;
 import vnes.emulator.CPU;
-import vnes.mappers.Memory;
+import vnes.emulator.Memory;
 import vnes.channels.ChannelDM;
 import vnes.channels.ChannelNoise;
 import vnes.channels.ChannelSquare;
