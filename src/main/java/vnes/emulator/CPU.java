@@ -22,11 +22,9 @@ emulator. During emulation, this is run in a loop that decodes and executes
 instructions and invokes emulation of the PPU and pAPU.
 */
 
-import vnes.*;
-import vnes.buffer.ByteBuffer;
-import vnes.mappers.MemoryMapper;
-import vnes.utils.Globals;
-import vnes.utils.Misc;
+
+import vnes.emulator.utils.Globals;
+import vnes.emulator.utils.Misc;
 
 public final class CPU implements Runnable {
 
@@ -224,12 +222,12 @@ public final class CPU implements Runnable {
 		// (when memory mappers switch ROM banks
 		// this will be written to, no need to
 		// update reference):
-		mem = nes.cpuMem.mem;
+		mem = nes.getCpuMemory().mem;
 
 		// References to other parts of NES:
-		MemoryMapper mmap = nes.memMapper;
-		PPU ppu  = nes.ppu;
-		PAPU papu = nes.papu;
+		MemoryMapper mmap = nes.getMemoryMapper();
+		PPU ppu  = nes.getPpu();
+		PAPU papu = nes.getPapu();
 
 
 		// Registers:
@@ -477,7 +475,7 @@ public final class CPU implements Runnable {
 
 					// Add with carry.
 					temp = REG_ACC + load(addr) + F_CARRY;
-					F_OVERFLOW = ((!(((REG_ACC ^ load(addr)) & 0x80)!=0) && (((REG_ACC ^ temp) & 0x80))!=0)?1:0);
+					F_OVERFLOW = ((((REG_ACC ^ load(addr)) & 0x80) == 0 && (((REG_ACC ^ temp) & 0x80))!=0)?1:0);
 					F_CARRY = (temp>255?1:0);
 					F_SIGN = (temp>>7)&1;
 					F_ZERO = temp&0xFF;
@@ -1266,7 +1264,7 @@ public final class CPU implements Runnable {
 					if(!crash){
 						crash = true;
 						stopRunning = true;
-						nes.gui.showErrorMsg("Game crashed, invalid opcode at address $"+ Misc.hex16(opaddr));
+						nes.getGui().showErrorMsg("Game crashed, invalid opcode at address $"+ Misc.hex16(opaddr));
 					}
 					break;
 
@@ -1284,8 +1282,8 @@ public final class CPU implements Runnable {
 				}
 			}
 
-			if(asApplet){			
-				ppu.cycles = cycleCount*3;
+			if(asApplet){
+				ppu.setCycles(cycleCount*3);
 				ppu.emulateCycles();			
 			}
 			

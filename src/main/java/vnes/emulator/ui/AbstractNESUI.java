@@ -1,8 +1,8 @@
-package vnes.ui;
+package vnes.emulator.ui;
 
-import vnes.input.InputCallback;
-import vnes.input.InputHandler;
-import vnes.input.InputHandlerAdapter;
+import vnes.emulator.InputCallback;
+import vnes.emulator.InputHandler;
+import vnes.applet.input.InputHandlerAdapter;
 
 /**
  * Abstract base implementation of the NESUICore interface.

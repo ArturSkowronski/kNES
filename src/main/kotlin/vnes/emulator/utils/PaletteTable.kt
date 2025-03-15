@@ -1,4 +1,4 @@
-package vnes.utils
+package vnes.emulator.utils
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project
@@ -372,5 +372,14 @@ class PaletteTable {
         currentLightness = 0
         setEmphasis(0)
         updatePalette()
+    }
+
+    fun init() {
+
+        if (!loadNTSCPalette()) {
+            //System.out.println("Unable to load palette file. Using default.");
+            loadDefaultPalette()
+        }
+
     }
 }

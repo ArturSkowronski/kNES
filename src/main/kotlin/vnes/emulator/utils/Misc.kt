@@ -8,7 +8,7 @@
  * (at your option) any later version.
  */
 
-package vnes.utils
+package vnes.emulator.utils
 
 object Misc {
     @JvmField

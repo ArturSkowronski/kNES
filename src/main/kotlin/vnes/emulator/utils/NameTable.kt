@@ -1,6 +1,6 @@
-package vnes.utils
+package vnes.emulator.utils
 
-import vnes.buffer.ByteBuffer
+import vnes.emulator.ByteBuffer
 
 class NameTable(var width: Int, var height: Int, var name: String?) {
     var tile: ShortArray

@@ -16,12 +16,11 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.emulator.CPU;
 import vnes.emulator.PAPU;
 
 public class ChannelDM implements PapuChannel {
 
-    PAPU papu;
+    private PAPU papu;
 
     public static final int MODE_NORMAL = 0;
     public static final int MODE_LOOP = 1;
@@ -48,7 +47,7 @@ public class ChannelDM implements PapuChannel {
         this.papu = papu;
     }
 
-    public void clockDmc() {
+    public void clockDmc(int irqNormal) {
 
         // Only alter DAC value if the sample buffer has data:
         if (hasSample) {
@@ -88,7 +87,7 @@ public class ChannelDM implements PapuChannel {
         }
 
         if (irqGenerated) {
-            papu.getCPU().requestIrq(CPU.IRQ_NORMAL);
+            papu.getCPU().requestIrq(irqNormal);
         }
 
     }

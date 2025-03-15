@@ -16,9 +16,8 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.Tile;
-import vnes.mappers.*;
-import vnes.utils.FileLoader;
+import vnes.emulator.mappers.MapperDefault;
+import vnes.emulator.utils.FileLoader;
 
 import java.io.*;
 import java.util.function.Consumer;
@@ -94,9 +93,7 @@ public class ROM {
 
         // Read header:
         header = new short[16];
-        for (int i = 0; i < 16; i++) {
-            header[i] = b[i];
-        }
+        System.arraycopy(b, 0, header, 0, 16);
 
         // Check first four bytes:
         String fcode = new String(new byte[]{(byte) b[0], (byte) b[1], (byte) b[2], (byte) b[3]});

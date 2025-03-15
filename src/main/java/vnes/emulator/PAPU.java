@@ -16,14 +16,11 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.NES;
-import vnes.buffer.ByteBuffer;
 import vnes.emulator.channels.ChannelDM;
 import vnes.emulator.channels.ChannelNoise;
 import vnes.emulator.channels.ChannelSquare;
 import vnes.emulator.channels.ChannelTriangle;
-import vnes.mappers.MemoryMapper;
-import vnes.utils.Globals;
+import vnes.emulator.utils.Globals;
 
 import javax.sound.sampled.*;
 
@@ -153,7 +150,17 @@ public final class PAPU {
 
         frameIrqEnabled = false;
         frameIrqCounterMax = 4;
+    }
 
+    public void init(){
+        // Init sound registers:
+        for (int i = 0; i < 0x14; i++) {
+            if (i == 0x10) {
+                writeReg(0x4010, (short) 0x10);
+            } else {
+                writeReg(0x4000 + i, (short) 0);
+            }
+        }
     }
 
     public void stateLoad(ByteBuffer buf) {
@@ -284,11 +291,7 @@ public final class PAPU {
             masterFrameCounter = 0;
             frameIrqActive = false;
 
-            if (((value >> 6) & 0x1) == 0) {
-                frameIrqEnabled = true;
-            } else {
-                frameIrqEnabled = false;
-            }
+            frameIrqEnabled = ((value >> 6) & 0x1) == 0;
 
             if (countSequence == 0) {
 
@@ -371,7 +374,7 @@ public final class PAPU {
             dmc.shiftCounter -= (nCycles << 3);
             while (dmc.shiftCounter <= 0 && dmc.dmaFrequency > 0) {
                 dmc.shiftCounter += dmc.dmaFrequency;
-                dmc.clockDmc();
+                dmc.clockDmc(CPU.IRQ_NORMAL);
             }
 
         }
@@ -435,7 +438,7 @@ public final class PAPU {
             // Do all cycles at once:
             noise.progTimerCount -= acc_c;
             noise.accCount += acc_c;
-            noise.accValue += acc_c * noise.sampleValue;
+            noise.accValue += (long) acc_c * noise.sampleValue;
 
         } else {
 
@@ -863,9 +866,7 @@ public final class PAPU {
 
     public void setPanning(int[] pos) {
 
-        for (int i = 0; i < 5; i++) {
-            panning[i] = pos[i];
-        }
+        System.arraycopy(pos, 0, panning, 0, 5);
         updateStereoPos();
 
     }
@@ -1062,7 +1063,6 @@ public final class PAPU {
         square1 = null;
         square2 = null;
         triangle = null;
-        ;
         noise = null;
         dmc = null;
 

@@ -1,7 +1,6 @@
-package vnes
+package vnes.emulator
 
-import vnes.buffer.ByteBuffer
-import vnes.utils.Misc
+import vnes.emulator.utils.Misc
 import java.io.File
 import java.io.FileWriter
 

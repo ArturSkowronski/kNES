@@ -1,4 +1,4 @@
-package vnes.applet;
+package vnes.emulator.ui;
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project
@@ -17,28 +17,22 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 
-import vnes.input.InputHandler;
-import vnes.ui.UiInfoMessageBus;
-import vnes.utils.HiResTimer;
+import vnes.emulator.NES;
+import vnes.emulator.InputHandler;
+import vnes.emulator.utils.HiResTimer;
 
 /**
  * Legacy UI interface that extends the platform-agnostic NESUICore.
  * This interface maintains backward compatibility with AWT-specific implementations
  * while providing a bridge to the new platform-agnostic interface.
  */
-public interface NotYetAbstractUI extends UiInfoMessageBus {
+public interface GUI extends UiInfoMessageBus {
 
-    // AWT-specific methods
     InputHandler getJoy1();
     InputHandler getJoy2();
-    BufferView getScreenView();
-    BufferView getPatternView();
-    BufferView getSprPalView();
-    BufferView getNameTableView();
-    BufferView getImgPalView();
+    ScreenView getScreenView();
     HiResTimer getTimer();
     void imageReady(boolean skipFrame);
-    void init(boolean showGui);
-    int getRomFileSize();
+    void init(NES nes, boolean showGui);
     void println(String s);
 }

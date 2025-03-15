@@ -20,12 +20,13 @@ import java.awt.*;
 import java.awt.image.*;
 import javax.swing.*;
 
-import vnes.NES;
-import vnes.Scale;
+import vnes.emulator.NES;
+import vnes.emulator.Scale;
+import vnes.emulator.ui.ScreenView;
 
-public class BufferView extends JPanel {
+public class BufferView extends JPanel implements ScreenView {
 
-    // vnes.Scale modes:
+    // vnes.emulator.Scale modes:
     public static final int SCALE_NONE = 0;
     public static final int SCALE_HW2X = 1;
     public static final int SCALE_HW3X = 2;
@@ -37,8 +38,8 @@ public class BufferView extends JPanel {
     private VolatileImage vimg;
     private boolean usingMenu = false;
     private Graphics gfx;
-    private int width;
-    private int height;
+    private final int width;
+    private final int height;
     private int[] pix;
     private int[] pix_scaled;
     private int scaleMode;
@@ -47,7 +48,7 @@ public class BufferView extends JPanel {
     private long prevFrameTime;
     private String fps;
     private int fpsCounter;
-    private Font fpsFont = new Font("Verdana", Font.BOLD, 10);
+    private final Font fpsFont = new Font("Verdana", Font.BOLD, 10);
     private int bgColor = Color.white.darker().getRGB();
 
     // Constructor
@@ -154,7 +155,7 @@ public class BufferView extends JPanel {
         if (scaleMode == SCALE_NONE || scaleMode == SCALE_HW2X || scaleMode == SCALE_HW3X) {
 
             pix = raster;
-            nes.ppu.buffer = raster;
+            nes.getPpu().setBuffer(raster);
 
         } else {
 
@@ -190,20 +191,20 @@ public class BufferView extends JPanel {
 
                 if (scaleMode == SCALE_NORMAL) {
 
-                    Scale.doNormalScaling(pix, pix_scaled, nes.ppu.scanlineChanged);
+                    Scale.doNormalScaling(pix, pix_scaled, nes.getPpu().getScanlineChanged());
 
                 } else if (scaleMode == SCALE_SCANLINE) {
 
-                    Scale.doScanlineScaling(pix, pix_scaled, nes.ppu.scanlineChanged);
+                    Scale.doScanlineScaling(pix, pix_scaled, nes.getPpu().getScanlineChanged());
 
                 } else if (scaleMode == SCALE_RASTER) {
 
-                    Scale.doRasterScaling(pix, pix_scaled, nes.ppu.scanlineChanged);
+                    Scale.doRasterScaling(pix, pix_scaled, nes.getPpu().getScanlineChanged());
 
                 }
             }
 
-            nes.ppu.requestRenderAll = false;
+            nes.getPpu().setRequestRenderAll(false);
             paint(getGraphics());
 
         }

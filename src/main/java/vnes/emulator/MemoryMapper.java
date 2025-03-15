@@ -1,4 +1,4 @@
-package vnes.emulator.channels;
+package vnes.emulator;
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project
@@ -16,15 +16,33 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-public interface PapuChannel {
+public interface MemoryMapper {
 
-    void writeReg(int address, int value);
+    void init(NES nes);
 
-    void setEnabled(boolean value);
+    void loadROM(ROM rom);
 
-    boolean isEnabled();
+    void write(int address, short value);
+
+    short load(int address);
+
+    short joy1Read();
+
+    short joy2Read();
 
     void reset();
 
-    int getLengthStatus();
+    void clockIrqCounter();
+
+    void loadBatteryRam();
+
+    void destroy();
+
+    void stateLoad(ByteBuffer buf);
+
+    void stateSave(ByteBuffer buf);
+
+    void setMouseState(boolean pressed, int x, int y);
+
+    void latchAccess(int address);
 }

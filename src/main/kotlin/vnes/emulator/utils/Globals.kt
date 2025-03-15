@@ -1,4 +1,4 @@
-package vnes.utils
+package vnes.emulator.utils
 
 object Globals {
     @JvmField

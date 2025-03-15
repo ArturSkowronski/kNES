@@ -1,4 +1,4 @@
-package vnes.buffer
+package vnes.emulator
 
 import kotlin.math.sin
 

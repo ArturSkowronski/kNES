@@ -18,15 +18,15 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import java.awt.event.*;
 
-import vnes.utils.Globals;
-import vnes.NES;
+import vnes.emulator.utils.Globals;
+import vnes.emulator.NES;
 
-public class ScreenView extends BufferView {
+public class AppletScreenView extends BufferView {
 
     private MyMouseAdapter mouse;
     private boolean notifyImageReady;
 
-    public ScreenView(NES nes, int width, int height) {
+    public AppletScreenView(NES nes, int width, int height) {
         super(nes, width, height);
     }
 
@@ -54,8 +54,8 @@ public class ScreenView extends BufferView {
             requestFocus();
 
             if (me.getX() >= 0 && me.getY() >= 0 && me.getX() < 256 && me.getY() < 240) {
-                if (nes != null && nes.memMapper != null) {
-                    nes.memMapper.setMouseState(true, me.getX(), me.getY());
+                if (nes != null && nes.getMemoryMapper() != null) {
+                    nes.getMemoryMapper().setMouseState(true, me.getX(), me.getY());
                 }
             }
 
@@ -63,8 +63,8 @@ public class ScreenView extends BufferView {
 
         public void mouseReleased(MouseEvent me) {
 
-            if (nes != null && nes.memMapper != null) {
-                nes.memMapper.setMouseState(false, 0, 0);
+            if (nes != null && nes.getMemoryMapper() != null) {
+                nes.getMemoryMapper().setMouseState(false, 0, 0);
             }
 
         }
