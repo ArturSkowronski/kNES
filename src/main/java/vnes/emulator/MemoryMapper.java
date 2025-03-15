@@ -1,4 +1,4 @@
-package vnes.emulator.mappers;
+package vnes.emulator;
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project
@@ -15,10 +15,7 @@ PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-
-import vnes.buffer.ByteBuffer;
 import vnes.NES;
-import vnes.emulator.ROM;
 
 public interface MemoryMapper {
 
@@ -35,8 +32,6 @@ public interface MemoryMapper {
     short joy2Read();
 
     void reset();
-
-    void setGameGenieState(boolean value);
 
     void clockIrqCounter();
 

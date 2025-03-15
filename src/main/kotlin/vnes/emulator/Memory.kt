@@ -1,6 +1,5 @@
 package vnes.emulator
 
-import vnes.buffer.ByteBuffer
 import java.io.File
 import java.io.FileWriter
 import java.io.IOException

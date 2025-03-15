@@ -1,4 +1,4 @@
-package vnes
+package vnes.emulator
 
 object Scale {
     private var brightenShift = 0

@@ -17,12 +17,10 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import vnes.NES;
-import vnes.buffer.ByteBuffer;
 import vnes.emulator.channels.ChannelDM;
 import vnes.emulator.channels.ChannelNoise;
 import vnes.emulator.channels.ChannelSquare;
 import vnes.emulator.channels.ChannelTriangle;
-import vnes.emulator.mappers.MemoryMapper;
 import vnes.utils.Globals;
 
 import javax.sound.sampled.*;
@@ -377,7 +375,7 @@ public final class PAPU {
             dmc.shiftCounter -= (nCycles << 3);
             while (dmc.shiftCounter <= 0 && dmc.dmaFrequency > 0) {
                 dmc.shiftCounter += dmc.dmaFrequency;
-                dmc.clockDmc();
+                dmc.clockDmc(CPU.IRQ_NORMAL);
             }
 
         }

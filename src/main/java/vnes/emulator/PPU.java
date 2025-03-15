@@ -1,4 +1,4 @@
-package vnes.emulator.channels;
+package vnes.emulator;
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project
@@ -17,11 +17,6 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import vnes.NES;
-import vnes.Tile;
-import vnes.buffer.ByteBuffer;
-import vnes.emulator.CPU;
-import vnes.emulator.ROM;
-import vnes.emulator.Memory;
 import vnes.utils.Globals;
 import vnes.utils.HiResTimer;
 import vnes.utils.NameTable;
@@ -33,15 +28,15 @@ public class PPU {
     private Memory ppuMem;
     private Memory sprMem;
     // Rendering Options:
-    boolean showSpr0Hit = false;
+    private boolean showSpr0Hit = false;
 
     public void setShowSoundBuffer(boolean showSoundBuffer) {
         this.showSoundBuffer = showSoundBuffer;
     }
 
-    boolean showSoundBuffer = false;
-    boolean clipTVcolumn = true;
-    boolean clipTVrow = false;
+    private boolean showSoundBuffer = false;
+    private boolean clipTVcolumn = true;
+    private boolean clipTVrow = false;
     // Control Flags Register 1:
     private int f_nmiOnVblank;    // NMI on VBlank. 0=disable, 1=enable
     private int f_spriteSize;     // Sprite size. 0=8x8, 1=8x16
@@ -114,8 +109,8 @@ public class PPU {
     int currentMirroring = -1;
 
     // Palette data:
-    int[] sprPalette = new int[16];
-    int[] imgPalette = new int[16];
+    private int[] sprPalette = new int[16];
+    private int[] imgPalette = new int[16];
     // Misc:
     private boolean scanlineAlreadyRendered;
     private boolean requestEndFrame;

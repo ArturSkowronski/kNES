@@ -1,4 +1,4 @@
-package vnes.buffer
+package vnes.emulator
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project

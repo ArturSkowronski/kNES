@@ -21,11 +21,11 @@ import java.awt.image.*;
 import javax.swing.*;
 
 import vnes.NES;
-import vnes.Scale;
+import vnes.emulator.Scale;
 
 public class BufferView extends JPanel {
 
-    // vnes.Scale modes:
+    // vnes.emulator.Scale modes:
     public static final int SCALE_NONE = 0;
     public static final int SCALE_HW2X = 1;
     public static final int SCALE_HW3X = 2;

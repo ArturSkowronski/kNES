@@ -22,10 +22,8 @@ emulator. During emulation, this is run in a loop that decodes and executes
 instructions and invokes emulation of the PPU and pAPU.
 */
 
-import vnes.*;
-import vnes.buffer.ByteBuffer;
-import vnes.emulator.channels.PPU;
-import vnes.emulator.mappers.MemoryMapper;
+
+import vnes.NES;
 import vnes.utils.Globals;
 import vnes.utils.Misc;
 
