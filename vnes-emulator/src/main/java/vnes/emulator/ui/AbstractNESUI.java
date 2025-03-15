@@ -2,7 +2,7 @@ package vnes.emulator.ui;
 
 import vnes.emulator.InputCallback;
 import vnes.emulator.InputHandler;
-import vnes.applet.input.InputHandlerAdapter;
+import vnes.emulator.DestroyableInputHandler;
 
 /**
  * Abstract base implementation of the NESUICore interface.
@@ -29,8 +29,8 @@ public abstract class AbstractNESUI implements UiInfoMessageBus {
         for (int i = 0; i < inputHandlers.length; i++) {
             if (inputHandlers[i] != null) {
                 inputHandlers[i].reset();
-                if (inputHandlers[i] instanceof InputHandlerAdapter) {
-                    ((InputHandlerAdapter) inputHandlers[i]).destroy();
+                if (inputHandlers[i] instanceof DestroyableInputHandler) {
+                    ((DestroyableInputHandler) inputHandlers[i]).destroy();
                 }
                 inputHandlers[i] = null;
             }
