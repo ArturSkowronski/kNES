@@ -29,7 +29,7 @@ import vnes.emulator.Memory;
 import vnes.emulator.channels.PPU;
 import vnes.input.InputHandler;
 
-import vnes.mappers.MemoryMapper;
+import vnes.emulator.mappers.MemoryMapper;
 
 import vnes.utils.Globals;
 import vnes.utils.PaletteTable;

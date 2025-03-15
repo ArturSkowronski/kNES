@@ -22,7 +22,7 @@ import vnes.emulator.channels.ChannelDM;
 import vnes.emulator.channels.ChannelNoise;
 import vnes.emulator.channels.ChannelSquare;
 import vnes.emulator.channels.ChannelTriangle;
-import vnes.mappers.MemoryMapper;
+import vnes.emulator.mappers.MemoryMapper;
 import vnes.utils.Globals;
 
 import javax.sound.sampled.*;

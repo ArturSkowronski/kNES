@@ -25,7 +25,7 @@ instructions and invokes emulation of the PPU and pAPU.
 import vnes.*;
 import vnes.buffer.ByteBuffer;
 import vnes.emulator.channels.PPU;
-import vnes.mappers.MemoryMapper;
+import vnes.emulator.mappers.MemoryMapper;
 import vnes.utils.Globals;
 import vnes.utils.Misc;
 

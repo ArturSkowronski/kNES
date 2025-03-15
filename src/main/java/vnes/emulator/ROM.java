@@ -17,7 +17,8 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import vnes.Tile;
-import vnes.mappers.*;
+import vnes.emulator.mappers.MapperDefault;
+import vnes.emulator.mappers.MemoryMapper;
 import vnes.utils.FileLoader;
 
 import java.io.*;
