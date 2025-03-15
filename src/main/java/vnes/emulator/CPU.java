@@ -24,6 +24,7 @@ instructions and invokes emulation of the PPU and pAPU.
 
 import vnes.*;
 import vnes.buffer.ByteBuffer;
+import vnes.emulator.channels.PPU;
 import vnes.mappers.MemoryMapper;
 import vnes.utils.Globals;
 import vnes.utils.Misc;
@@ -1284,8 +1285,8 @@ public final class CPU implements Runnable {
 				}
 			}
 
-			if(asApplet){			
-				ppu.cycles = cycleCount*3;
+			if(asApplet){
+				ppu.setCycles(cycleCount*3);
 				ppu.emulateCycles();			
 			}
 			

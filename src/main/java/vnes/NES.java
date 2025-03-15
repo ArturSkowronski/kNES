@@ -17,14 +17,20 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import vnes.applet.BufferView;
+import vnes.applet.NotYetAbstractUI;
+
 import vnes.buffer.ByteBuffer;
+
 import vnes.emulator.CPU;
 import vnes.emulator.PAPU;
 import vnes.emulator.ROM;
-import vnes.input.InputHandler;
 import vnes.emulator.Memory;
+
+import vnes.emulator.channels.PPU;
+import vnes.input.InputHandler;
+
 import vnes.mappers.MemoryMapper;
-import vnes.applet.NotYetAbstractUI;
+
 import vnes.utils.Globals;
 import vnes.utils.PaletteTable;
 
@@ -69,6 +75,10 @@ public class NES {
 
     public BufferView getScreenView() {
         return gui.getScreenView();
+    }
+
+    public boolean isNonHWScalingEnabled() {
+        return gui.getScreenView().scalingEnabled() && !gui.getScreenView().useHWScaling();
     }
 
     public boolean stateLoad(ByteBuffer buf) {

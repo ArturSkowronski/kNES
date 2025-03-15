@@ -22,6 +22,7 @@ import vnes.emulator.CPU;
 import vnes.emulator.Memory;
 import vnes.emulator.PAPU;
 import vnes.emulator.ROM;
+import vnes.emulator.channels.PPU;
 import vnes.input.InputHandler;
 
 public class MapperDefault implements MemoryMapper {
@@ -291,7 +292,7 @@ public class MapperDefault implements MemoryMapper {
 
                         // 0x4017:
                         // Joystick 2 + Strobe
-                        if (mousePressed && ppu != null && ppu.buffer != null) {
+                        if (mousePressed && ppu != null && ppu.getBuffer() != null) {
 
                             // Check for white pixel nearby:
 
@@ -304,7 +305,7 @@ public class MapperDefault implements MemoryMapper {
 
                             for (int y = sy; y < ey; y++) {
                                 for (int x = sx; x < ex; x++) {
-                                    if ((ppu.buffer[(y << 8) + x] & 0xFFFFFF) == 0xFFFFFF) {
+                                    if ((ppu.getBuffer()[(y << 8) + x] & 0xFFFFFF) == 0xFFFFFF) {
                                         w = 0x1 << 3;
                                         break;
                                     }

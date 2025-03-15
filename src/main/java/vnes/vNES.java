@@ -108,7 +108,7 @@ public class vNES extends Applet implements Runnable {
 
             // Set some properties:
             Globals.timeEmulation = properties.isTimeemulation();
-            nes.getPpu().showSoundBuffer = properties.isShowsoundbuffer();
+            nes.getPpu().setShowSoundBuffer(properties.isShowsoundbuffer());
 
             // Start emulation:
             //System.out.println("vNES is now starting the processor.");
