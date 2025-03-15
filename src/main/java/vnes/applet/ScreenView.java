@@ -54,8 +54,8 @@ public class ScreenView extends BufferView {
             requestFocus();
 
             if (me.getX() >= 0 && me.getY() >= 0 && me.getX() < 256 && me.getY() < 240) {
-                if (nes != null && nes.memMapper != null) {
-                    nes.memMapper.setMouseState(true, me.getX(), me.getY());
+                if (nes != null && nes.getMemoryMapper() != null) {
+                    nes.getMemoryMapper().setMouseState(true, me.getX(), me.getY());
                 }
             }
 
@@ -63,8 +63,8 @@ public class ScreenView extends BufferView {
 
         public void mouseReleased(MouseEvent me) {
 
-            if (nes != null && nes.memMapper != null) {
-                nes.memMapper.setMouseState(false, 0, 0);
+            if (nes != null && nes.getMemoryMapper() != null) {
+                nes.getMemoryMapper().setMouseState(false, 0, 0);
             }
 
         }

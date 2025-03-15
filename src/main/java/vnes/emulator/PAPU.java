@@ -153,7 +153,17 @@ public final class PAPU {
 
         frameIrqEnabled = false;
         frameIrqCounterMax = 4;
+    }
 
+    public void init(){
+        // Init sound registers:
+        for (int i = 0; i < 0x14; i++) {
+            if (i == 0x10) {
+                writeReg(0x4010, (short) 0x10);
+            } else {
+                writeReg(0x4000 + i, (short) 0);
+            }
+        }
     }
 
     public void stateLoad(ByteBuffer buf) {

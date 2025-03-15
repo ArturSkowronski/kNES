@@ -154,7 +154,7 @@ public class BufferView extends JPanel {
         if (scaleMode == SCALE_NONE || scaleMode == SCALE_HW2X || scaleMode == SCALE_HW3X) {
 
             pix = raster;
-            nes.ppu.buffer = raster;
+            nes.getPpu().buffer = raster;
 
         } else {
 
@@ -190,20 +190,20 @@ public class BufferView extends JPanel {
 
                 if (scaleMode == SCALE_NORMAL) {
 
-                    Scale.doNormalScaling(pix, pix_scaled, nes.ppu.scanlineChanged);
+                    Scale.doNormalScaling(pix, pix_scaled, nes.getPpu().scanlineChanged);
 
                 } else if (scaleMode == SCALE_SCANLINE) {
 
-                    Scale.doScanlineScaling(pix, pix_scaled, nes.ppu.scanlineChanged);
+                    Scale.doScanlineScaling(pix, pix_scaled, nes.getPpu().scanlineChanged);
 
                 } else if (scaleMode == SCALE_RASTER) {
 
-                    Scale.doRasterScaling(pix, pix_scaled, nes.ppu.scanlineChanged);
+                    Scale.doRasterScaling(pix, pix_scaled, nes.getPpu().scanlineChanged);
 
                 }
             }
 
-            nes.ppu.requestRenderAll = false;
+            nes.getPpu().requestRenderAll = false;
             paint(getGraphics());
 
         }

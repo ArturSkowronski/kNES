@@ -17,6 +17,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 
+import vnes.NES;
 import vnes.input.InputHandler;
 import vnes.ui.UiInfoMessageBus;
 import vnes.utils.HiResTimer;
@@ -38,7 +39,6 @@ public interface NotYetAbstractUI extends UiInfoMessageBus {
     BufferView getImgPalView();
     HiResTimer getTimer();
     void imageReady(boolean skipFrame);
-    void init(boolean showGui);
-    int getRomFileSize();
+    void init(NES nes, boolean showGui);
     void println(String s);
 }

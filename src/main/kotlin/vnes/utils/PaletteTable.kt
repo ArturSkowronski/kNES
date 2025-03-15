@@ -373,4 +373,13 @@ class PaletteTable {
         setEmphasis(0)
         updatePalette()
     }
+
+    fun init() {
+
+        if (!loadNTSCPalette()) {
+            //System.out.println("Unable to load palette file. Using default.");
+            loadDefaultPalette()
+        }
+
+    }
 }

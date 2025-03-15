@@ -47,7 +47,7 @@ public class AppletUI extends AbstractNESUI implements NotYetAbstractUI {
 
     /**
      * Create a new AppletUI for the specified applet.
-     * 
+     *
      * @param applet The vNES applet
      */
     public AppletUI(vNES applet) {
@@ -55,14 +55,12 @@ public class AppletUI extends AbstractNESUI implements NotYetAbstractUI {
 
         timer = new HiResTimer();
         this.applet = applet;
-
-        // Create the NES instance with this UI
-        nes = new NES(this);
     }
 
     @Override
-    public void init(boolean showGui) {
+    public void init(NES nes, boolean showGui) {
         // Create the screen view
+        this.nes = nes;
         vScreen = new ScreenView(nes, 256, 240);
         vScreen.setBgColor(applet.bgColor.getRGB());
         vScreen.init();
@@ -75,34 +73,34 @@ public class AppletUI extends AbstractNESUI implements NotYetAbstractUI {
         // Create the input handlers
         kbJoy1 = new KbInputHandler(nes::menuListener, 0);
         kbJoy2 = new KbInputHandler(nes::menuListener, 1);
-        
+
         // Set the input handlers
         inputHandlers[0] = kbJoy1;
         inputHandlers[1] = kbJoy2;
 
         // Grab Controller Setting for Player 1:
-        kbJoy1.mapKey(InputHandler.KEY_A, (Integer) Globals.keycodes.get(Globals.controls.get("p1_a")));
-        kbJoy1.mapKey(InputHandler.KEY_B, (Integer) Globals.keycodes.get(Globals.controls.get("p1_b")));
-        kbJoy1.mapKey(InputHandler.KEY_START, (Integer) Globals.keycodes.get(Globals.controls.get("p1_start")));
-        kbJoy1.mapKey(InputHandler.KEY_SELECT, (Integer) Globals.keycodes.get(Globals.controls.get("p1_select")));
-        kbJoy1.mapKey(InputHandler.KEY_UP, (Integer) Globals.keycodes.get(Globals.controls.get("p1_up")));
-        kbJoy1.mapKey(InputHandler.KEY_DOWN, (Integer) Globals.keycodes.get(Globals.controls.get("p1_down")));
-        kbJoy1.mapKey(InputHandler.KEY_LEFT, (Integer) Globals.keycodes.get(Globals.controls.get("p1_left")));
-        kbJoy1.mapKey(InputHandler.KEY_RIGHT, (Integer) Globals.keycodes.get(Globals.controls.get("p1_right")));
+        kbJoy1.mapKey(InputHandler.KEY_A, Globals.keycodes.get(Globals.controls.get("p1_a")));
+        kbJoy1.mapKey(InputHandler.KEY_B, Globals.keycodes.get(Globals.controls.get("p1_b")));
+        kbJoy1.mapKey(InputHandler.KEY_START, Globals.keycodes.get(Globals.controls.get("p1_start")));
+        kbJoy1.mapKey(InputHandler.KEY_SELECT, Globals.keycodes.get(Globals.controls.get("p1_select")));
+        kbJoy1.mapKey(InputHandler.KEY_UP, Globals.keycodes.get(Globals.controls.get("p1_up")));
+        kbJoy1.mapKey(InputHandler.KEY_DOWN, Globals.keycodes.get(Globals.controls.get("p1_down")));
+        kbJoy1.mapKey(InputHandler.KEY_LEFT, Globals.keycodes.get(Globals.controls.get("p1_left")));
+        kbJoy1.mapKey(InputHandler.KEY_RIGHT, Globals.keycodes.get(Globals.controls.get("p1_right")));
         vScreen.addKeyListener(kbJoy1);
 
         // Grab Controller Setting for Player 2:
-        kbJoy2.mapKey(InputHandler.KEY_A, (Integer) Globals.keycodes.get(Globals.controls.get("p2_a")));
-        kbJoy2.mapKey(InputHandler.KEY_B, (Integer) Globals.keycodes.get(Globals.controls.get("p2_b")));
-        kbJoy2.mapKey(InputHandler.KEY_START, (Integer) Globals.keycodes.get(Globals.controls.get("p2_start")));
-        kbJoy2.mapKey(InputHandler.KEY_SELECT, (Integer) Globals.keycodes.get(Globals.controls.get("p2_select")));
-        kbJoy2.mapKey(InputHandler.KEY_UP, (Integer) Globals.keycodes.get(Globals.controls.get("p2_up")));
-        kbJoy2.mapKey(InputHandler.KEY_DOWN, (Integer) Globals.keycodes.get(Globals.controls.get("p2_down")));
-        kbJoy2.mapKey(InputHandler.KEY_LEFT, (Integer) Globals.keycodes.get(Globals.controls.get("p2_left")));
-        kbJoy2.mapKey(InputHandler.KEY_RIGHT, (Integer) Globals.keycodes.get(Globals.controls.get("p2_right")));
+        kbJoy2.mapKey(InputHandler.KEY_A, Globals.keycodes.get(Globals.controls.get("p2_a")));
+        kbJoy2.mapKey(InputHandler.KEY_B, Globals.keycodes.get(Globals.controls.get("p2_b")));
+        kbJoy2.mapKey(InputHandler.KEY_START, Globals.keycodes.get(Globals.controls.get("p2_start")));
+        kbJoy2.mapKey(InputHandler.KEY_SELECT, Globals.keycodes.get(Globals.controls.get("p2_select")));
+        kbJoy2.mapKey(InputHandler.KEY_UP, Globals.keycodes.get(Globals.controls.get("p2_up")));
+        kbJoy2.mapKey(InputHandler.KEY_DOWN, Globals.keycodes.get(Globals.controls.get("p2_down")));
+        kbJoy2.mapKey(InputHandler.KEY_LEFT, Globals.keycodes.get(Globals.controls.get("p2_left")));
+        kbJoy2.mapKey(InputHandler.KEY_RIGHT, Globals.keycodes.get(Globals.controls.get("p2_right")));
         vScreen.addKeyListener(kbJoy2);
     }
-    
+
 
     @Override
     public void imageReady(boolean skipFrame) {
@@ -111,13 +109,13 @@ public class AppletUI extends AbstractNESUI implements NotYetAbstractUI {
         if (Globals.enableSound && Globals.timeEmulation && tmp > 0) {
             int min_avail = nes.getPapu().line.getBufferSize() - 4 * tmp;
 
-            long timeToSleep = nes.papu.getMillisToAvailableAbove(min_avail);
+            long timeToSleep = nes.getPapu().getMillisToAvailableAbove(min_avail);
             do {
                 try {
                     Thread.sleep(timeToSleep);
                 } catch (InterruptedException e) {
                 }
-            } while ((timeToSleep = nes.papu.getMillisToAvailableAbove(min_avail)) > 0);
+            } while ((timeToSleep = nes.getPapu().getMillisToAvailableAbove(min_avail)) > 0);
 
             nes.getPapu().writeBuffer();
         }
@@ -134,10 +132,6 @@ public class AppletUI extends AbstractNESUI implements NotYetAbstractUI {
         t1 = t2;
     }
 
-    public int getRomFileSize() {
-        return applet.romSize;
-    }
-
     public void showLoadProgress(int percentComplete) {
 
         // Show ROM load progress:
@@ -152,7 +146,7 @@ public class AppletUI extends AbstractNESUI implements NotYetAbstractUI {
     public void destroy() {
         // Call the parent destroy method
         super.destroy();
-        
+
         // Clean up additional resources
         applet = null;
         vScreen = null;

@@ -224,12 +224,12 @@ public final class CPU implements Runnable {
 		// (when memory mappers switch ROM banks
 		// this will be written to, no need to
 		// update reference):
-		mem = nes.cpuMem.mem;
+		mem = nes.getCpuMemory().mem;
 
 		// References to other parts of NES:
-		MemoryMapper mmap = nes.memMapper;
-		PPU ppu  = nes.ppu;
-		PAPU papu = nes.papu;
+		MemoryMapper mmap = nes.getMemoryMapper();
+		PPU ppu  = nes.getPpu();
+		PAPU papu = nes.getPapu();
 
 
 		// Registers:
@@ -1266,7 +1266,7 @@ public final class CPU implements Runnable {
 					if(!crash){
 						crash = true;
 						stopRunning = true;
-						nes.gui.showErrorMsg("Game crashed, invalid opcode at address $"+ Misc.hex16(opaddr));
+						nes.getGui().showErrorMsg("Game crashed, invalid opcode at address $"+ Misc.hex16(opaddr));
 					}
 					break;
 

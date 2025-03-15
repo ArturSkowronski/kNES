@@ -357,7 +357,7 @@ public class PPU {
 
         // Make sure everything is rendered:
         if (lastRenderedScanline < 239) {
-            renderFramePartially(nes.gui.getScreenView().getBuffer(), lastRenderedScanline + 1, 240 - lastRenderedScanline);
+            renderFramePartially(nes.getGui().getScreenView().getBuffer(), lastRenderedScanline + 1, 240 - lastRenderedScanline);
         }
 
         endFrame();
@@ -428,7 +428,7 @@ public class PPU {
 
             if (f_bgVisibility == 1 || f_spVisibility == 1) {
                 // Clock mapper IRQ Counter:
-                nes.memMapper.clockIrqCounter();
+                nes.getMemoryMapper().clockIrqCounter();
             }
 
         } else if (scanline >= 21 + vblankAdd && scanline <= 260) {
@@ -458,7 +458,7 @@ public class PPU {
 
             if (f_bgVisibility == 1 || f_spVisibility == 1) {
                 // Clock mapper IRQ Counter:
-                nes.memMapper.clockIrqCounter();
+                nes.getMemoryMapper().clockIrqCounter();
             }
 
         } else if (scanline == 261 + vblankAdd) {
@@ -645,7 +645,7 @@ public class PPU {
         f_dispType = value & 1;
 
         if (f_dispType == 0) {
-            nes.palTable.setEmphasis(f_color);
+            nes.getPalTable().setEmphasis(f_color);
         }
         updatePalettes();
 
@@ -766,7 +766,7 @@ public class PPU {
         // Invoke mapper latch:
         cntsToAddress();
         if (vramAddress < 0x2000) {
-            nes.memMapper.latchAccess(vramAddress);
+            nes.getMemoryMapper().latchAccess(vramAddress);
         }
 
     }
@@ -792,7 +792,7 @@ public class PPU {
 
             // Mapper latch access:
             if (vramAddress < 0x2000) {
-                nes.memMapper.latchAccess(vramAddress);
+                nes.getMemoryMapper().latchAccess(vramAddress);
             }
 
             // Increment by either 1 or 32, depending on d2 of Control Register 1:
@@ -834,7 +834,7 @@ public class PPU {
             writeMem(vramAddress, value);
 
             // Invoke mapper latch:
-            nes.memMapper.latchAccess(vramAddress);
+            nes.getMemoryMapper().latchAccess(vramAddress);
 
         }
 
@@ -1550,16 +1550,16 @@ public class PPU {
 
         for (int i = 0; i < 16; i++) {
             if (f_dispType == 0) {
-                imgPalette[i] = nes.palTable.getEntry(ppuMem.load(0x3f00 + i) & 63);
+                imgPalette[i] = nes.getPalTable().getEntry(ppuMem.load(0x3f00 + i) & 63);
             } else {
-                imgPalette[i] = nes.palTable.getEntry(ppuMem.load(0x3f00 + i) & 32);
+                imgPalette[i] = nes.getPalTable().getEntry(ppuMem.load(0x3f00 + i) & 32);
             }
         }
         for (int i = 0; i < 16; i++) {
             if (f_dispType == 0) {
-                sprPalette[i] = nes.palTable.getEntry(ppuMem.load(0x3f10 + i) & 63);
+                sprPalette[i] = nes.getPalTable().getEntry(ppuMem.load(0x3f10 + i) & 63);
             } else {
-                sprPalette[i] = nes.palTable.getEntry(ppuMem.load(0x3f10 + i) & 32);
+                sprPalette[i] = nes.getPalTable().getEntry(ppuMem.load(0x3f10 + i) & 32);
             }
         }
 

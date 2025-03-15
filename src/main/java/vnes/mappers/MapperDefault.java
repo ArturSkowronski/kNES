@@ -20,18 +20,19 @@ import vnes.*;
 import vnes.buffer.ByteBuffer;
 import vnes.emulator.CPU;
 import vnes.emulator.Memory;
+import vnes.emulator.PAPU;
 import vnes.emulator.ROM;
 import vnes.input.InputHandler;
 
 public class MapperDefault implements MemoryMapper {
 
-    public NES nes;
     public Memory cpuMem;
     public Memory ppuMem;
     public short[] cpuMemArray;
     public ROM rom;
     public CPU cpu;
     public PPU ppu;
+    public PAPU papu;
     public int cpuMemSize;
     public int joy1StrobeState;
     public int joy2StrobeState;
@@ -41,20 +42,22 @@ public class MapperDefault implements MemoryMapper {
     public int mouseX;
     public int mouseY;
     int tmp;
+    private InputHandler inputHandler;
+    private InputHandler inputHandler2;
 
     public void init(NES nes) {
-
-        this.nes = nes;
         this.cpuMem = nes.getCpuMemory();
         this.cpuMemArray = cpuMem.mem;
         this.ppuMem = nes.getPpuMemory();
         this.rom = nes.getRom();
         this.cpu = nes.getCpu();
         this.ppu = nes.getPpu();
+        this.papu = nes.getPapu();
+        this.inputHandler = nes.getGui().getJoy1();
+        this.inputHandler2 = nes.getGui().getJoy2();
 
         cpuMemSize = cpuMem.getMemSize();
         joypadLastWrite = -1;
-
     }
 
     public void stateLoad(ByteBuffer buf) {
@@ -274,7 +277,7 @@ public class MapperDefault implements MemoryMapper {
 
                         // 0x4015:
                         // Sound channel enable, DMC Status
-                        return nes.getPapu().readReg(address);
+                        return papu.readReg(address);
 
                     }
                     case 1: {
@@ -288,7 +291,7 @@ public class MapperDefault implements MemoryMapper {
 
                         // 0x4017:
                         // Joystick 2 + Strobe
-                        if (mousePressed && nes.ppu != null && nes.ppu.buffer != null) {
+                        if (mousePressed && ppu != null && ppu.buffer != null) {
 
                             // Check for white pixel nearby:
 
@@ -301,7 +304,7 @@ public class MapperDefault implements MemoryMapper {
 
                             for (int y = sy; y < ey; y++) {
                                 for (int x = sx; x < ex; x++) {
-                                    if ((nes.ppu.buffer[(y << 8) + x] & 0xFFFFFF) == 0xFFFFFF) {
+                                    if ((ppu.buffer[(y << 8) + x] & 0xFFFFFF) == 0xFFFFFF) {
                                         w = 0x1 << 3;
                                         break;
                                     }
@@ -391,7 +394,7 @@ public class MapperDefault implements MemoryMapper {
             case 0x4015: {
 
                 // Sound Channel Switch, DMC Status
-                nes.getPapu().writeReg(address, value);
+                papu.writeReg(address, value);
                 break;
 
             }
@@ -412,7 +415,7 @@ public class MapperDefault implements MemoryMapper {
             case 0x4017: {
 
                 // Sound channel frame sequencer:
-                nes.papu.writeReg(address, value);
+                papu.writeReg(address, value);
                 break;
 
             }
@@ -421,7 +424,7 @@ public class MapperDefault implements MemoryMapper {
                 // Sound registers
                 ////System.out.println("write to sound reg");
                 if (address >= 0x4000 && address <= 0x4017) {
-                    nes.getPapu().writeReg(address, value);
+                    papu.writeReg(address, value);
                 }
                 break;
 
@@ -432,33 +435,32 @@ public class MapperDefault implements MemoryMapper {
 
     public short joy1Read() {
 
-        InputHandler in = nes.getGui().getJoy1();
         short ret;
 
         switch (joy1StrobeState) {
             case 0:
-                ret = in.getKeyState(InputHandler.KEY_A);
+                ret = inputHandler.getKeyState(InputHandler.KEY_A);
                 break;
             case 1:
-                ret = in.getKeyState(InputHandler.KEY_B);
+                ret = inputHandler.getKeyState(InputHandler.KEY_B);
                 break;
             case 2:
-                ret = in.getKeyState(InputHandler.KEY_SELECT);
+                ret = inputHandler.getKeyState(InputHandler.KEY_SELECT);
                 break;
             case 3:
-                ret = in.getKeyState(InputHandler.KEY_START);
+                ret = inputHandler.getKeyState(InputHandler.KEY_START);
                 break;
             case 4:
-                ret = in.getKeyState(InputHandler.KEY_UP);
+                ret = inputHandler.getKeyState(InputHandler.KEY_UP);
                 break;
             case 5:
-                ret = in.getKeyState(InputHandler.KEY_DOWN);
+                ret = inputHandler.getKeyState(InputHandler.KEY_DOWN);
                 break;
             case 6:
-                ret = in.getKeyState(InputHandler.KEY_LEFT);
+                ret = inputHandler.getKeyState(InputHandler.KEY_LEFT);
                 break;
             case 7:
-                ret = in.getKeyState(InputHandler.KEY_RIGHT);
+                ret = inputHandler.getKeyState(InputHandler.KEY_RIGHT);
                 break;
             case 8:
             case 9:
@@ -490,7 +492,6 @@ public class MapperDefault implements MemoryMapper {
     }
 
     public short joy2Read() {
-        InputHandler in = nes.getGui().getJoy2();
         int st = joy2StrobeState;
 
         joy2StrobeState++;
@@ -499,21 +500,21 @@ public class MapperDefault implements MemoryMapper {
         }
 
         if (st == 0) {
-            return in.getKeyState(InputHandler.KEY_A);
+            return inputHandler2.getKeyState(InputHandler.KEY_A);
         } else if (st == 1) {
-            return in.getKeyState(InputHandler.KEY_B);
+            return inputHandler2.getKeyState(InputHandler.KEY_B);
         } else if (st == 2) {
-            return in.getKeyState(InputHandler.KEY_SELECT);
+            return inputHandler2.getKeyState(InputHandler.KEY_SELECT);
         } else if (st == 3) {
-            return in.getKeyState(InputHandler.KEY_START);
+            return inputHandler2.getKeyState(InputHandler.KEY_START);
         } else if (st == 4) {
-            return in.getKeyState(InputHandler.KEY_UP);
+            return inputHandler2.getKeyState(InputHandler.KEY_UP);
         } else if (st == 5) {
-            return in.getKeyState(InputHandler.KEY_DOWN);
+            return inputHandler2.getKeyState(InputHandler.KEY_DOWN);
         } else if (st == 6) {
-            return in.getKeyState(InputHandler.KEY_LEFT);
+            return inputHandler2.getKeyState(InputHandler.KEY_LEFT);
         } else if (st == 7) {
-            return in.getKeyState(InputHandler.KEY_RIGHT);
+            return inputHandler2.getKeyState(InputHandler.KEY_RIGHT);
         } else if (st == 16) {
             return (short) 0;
         } else if (st == 17) {
@@ -545,7 +546,7 @@ public class MapperDefault implements MemoryMapper {
 
         // Reset IRQ:
         //nes.getCpu().doResetInterrupt();
-        nes.getCpu().requestIrq(CPU.IRQ_RESET);
+        cpu.requestIrq(CPU.IRQ_RESET);
 
     }
 
@@ -589,7 +590,7 @@ public class MapperDefault implements MemoryMapper {
             if (ram != null && ram.length == 0x2000) {
 
                 // Load Battery RAM into memory:
-                System.arraycopy(ram, 0, nes.cpuMem.mem, 0x6000, 0x2000);
+                System.arraycopy(ram, 0, cpuMem.mem, 0x6000, 0x2000);
 
             }
 
@@ -614,7 +615,7 @@ public class MapperDefault implements MemoryMapper {
         }
         ppu.triggerRendering();
 
-        System.arraycopy(rom.getVromBank(bank % rom.getVromBankCount()), 0, nes.ppuMem.mem, address, 4096);
+        System.arraycopy(rom.getVromBank(bank % rom.getVromBankCount()), 0, ppuMem.mem, address, 4096);
 
         Tile[] vromTile = rom.getVromBankTiles(bank % rom.getVromBankCount());
         System.arraycopy(vromTile, 0, ppu.ptTile, address >> 4, 256);
@@ -649,7 +650,7 @@ public class MapperDefault implements MemoryMapper {
 
         int bank4k = (bank1k / 4) % rom.getVromBankCount();
         int bankoffset = (bank1k % 4) * 1024;
-        System.arraycopy(rom.getVromBank(bank4k), 0, nes.ppuMem.mem, bankoffset, 1024);
+        System.arraycopy(rom.getVromBank(bank4k), 0, ppuMem.mem, bankoffset, 1024);
 
         // Update tiles:
         Tile[] vromTile = rom.getVromBankTiles(bank4k);
@@ -669,7 +670,7 @@ public class MapperDefault implements MemoryMapper {
 
         int bank4k = (bank2k / 2) % rom.getVromBankCount();
         int bankoffset = (bank2k % 2) * 2048;
-        System.arraycopy(rom.getVromBank(bank4k), bankoffset, nes.ppuMem.mem, address, 2048);
+        System.arraycopy(rom.getVromBank(bank4k), bankoffset, ppuMem.mem, address, 2048);
 
         // Update tiles:
         Tile[] vromTile = rom.getVromBankTiles(bank4k);
@@ -724,8 +725,6 @@ public class MapperDefault implements MemoryMapper {
     }
 
     public void destroy() {
-
-        nes = null;
         cpuMem = null;
         ppuMem = null;
         rom = null;

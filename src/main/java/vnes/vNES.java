@@ -18,6 +18,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import java.applet.*;
 import java.awt.*;
+import java.util.Map;
 
 import vnes.applet.AppletUI;
 import vnes.applet.BufferView;
@@ -26,18 +27,11 @@ import vnes.utils.Globals;
 
 public class vNES extends Applet implements Runnable {
 
-    boolean scale;
-    boolean scanlines;
-    boolean sound;
-    boolean fps;
-    boolean stereo;
-    boolean timeemulation;
-    boolean showsoundbuffer;
-    int samplerate;
-    public int romSize;
-    int progress;
-    AppletUI gui;
     NES nes;
+    Properties properties;
+
+    int progress;
+
     ScreenView panelScreen;
     String rom = "";
     Font progressFont;
@@ -46,31 +40,30 @@ public class vNES extends Applet implements Runnable {
 
     public void init() {
         initKeyCodes();
-        readParams();
-        System.gc();
+        properties = readParams();
 
-        gui = new AppletUI(this);
-        gui.init(false);
+        AppletUI gui = new AppletUI(this);
+
+        nes = new NES(gui);
+        nes.enableSound(properties.isSound());
+        nes.reset();
+
+        gui.init(nes, false);
 
         Globals.appletMode = true;
         Globals.memoryFlushValue = 0x00; // make SMB1 hacked version work.
-
-        nes = gui.getNES();
-        nes.enableSound(sound);
-        nes.reset();
-
     }
 
     public void addScreenView() {
 
-        panelScreen = (ScreenView) gui.getScreenView();
-        panelScreen.setFPSEnabled(fps);
+        panelScreen = (ScreenView) nes.getScreenView();
+        panelScreen.setFPSEnabled(properties.isFps());
 
         this.setLayout(null);
 
-        if (scale) {
+        if (properties.isScale()) {
 
-            if (scanlines) {
+            if (properties.isScanlines()) {
                 panelScreen.setScaleMode(BufferView.SCALE_SCANLINE);
             } else {
                 panelScreen.setScaleMode(BufferView.SCALE_NORMAL);
@@ -79,11 +72,8 @@ public class vNES extends Applet implements Runnable {
             this.setSize(512, 480);
             this.setBounds(0, 0, 512, 480);
             panelScreen.setBounds(0, 0, 512, 480);
-
         } else {
-
             panelScreen.setBounds(0, 0, 256, 240);
-
         }
 
         this.setIgnoreRepaint(true);
@@ -92,10 +82,8 @@ public class vNES extends Applet implements Runnable {
     }
 
     public void start() {
-
         Thread t = new Thread(this);
         t.start();
-
     }
 
     public void run() {
@@ -113,18 +101,18 @@ public class vNES extends Applet implements Runnable {
 
         nes.loadRom(rom);
 
-        if (nes.rom.isValid()) {
+        if (nes.getRom().isValid()) {
 
             // Add the screen buffer:
             addScreenView();
 
             // Set some properties:
-            Globals.timeEmulation = timeemulation;
-            nes.ppu.showSoundBuffer = showsoundbuffer;
+            Globals.timeEmulation = properties.isTimeemulation();
+            nes.getPpu().showSoundBuffer = properties.isShowsoundbuffer();
 
             // Start emulation:
             //System.out.println("vNES is now starting the processor.");
-            nes.getCpu().beginExecution();
+            nes.beginExecution();
 
         } else {
 
@@ -136,44 +124,24 @@ public class vNES extends Applet implements Runnable {
     }
 
     public void stop() {
-        nes.stopEmulation();
-        //System.out.println("vNES has stopped the processor.");
-        nes.getPapu().stop();
         this.destroy();
-
     }
 
     public void destroy() {
-
-        if (nes != null && nes.getCpu().isRunning()) {
-            stop();
-        }
-        
         if (nes != null) {
             nes.destroy();
         }
-        if (gui != null) {
-            gui.destroy();
-        }
 
-        gui = null;
         nes = null;
         panelScreen = null;
         rom = null;
-
-        System.runFinalization();
-        System.gc();
-
     }
 
     public void showLoadProgress(int percentComplete) {
-
         progress = percentComplete;
         paint(getGraphics());
-
     }
 
-    // Show the progress graphically.
     public void paint(Graphics g) {
 
         String pad;
@@ -186,7 +154,7 @@ public class vNES extends Applet implements Runnable {
         }
 
         // Get screen size:
-        if (scale) {
+        if (properties.isScale()) {
             scrw = 512;
             scrh = 480;
         } else {
@@ -221,184 +189,149 @@ public class vNES extends Applet implements Runnable {
         g.drawString("vNES \u00A9 2006-2013 Open Emulation Project", 12, 464);
     }
 
-    public void update(Graphics g) {
-        // do nothing.
-    }
-
-    public void readParams() {
-
+    public Properties readParams() {
+        Properties properties = new Properties();
         String tmp;
 
         tmp = getParameter("rom");
-        if (tmp == null || tmp.equals("")) {
-            rom = "vnes.nes";
-        } else {
-            rom = tmp;
+        if (tmp != null && !tmp.equals("")) {
+            properties.setRom(tmp);
         }
+        // Set instance variables for backward compatibility
+        rom = properties.getRom();
 
         tmp = getParameter("scale");
-        if (tmp == null || tmp.equals("")) {
-            scale = false;
-        } else {
-            scale = tmp.equals("on");
+        if (tmp != null && !tmp.equals("")) {
+            properties.setScale(tmp.equals("on"));
         }
-
         tmp = getParameter("sound");
-        if (tmp == null || tmp.equals("")) {
-            sound = true;
-        } else {
-            sound = tmp.equals("on");
+        if (tmp != null && !tmp.equals("")) {
+            properties.setSound(tmp.equals("on"));
         }
 
         tmp = getParameter("stereo");
-        if (tmp == null || tmp.equals("")) {
-            stereo = true; // on by default
-        } else {
-            stereo = tmp.equals("on");
-        }
+        if (tmp != null && !tmp.equals("")) {
+            properties.setStereo(tmp.equals("on"));
+        }// Set instance variables for backward compatibility
 
         tmp = getParameter("scanlines");
-        if (tmp == null || tmp.equals("")) {
-            scanlines = false;
-        } else {
-            scanlines = tmp.equals("on");
+        if (tmp != null && !tmp.equals("")) {
+            properties.setScanlines(tmp.equals("on"));
         }
 
         tmp = getParameter("fps");
-        if (tmp == null || tmp.equals("")) {
-            fps = false;
-        } else {
-            fps = tmp.equals("on");
+        if (tmp != null && !tmp.equals("")) {
+            properties.setFps(tmp.equals("on"));
         }
 
         tmp = getParameter("timeemulation");
-        if (tmp == null || tmp.equals("")) {
-            timeemulation = true;
-        } else {
-            timeemulation = tmp.equals("on");
+        if (tmp != null && !tmp.equals("")) {
+            properties.setTimeemulation(tmp.equals("on"));
         }
 
         tmp = getParameter("showsoundbuffer");
-        if (tmp == null || tmp.equals("")) {
-            showsoundbuffer = false;
-        } else {
-            showsoundbuffer = tmp.equals("on");
+        if (tmp != null && !tmp.equals("")) {
+            properties.setShowsoundbuffer(tmp.equals("on"));
         }
 
         /* Controller Setup for Player 1 */
+        Map<String, String> controls = properties.getControls();
 
         tmp = getParameter("p1_up");
-        if (tmp == null || tmp.equals("")) {
-            Globals.controls.put("p1_up", "VK_UP");
-        } else {
-            Globals.controls.put("p1_up", "VK_" + tmp);
+        if (tmp != null && !tmp.equals("")) {
+            controls.put("p1_up", "VK_" + tmp);
         }
+
         tmp = getParameter("p1_down");
-        if (tmp == null || tmp.equals("")) {
-            Globals.controls.put("p1_down", "VK_DOWN");
-        } else {
-            Globals.controls.put("p1_down", "VK_" + tmp);
+        if (tmp != null && !tmp.equals("")) {
+            controls.put("p1_down", "VK_" + tmp);
         }
+
         tmp = getParameter("p1_left");
-        if (tmp == null || tmp.equals("")) {
-            Globals.controls.put("p1_left", "VK_LEFT");
-        } else {
-            Globals.controls.put("p1_left", "VK_" + tmp);
+        if (tmp != null && !tmp.equals("")) {
+            controls.put("p1_left", "VK_" + tmp);
         }
+
         tmp = getParameter("p1_right");
-        if (tmp == null || tmp.equals("")) {
-            Globals.controls.put("p1_right", "VK_RIGHT");
-        } else {
-            Globals.controls.put("p1_right", "VK_" + tmp);
+        if (tmp != null && !tmp.equals("")) {
+            controls.put("p1_right", "VK_" + tmp);
         }
+
         tmp = getParameter("p1_a");
-        if (tmp == null || tmp.equals("")) {
-            Globals.controls.put("p1_a", "VK_X");
-        } else {
-            Globals.controls.put("p1_a", "VK_" + tmp);
+        if (tmp != null && !tmp.equals("")) {
+            controls.put("p1_a", "VK_" + tmp);
         }
+
         tmp = getParameter("p1_b");
-        if (tmp == null || tmp.equals("")) {
-            Globals.controls.put("p1_b", "VK_Z");
-        } else {
-            Globals.controls.put("p1_b", "VK_" + tmp);
+        if (tmp != null && !tmp.equals("")) {
+            controls.put("p1_b", "VK_" + tmp);
         }
+
         tmp = getParameter("p1_start");
-        if (tmp == null || tmp.equals("")) {
-            Globals.controls.put("p1_start", "VK_ENTER");
-        } else {
-            Globals.controls.put("p1_start", "VK_" + tmp);
+        if (tmp != null && !tmp.equals("")) {
+            controls.put("p1_start", "VK_" + tmp);
         }
+
         tmp = getParameter("p1_select");
-        if (tmp == null || tmp.equals("")) {
-            Globals.controls.put("p1_select", "VK_CONTROL");
-        } else {
-            Globals.controls.put("p1_select", "VK_" + tmp);
+        if (tmp != null && !tmp.equals("")) {
+            controls.put("p1_select", "VK_" + tmp);
         }
 
         /* Controller Setup for Player 2 */
-
         tmp = getParameter("p2_up");
-        if (tmp == null || tmp.equals("")) {
-            Globals.controls.put("p2_up", "VK_NUMPAD8");
-        } else {
-            Globals.controls.put("p2_up", "VK_" + tmp);
+        if (tmp != null && !tmp.equals("")) {
+            controls.put("p2_up", "VK_" + tmp);
         }
+
         tmp = getParameter("p2_down");
-        if (tmp == null || tmp.equals("")) {
-            Globals.controls.put("p2_down", "VK_NUMPAD2");
-        } else {
-            Globals.controls.put("p2_down", "VK_" + tmp);
+        if (tmp != null && !tmp.equals("")) {
+            controls.put("p2_down", "VK_" + tmp);
         }
+
         tmp = getParameter("p2_left");
-        if (tmp == null || tmp.equals("")) {
-            Globals.controls.put("p2_left", "VK_NUMPAD4");
-        } else {
-            Globals.controls.put("p2_left", "VK_" + tmp);
+        if (tmp != null && !tmp.equals("")) {
+            controls.put("p2_left", "VK_" + tmp);
         }
+
         tmp = getParameter("p2_right");
-        if (tmp == null || tmp.equals("")) {
-            Globals.controls.put("p2_right", "VK_NUMPAD6");
-        } else {
-            Globals.controls.put("p2_right", "VK_" + tmp);
+        if (tmp != null && !tmp.equals("")) {
+            controls.put("p2_right", "VK_" + tmp);
         }
+
         tmp = getParameter("p2_a");
-        if (tmp == null || tmp.equals("")) {
-            Globals.controls.put("p2_a", "VK_NUMPAD7");
-        } else {
-            Globals.controls.put("p2_a", "VK_" + tmp);
+        if (tmp != null && !tmp.equals("")) {
+            controls.put("p2_a", "VK_" + tmp);
         }
+
         tmp = getParameter("p2_b");
-        if (tmp == null || tmp.equals("")) {
-            Globals.controls.put("p2_b", "VK_NUMPAD9");
-        } else {
-            Globals.controls.put("p2_b", "VK_" + tmp);
+        if (tmp != null && !tmp.equals("")) {
+            controls.put("p2_b", "VK_" + tmp);
         }
+
         tmp = getParameter("p2_start");
-        if (tmp == null || tmp.equals("")) {
-            Globals.controls.put("p2_start", "VK_NUMPAD1");
-        } else {
-            Globals.controls.put("p2_start", "VK_" + tmp);
+        if (tmp != null && !tmp.equals("")) {
+            controls.put("p2_start", "VK_" + tmp);
         }
+
         tmp = getParameter("p2_select");
-        if (tmp == null || tmp.equals("")) {
-            Globals.controls.put("p2_select", "VK_NUMPAD3");
-        } else {
-            Globals.controls.put("p2_select", "VK_" + tmp);
+        if (tmp != null && !tmp.equals("")) {
+            controls.put("p2_select", "VK_" + tmp);
         }
+
+        // Set Globals.controls for backward compatibility
+        Globals.controls.putAll(controls);
 
         tmp = getParameter("romsize");
-        if (tmp == null || tmp.equals("")) {
-            romSize = -1;
-        } else {
+        if (tmp != null && !tmp.equals("")) {
             try {
-                romSize = Integer.parseInt(tmp);
+                properties.setRomSize(Integer.parseInt(tmp));
             } catch (Exception e) {
-                romSize = -1;
+                // Keep default value
             }
         }
-    }
 
+        return properties;
+    }
     public void initKeyCodes() {
         Globals.keycodes.put("VK_SPACE", 32);
         Globals.keycodes.put("VK_PAGE_UP", 33);
