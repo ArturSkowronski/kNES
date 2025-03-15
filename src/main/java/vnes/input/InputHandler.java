@@ -19,23 +19,23 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 public interface InputHandler {
 
     // Joypad keys:
-    public static final int KEY_A = 0;
-    public static final int KEY_B = 1;
-    public static final int KEY_START = 2;
-    public static final int KEY_SELECT = 3;
-    public static final int KEY_UP = 4;
-    public static final int KEY_DOWN = 5;
-    public static final int KEY_LEFT = 6;
-    public static final int KEY_RIGHT = 7;
+    int KEY_A = 0;
+    int KEY_B = 1;
+    int KEY_START = 2;
+    int KEY_SELECT = 3;
+    int KEY_UP = 4;
+    int KEY_DOWN = 5;
+    int KEY_LEFT = 6;
+    int KEY_RIGHT = 7;
     
     // Key count:
-    public static final int NUM_KEYS = 8;
+    int NUM_KEYS = 8;
 
-    public short getKeyState(int padKey);
+    short getKeyState(int padKey);
 
-    public void mapKey(int padKey, int deviceKey);
+    void mapKey(int padKey, int deviceKey);
 
-    public void reset();
+    void reset();
 
-    public void update();
+    void update();
 }

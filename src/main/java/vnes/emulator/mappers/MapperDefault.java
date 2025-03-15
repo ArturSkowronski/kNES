@@ -656,9 +656,7 @@ public class MapperDefault implements MemoryMapper {
         // Update tiles:
         Tile[] vromTile = rom.getVromBankTiles(bank4k);
         int baseIndex = address >> 4;
-        for (int i = 0; i < 64; i++) {
-            ppu.ptTile[baseIndex + i] = vromTile[((bank1k % 4) << 6) + i];
-        }
+        System.arraycopy(vromTile, ((bank1k % 4) << 6) + 0, ppu.ptTile, baseIndex + 0, 64);
 
     }
 
@@ -676,9 +674,7 @@ public class MapperDefault implements MemoryMapper {
         // Update tiles:
         Tile[] vromTile = rom.getVromBankTiles(bank4k);
         int baseIndex = address >> 4;
-        for (int i = 0; i < 128; i++) {
-            ppu.ptTile[baseIndex + i] = vromTile[((bank2k % 2) << 7) + i];
-        }
+        System.arraycopy(vromTile, ((bank2k % 2) << 7) + 0, ppu.ptTile, baseIndex + 0, 128);
 
     }
 

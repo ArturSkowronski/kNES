@@ -294,11 +294,7 @@ public final class PAPU {
             masterFrameCounter = 0;
             frameIrqActive = false;
 
-            if (((value >> 6) & 0x1) == 0) {
-                frameIrqEnabled = true;
-            } else {
-                frameIrqEnabled = false;
-            }
+            frameIrqEnabled = ((value >> 6) & 0x1) == 0;
 
             if (countSequence == 0) {
 
@@ -445,7 +441,7 @@ public final class PAPU {
             // Do all cycles at once:
             noise.progTimerCount -= acc_c;
             noise.accCount += acc_c;
-            noise.accValue += acc_c * noise.sampleValue;
+            noise.accValue += (long) acc_c * noise.sampleValue;
 
         } else {
 
@@ -873,9 +869,7 @@ public final class PAPU {
 
     public void setPanning(int[] pos) {
 
-        for (int i = 0; i < 5; i++) {
-            panning[i] = pos[i];
-        }
+        System.arraycopy(pos, 0, panning, 0, 5);
         updateStereoPos();
 
     }
@@ -1072,7 +1066,6 @@ public final class PAPU {
         square1 = null;
         square2 = null;
         triangle = null;
-        ;
         noise = null;
         dmc = null;
 

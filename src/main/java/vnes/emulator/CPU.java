@@ -478,7 +478,7 @@ public final class CPU implements Runnable {
 
 					// Add with carry.
 					temp = REG_ACC + load(addr) + F_CARRY;
-					F_OVERFLOW = ((!(((REG_ACC ^ load(addr)) & 0x80)!=0) && (((REG_ACC ^ temp) & 0x80))!=0)?1:0);
+					F_OVERFLOW = ((((REG_ACC ^ load(addr)) & 0x80) == 0 && (((REG_ACC ^ temp) & 0x80))!=0)?1:0);
 					F_CARRY = (temp>255?1:0);
 					F_SIGN = (temp>>7)&1;
 					F_ZERO = temp&0xFF;

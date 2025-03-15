@@ -37,8 +37,8 @@ public class BufferView extends JPanel {
     private VolatileImage vimg;
     private boolean usingMenu = false;
     private Graphics gfx;
-    private int width;
-    private int height;
+    private final int width;
+    private final int height;
     private int[] pix;
     private int[] pix_scaled;
     private int scaleMode;
@@ -47,7 +47,7 @@ public class BufferView extends JPanel {
     private long prevFrameTime;
     private String fps;
     private int fpsCounter;
-    private Font fpsFont = new Font("Verdana", Font.BOLD, 10);
+    private final Font fpsFont = new Font("Verdana", Font.BOLD, 10);
     private int bgColor = Color.white.darker().getRGB();
 
     // Constructor

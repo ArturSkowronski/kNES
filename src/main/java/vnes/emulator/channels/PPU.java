@@ -57,10 +57,10 @@ public class PPU {
     private int f_bgClipping;     // Background clipping. 0=BG invisible in left 8-pixel column, 1=No clipping
     private int f_dispType;       // Display type. 0=color, 1=monochrome
     // Status flags:
-    private int STATUS_VRAMWRITE = 4;
-    private int STATUS_SLSPRITECOUNT = 5;
-    private int STATUS_SPRITE0HIT = 6;
-    private int STATUS_VBLANK = 7;
+    private final int STATUS_VRAMWRITE = 4;
+    private final int STATUS_SLSPRITECOUNT = 5;
+    private final int STATUS_SPRITE0HIT = 6;
+    private final int STATUS_VBLANK = 7;
     // VRAM I/O:
     private int vramAddress;
     private int vramTmpAddress;
@@ -127,12 +127,12 @@ public class PPU {
     // Vars used when updating regs/address:
     private int address, b1, b2;
     // Variables used when rendering:
-    private int[] attrib = new int[32];
-    private int[] bgbuffer = new int[256 * 240];
-    private int[] pixrendered = new int[256 * 240];
-    private int[] spr0dummybuffer = new int[256 * 240];
-    private int[] dummyPixPriTable = new int[256 * 240];
-    private int[] oldFrame = new int[256 * 240];
+    private final int[] attrib = new int[32];
+    private final int[] bgbuffer = new int[256 * 240];
+    private final int[] pixrendered = new int[256 * 240];
+    private final int[] spr0dummybuffer = new int[256 * 240];
+    private final int[] dummyPixPriTable = new int[256 * 240];
+    private final int[] oldFrame = new int[256 * 240];
 
     public int[] getBuffer() {
         return buffer;
@@ -150,7 +150,7 @@ public class PPU {
         return scanlineChanged;
     }
 
-    private boolean[] scanlineChanged = new boolean[240];
+    private final boolean[] scanlineChanged = new boolean[240];
 
     public boolean isRequestRenderAll() {
         return requestRenderAll;

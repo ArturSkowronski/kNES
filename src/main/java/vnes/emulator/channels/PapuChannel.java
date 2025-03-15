@@ -18,13 +18,13 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 public interface PapuChannel {
 
-    public void writeReg(int address, int value);
+    void writeReg(int address, int value);
 
-    public void setEnabled(boolean value);
+    void setEnabled(boolean value);
 
-    public boolean isEnabled();
+    boolean isEnabled();
 
-    public void reset();
+    void reset();
 
-    public int getLengthStatus();
+    int getLengthStatus();
 }

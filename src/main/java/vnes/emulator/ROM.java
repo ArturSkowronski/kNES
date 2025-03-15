@@ -95,9 +95,7 @@ public class ROM {
 
         // Read header:
         header = new short[16];
-        for (int i = 0; i < 16; i++) {
-            header[i] = b[i];
-        }
+        System.arraycopy(b, 0, header, 0, 16);
 
         // Check first four bytes:
         String fcode = new String(new byte[]{(byte) b[0], (byte) b[1], (byte) b[2], (byte) b[3]});

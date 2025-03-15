@@ -124,9 +124,6 @@ object Scale {
         var col1: Int
         var col2: Int
         var col3: Int
-        var r: Int
-        var g: Int
-        var b: Int
         var flag = 0
 
         for (y in 0..239) {
