@@ -1,4 +1,4 @@
-package vnes.channels;
+package vnes.emulator.channels;
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project
@@ -17,14 +17,15 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import vnes.emulator.CPU;
-import vnes.PAPU;
+import vnes.emulator.PAPU;
 
 public class ChannelDM implements PapuChannel {
+
+    PAPU papu;
 
     public static final int MODE_NORMAL = 0;
     public static final int MODE_LOOP = 1;
     public static final int MODE_IRQ = 2;
-    PAPU papu;
     public boolean isEnabled;
     boolean hasSample;
     public boolean irqGenerated = false;
@@ -87,7 +88,7 @@ public class ChannelDM implements PapuChannel {
         }
 
         if (irqGenerated) {
-            papu.nes.cpu.requestIrq(CPU.IRQ_NORMAL);
+            papu.getCPU().requestIrq(CPU.IRQ_NORMAL);
         }
 
     }
@@ -127,8 +128,8 @@ public class ChannelDM implements PapuChannel {
     private void nextSample() {
 
         // Fetch byte:
-        data = papu.getNes().getMemoryMapper().load(playAddress);
-        papu.getNes().cpu.haltCycles(4);
+        data = papu.getMemoryMapper().load(playAddress);
+        papu.getCPU().haltCycles(4);
 
         playLengthCounter--;
         playAddress++;

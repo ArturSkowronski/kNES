@@ -1,4 +1,4 @@
-package vnes.channels;
+package vnes.emulator.channels;
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project
@@ -16,7 +16,7 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.PAPU;
+import vnes.emulator.PAPU;
 
 public class ChannelNoise implements PapuChannel {
 

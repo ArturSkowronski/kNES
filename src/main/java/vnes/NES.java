@@ -18,6 +18,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import vnes.buffer.ByteBuffer;
 import vnes.emulator.CPU;
+import vnes.emulator.PAPU;
 import vnes.emulator.ROM;
 import vnes.input.InputHandler;
 import vnes.emulator.Memory;
@@ -309,7 +310,7 @@ public class NES {
         cpu.init();
         ppu.reset();
         palTable.reset();
-        papu.reset();
+        papu.reset(this);
 
         InputHandler joy1 = gui.getJoy1();
         if (joy1 != null) {
@@ -338,14 +339,6 @@ public class NES {
         if (wasRunning) {
             startEmulation();
         }
-
-    }
-
-    public void setFramerate(int rate) {
-
-        Globals.preferredFrameRate = rate;
-        Globals.frameTime = 1000000 / rate;
-        papu.setSampleRate(papu.getSampleRate(), false);
 
     }
 
