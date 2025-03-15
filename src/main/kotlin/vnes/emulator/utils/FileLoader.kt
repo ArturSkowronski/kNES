@@ -1,4 +1,4 @@
-package vnes.utils
+package vnes.emulator.utils
 
 import java.io.File
 import java.io.FileInputStream

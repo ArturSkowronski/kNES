@@ -22,8 +22,9 @@ import java.util.Map;
 
 import vnes.applet.AppletUI;
 import vnes.applet.BufferView;
-import vnes.applet.ScreenView;
-import vnes.utils.Globals;
+import vnes.applet.AppletScreenView;
+import vnes.emulator.NES;
+import vnes.emulator.utils.Globals;
 
 public class vNES extends Applet implements Runnable {
 
@@ -32,7 +33,7 @@ public class vNES extends Applet implements Runnable {
 
     int progress;
 
-    ScreenView panelScreen;
+    AppletScreenView panelScreen;
     String rom = "";
     Font progressFont;
     public Color bgColor = Color.black.darker().darker();
@@ -56,7 +57,7 @@ public class vNES extends Applet implements Runnable {
 
     public void addScreenView() {
 
-        panelScreen = (ScreenView) nes.getScreenView();
+        panelScreen = (AppletScreenView) nes.getScreenView();
         panelScreen.setFPSEnabled(properties.isFps());
 
         this.setLayout(null);

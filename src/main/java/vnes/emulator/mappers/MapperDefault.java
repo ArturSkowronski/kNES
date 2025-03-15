@@ -16,9 +16,9 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.NES;
+import vnes.emulator.NES;
 import vnes.emulator.*;
-import vnes.input.InputHandler;
+import vnes.emulator.InputHandler;
 
 public class MapperDefault implements MemoryMapper {
 

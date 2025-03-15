@@ -23,9 +23,8 @@ instructions and invokes emulation of the PPU and pAPU.
 */
 
 
-import vnes.NES;
-import vnes.utils.Globals;
-import vnes.utils.Misc;
+import vnes.emulator.utils.Globals;
+import vnes.emulator.utils.Misc;
 
 public final class CPU implements Runnable {
 

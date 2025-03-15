@@ -20,10 +20,11 @@ import java.awt.*;
 import java.awt.image.*;
 import javax.swing.*;
 
-import vnes.NES;
+import vnes.emulator.NES;
 import vnes.emulator.Scale;
+import vnes.emulator.ui.ScreenView;
 
-public class BufferView extends JPanel {
+public class BufferView extends JPanel implements ScreenView {
 
     // vnes.emulator.Scale modes:
     public static final int SCALE_NONE = 0;

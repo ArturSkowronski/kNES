@@ -1,4 +1,4 @@
-package vnes.input;
+package vnes.emulator;
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project
@@ -16,23 +16,26 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/**
- * Platform-agnostic interface for handling input events.
- * This interface defines callbacks for button press and release events
- * without dependencies on specific UI frameworks.
- */
-public interface InputCallback {
-    /**
-     * Called when a button is pressed.
-     * 
-     * @param buttonCode The code of the button that was pressed
-     */
-    void buttonDown(int buttonCode);
+public interface InputHandler {
+
+    // Joypad keys:
+    int KEY_A = 0;
+    int KEY_B = 1;
+    int KEY_START = 2;
+    int KEY_SELECT = 3;
+    int KEY_UP = 4;
+    int KEY_DOWN = 5;
+    int KEY_LEFT = 6;
+    int KEY_RIGHT = 7;
     
-    /**
-     * Called when a button is released.
-     * 
-     * @param buttonCode The code of the button that was released
-     */
-    void buttonUp(int buttonCode);
+    // Key count:
+    int NUM_KEYS = 8;
+
+    short getKeyState(int padKey);
+
+    void mapKey(int padKey, int deviceKey);
+
+    void reset();
+
+    void update();
 }

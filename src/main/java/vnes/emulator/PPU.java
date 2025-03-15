@@ -16,10 +16,9 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.NES;
-import vnes.utils.Globals;
-import vnes.utils.HiResTimer;
-import vnes.utils.NameTable;
+import vnes.emulator.utils.Globals;
+import vnes.emulator.utils.HiResTimer;
+import vnes.emulator.utils.NameTable;
 
 public class PPU {
 

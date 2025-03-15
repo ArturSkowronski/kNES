@@ -16,12 +16,13 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.ui.*;
-import vnes.utils.Globals;
-import vnes.NES;
-import vnes.input.InputHandler;
-import vnes.input.KbInputHandler;
-import vnes.utils.HiResTimer;
+import vnes.emulator.ui.AbstractNESUI;
+import vnes.emulator.ui.GUI;
+import vnes.emulator.utils.Globals;
+import vnes.emulator.NES;
+import vnes.emulator.InputHandler;
+import vnes.applet.input.KbInputHandler;
+import vnes.emulator.utils.HiResTimer;
 import vnes.vNES;
 
 /**
@@ -29,7 +30,7 @@ import vnes.vNES;
  * This class extends AbstractNESUI to provide common functionality
  * and implements the UI interface for backward compatibility.
  */
-public class AppletUI extends AbstractNESUI implements NotYetAbstractUI {
+public class AppletUI extends AbstractNESUI implements GUI {
 
     public NES getNES() {
         return nes;
@@ -39,7 +40,7 @@ public class AppletUI extends AbstractNESUI implements NotYetAbstractUI {
     private vNES applet;
     private KbInputHandler kbJoy1;
     private KbInputHandler kbJoy2;
-    private ScreenView vScreen;
+    private AppletScreenView vScreen;
     private BufferViewAdapter screenAdapter;
     private HiResTimer timer;
     private long t1, t2;
@@ -61,7 +62,7 @@ public class AppletUI extends AbstractNESUI implements NotYetAbstractUI {
     public void init(NES nes, boolean showGui) {
         // Create the screen view
         this.nes = nes;
-        vScreen = new ScreenView(nes, 256, 240);
+        vScreen = new AppletScreenView(nes, 256, 240);
         vScreen.setBgColor(applet.bgColor.getRGB());
         vScreen.init();
         vScreen.setNotifyImageReady(true);
@@ -167,26 +168,6 @@ public class AppletUI extends AbstractNESUI implements NotYetAbstractUI {
     @Override
     public BufferView getScreenView() {
         return vScreen;
-    }
-
-    @Override
-    public BufferView getPatternView() {
-        return null;
-    }
-
-    @Override
-    public BufferView getSprPalView() {
-        return null;
-    }
-
-    @Override
-    public BufferView getNameTableView() {
-        return null;
-    }
-
-    @Override
-    public BufferView getImgPalView() {
-        return null;
     }
 
     @Override

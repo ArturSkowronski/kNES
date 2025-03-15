@@ -18,15 +18,15 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import java.awt.event.*;
 
-import vnes.utils.Globals;
-import vnes.NES;
+import vnes.emulator.utils.Globals;
+import vnes.emulator.NES;
 
-public class ScreenView extends BufferView {
+public class AppletScreenView extends BufferView {
 
     private MyMouseAdapter mouse;
     private boolean notifyImageReady;
 
-    public ScreenView(NES nes, int width, int height) {
+    public AppletScreenView(NES nes, int width, int height) {
         super(nes, width, height);
     }
 

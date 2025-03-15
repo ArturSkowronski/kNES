@@ -16,12 +16,11 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.NES;
 import vnes.emulator.channels.ChannelDM;
 import vnes.emulator.channels.ChannelNoise;
 import vnes.emulator.channels.ChannelSquare;
 import vnes.emulator.channels.ChannelTriangle;
-import vnes.utils.Globals;
+import vnes.emulator.utils.Globals;
 
 import javax.sound.sampled.*;
 
