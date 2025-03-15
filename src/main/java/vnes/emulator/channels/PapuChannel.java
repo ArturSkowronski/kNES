@@ -1,4 +1,4 @@
-package vnes.channels;
+package vnes.emulator.channels;
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project

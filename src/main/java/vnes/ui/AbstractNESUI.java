@@ -3,32 +3,19 @@ package vnes.ui;
 import vnes.input.InputCallback;
 import vnes.input.InputHandler;
 import vnes.input.InputHandlerAdapter;
-import vnes.NES;
 
 /**
  * Abstract base implementation of the NESUICore interface.
  * This class provides common functionality for all UI implementations.
  */
-public abstract class AbstractNESUI implements NESUICore {
-    protected NES nes;
+public abstract class AbstractNESUI implements UiInfoMessageBus {
     protected DisplayBuffer displayBuffer;
     protected InputCallback[] inputCallbacks;
     protected InputHandler[] inputHandlers;
     
-    /**
-     * Create a new AbstractNESUI.
-     * 
-     * @param nes The NES instance to use
-     */
-    public AbstractNESUI(NES nes) {
-        this.nes = nes;
+    public AbstractNESUI() {
         this.inputCallbacks = new InputCallback[2];
         this.inputHandlers = new InputHandler[2];
-    }
-    
-    @Override
-    public NES getNES() {
-        return nes;
     }
     
     @Override
@@ -50,6 +37,5 @@ public abstract class AbstractNESUI implements NESUICore {
             inputCallbacks[i] = null;
         }
         
-        nes = null;
     }
 }
