@@ -16,25 +16,27 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.emulator.ui.AbstractNESUI;
 import vnes.emulator.ui.GUI;
+import vnes.emulator.ui.DisplayBuffer;
 import vnes.emulator.utils.Globals;
 import vnes.emulator.NES;
 import vnes.emulator.InputHandler;
+import vnes.emulator.InputCallback;
+import vnes.emulator.DestroyableInputHandler;
 import vnes.applet.input.KbInputHandler;
 import vnes.emulator.utils.HiResTimer;
 import vnes.vNES;
 
 /**
  * AWT-specific implementation of the UI interface.
- * This class extends AbstractNESUI to provide common functionality
- * and implements the UI interface for backward compatibility.
+ * This class implements the GUI interface directly, providing all necessary
+ * functionality for the NES emulator UI.
  */
-public class AppletUI extends AbstractNESUI implements GUI {
+public class AppletUI implements GUI {
 
-    public NES getNES() {
-        return nes;
-    }
+    protected DisplayBuffer displayBuffer;
+    protected InputCallback[] inputCallbacks;
+    protected InputHandler[] inputHandlers;
 
     private NES nes;
     private vNES applet;
@@ -52,7 +54,9 @@ public class AppletUI extends AbstractNESUI implements GUI {
      * @param applet The vNES applet
      */
     public AppletUI(vNES applet) {
-        super(); // We'll set the NES instance later
+        // Initialize fields from AbstractNESUI
+        this.inputCallbacks = new InputCallback[2];
+        this.inputHandlers = new InputHandler[2];
 
         timer = new HiResTimer();
         this.applet = applet;
@@ -68,8 +72,7 @@ public class AppletUI extends AbstractNESUI implements GUI {
         vScreen.setNotifyImageReady(true);
 
         // Create the buffer adapter
-        screenAdapter = new BufferViewAdapter(vScreen);
-        displayBuffer = screenAdapter;
+        displayBuffer = new BufferViewAdapter(vScreen);
 
         // Create the input handlers
         kbJoy1 = new KbInputHandler(nes::menuListener, 0);
@@ -145,8 +148,22 @@ public class AppletUI extends AbstractNESUI implements GUI {
 
     @Override
     public void destroy() {
-        // Call the parent destroy method
-        super.destroy();
+        // Clean up resources from AbstractNESUI
+        if (displayBuffer != null) {
+            displayBuffer.destroy();
+            displayBuffer = null;
+        }
+
+        for (int i = 0; i < inputHandlers.length; i++) {
+            if (inputHandlers[i] != null) {
+                inputHandlers[i].reset();
+                if (inputHandlers[i] instanceof DestroyableInputHandler) {
+                    ((DestroyableInputHandler) inputHandlers[i]).destroy();
+                }
+                inputHandlers[i] = null;
+            }
+            inputCallbacks[i] = null;
+        }
 
         // Clean up additional resources
         applet = null;
