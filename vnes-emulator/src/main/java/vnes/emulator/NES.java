@@ -37,9 +37,9 @@ public class NES {
     private ROM rom;
     private String romFile;
     private boolean isRunning = false;
+    private NESUIFactory uiFactory;
 
     public NES(GUI gui) {
-
         this.gui = gui;
 
         cpuMem = new Memory(0x10000); // Main memory (internal to CPU)
@@ -59,6 +59,50 @@ public class NES {
         enableSound(true);
 
         clearCPUMemory();
+    }
+    
+    /**
+     * Creates a new NES instance using the provided UI factory.
+     * 
+     * @param uiFactory The factory to create UI components
+     */
+    public NES(NESUIFactory uiFactory) {
+        this.uiFactory = uiFactory;
+        
+        // Create UI components using the factory
+        DestroyableInputHandler inputHandler = uiFactory.createInputHandler(this);
+        ScreenView screenView = uiFactory.createScreenView(1);
+        
+        // Create a GUI adapter that delegates to the factory components
+        this.gui = new GUIAdapter(inputHandler, screenView);
+        
+        cpuMem = new Memory(0x10000); // Main memory (internal to CPU)
+        ppuMem = new Memory(0x8000);    // VRAM memory (internal to PPU)
+        sprMem = new Memory(0x100);    // Sprite RAM  (internal to PPU)
+
+        cpu = new CPU(this);
+        ppu = new PPU(this);
+        papu = new PAPU(this);
+        palTable = new PaletteTable();
+
+        cpu.init();
+        ppu.init();
+        papu.init();
+        palTable.init();
+
+        enableSound(true);
+
+        clearCPUMemory();
+    }
+    
+    /**
+     * Sets the UI factory for this NES instance.
+     * This can be used to change the UI implementation at runtime.
+     * 
+     * @param uiFactory The new UI factory to use
+     */
+    public void setUIFactory(NESUIFactory uiFactory) {
+        this.uiFactory = uiFactory;
     }
 
     public ScreenView getScreenView() {

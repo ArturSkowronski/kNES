@@ -1,0 +1,54 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(':vnes-emulator')
+    testImplementation 'junit:junit:4.13.2'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src/main/java']
+        }
+        resources {
+            srcDirs = ['src/main/resources']
+        }
+    }
+}
+
+application {
+    mainClass = 'vnes.applet.AppletLauncher'
+}
+
+jar {
+    manifest {
+        attributes(
+            'Main-Class': 'vnes.applet.AppletLauncher',
+            'Permissions': 'all-permissions',
+            'Application-Name': 'vNES Applet'
+        )
+    }
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    from {
+        configurations.runtimeClasspath.collect { 
+            it.isDirectory() ? it : zipTree(it) 
+        }
+    }
+}

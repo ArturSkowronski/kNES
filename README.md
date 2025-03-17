@@ -1,93 +1,73 @@
 # vNES - NES Emulator
 
-[![Java CI](https://github.com/USER_NAME/REPO_NAME/actions/workflows/build.yml/badge.svg)](https://github.com/USER_NAME/REPO_NAME/actions/workflows/build.yml)
+vNES is a Nintendo Entertainment System (NES) emulator written in Java and Kotlin.
 
-> Note: Replace USER_NAME/REPO_NAME with your actual GitHub username and repository name to make the badge work.
+## Project Structure
 
-## Building with Gradle
+The project is organized into the following modules:
 
-This project uses Gradle to build and run the NES emulator as a Java applet.
+- **vnes-emulator**: Core emulator functionality, including CPU, PPU, memory, and mappers.
+- **vnes-applet-ui**: Java Applet-based UI for the emulator.
+- **vnes-compose-ui**: Jetpack Compose-based UI for the emulator.
+- **Main Module**: Launcher application that allows choosing between different UIs.
 
-### Requirements
+## Building and Running
 
-- Java 8 (JDK 1.8) - the last Java version with full applet support
-- Gradle (wrapper included)
+### Prerequisites
+
+- Java 17 or higher
+- Gradle 7.0 or higher
 
 ### Building
 
-To build the project:
-
-```
+```bash
 ./gradlew build
 ```
 
-This will compile the Java sources and create a JAR file in `build/libs/vNES.jar`.
+### Running
 
-### Running the Application
-
-There are multiple ways to run the application:
-
-1. Using the Gradle run task (recommended):
-
-```
+```bash
 ./gradlew run
 ```
 
-This will run the application as a standalone Java application using the AppletLauncher class, which embeds the applet in a JFrame.
+This will launch the main application, which allows choosing between the Applet UI and the Compose UI.
 
-2. Running the JAR file directly:
+### Running the Applet UI directly
 
-```
-java -jar build/libs/vNES.jar
-```
-
-3. Using the Gradle runApplet task (requires Java 8 with appletviewer):
-
-```
-./gradlew runApplet
+```bash
+./gradlew :vnes-applet-ui:run
 ```
 
-This will attempt to run the applet using appletviewer if available.
+### Running the Compose UI directly
 
-4. Using a Java 8 compatible browser (requires Java 8):
+```bash
+./gradlew :vnes-compose-ui:run
+```
 
-After running the build task, an HTML file is generated at `build/applet.html`. You can open this file in a browser that supports Java applets (with the Java plugin enabled).
+## Architecture
 
-### Project Structure
+The emulator uses a modular architecture with a clear separation between the core emulator functionality and the UI. This allows for different UI implementations to be used with the same core emulator.
 
-- `src/main/java/` - Java source files
-- `src/main/resources/` - Resource files (palettes)
-- `build.gradle` - Gradle build configuration
-- `settings.gradle` - Gradle settings
-- `all.policy` - Java security policy file for running the applet
+### Core Emulator
 
-### Using ROM Files
+The core emulator is contained in the `vnes-emulator` module and provides the following components:
 
-To use the emulator, you need to provide NES ROM files:
+- **CPU**: 6502 CPU emulation
+- **PPU**: Picture Processing Unit emulation
+- **Memory**: Memory management
+- **Mappers**: ROM mappers for different game cartridges
 
-1. Create a `roms` directory in the project root (if not already created)
-2. Place your NES ROM files (`.nes` files) in the `roms` directory
-3. When running the application, you can load a ROM by:
-   - Placing a ROM file named `vnes.nes` in the project root directory, or
-   - Modifying the `AppletLauncher.java` file to specify a different ROM file:
-     ```java
-     // In AppletStubImpl constructor
-     parameters.put("ROM", "your-rom-filename.nes");
-     ```
+### UI Abstraction
 
-### Continuous Integration
+The UI abstraction is provided by the `NESUIFactory` interface, which allows different UI implementations to be plugged into the core emulator. The interface provides methods for creating UI components such as input handlers and screen views.
 
-This project uses GitHub Actions for continuous integration. The workflow:
+### UI Implementations
 
-- Runs on every push and pull request
-- Builds the project with Gradle
-- Runs tests to verify functionality
-- Uses Java 8 (JDK 1.8) for compatibility
+The project provides two UI implementations:
 
-You can see the build status at the top of this README.
+- **Applet UI**: A Java Applet-based UI for the emulator.
+- **Compose UI**: A Jetpack Compose-based UI for the emulator.
 
-### Notes
+## License
 
-- Java applets are deprecated technology and may not work in modern browsers
-- This project is configured to use Java 8, which is the last version with full applet support
-- NES ROM files are not included with this project. You must obtain them legally elsewhere.
+This project is licensed under the GNU General Public License v3.0 - see the LICENSE file for details.
