@@ -17,12 +17,14 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import java.awt.*;
+import java.awt.event.*;
 import java.awt.image.*;
 import javax.swing.*;
 
 import vnes.emulator.NES;
 import vnes.emulator.Scale;
 import vnes.emulator.ui.ScreenView;
+import vnes.emulator.utils.Globals;
 
 public class BufferView extends JPanel implements ScreenView {
 
@@ -50,6 +52,8 @@ public class BufferView extends JPanel implements ScreenView {
     private int fpsCounter;
     private final Font fpsFont = new Font("Verdana", Font.BOLD, 10);
     private int bgColor = Color.white.darker().getRGB();
+    private MyMouseAdapter mouse;
+    private boolean notifyImageReady;
 
     // Constructor
     public BufferView(NES nes, int width, int height) {
@@ -60,6 +64,40 @@ public class BufferView extends JPanel implements ScreenView {
         this.height = height;
         this.scaleMode = -1;
 
+    }
+
+    private class MyMouseAdapter extends MouseAdapter {
+
+        long lastClickTime = 0;
+
+        public void mouseClicked(MouseEvent me) {
+            setFocusable(true);
+            requestFocus();
+        }
+
+        public void mousePressed(MouseEvent me) {
+            setFocusable(true);
+            requestFocus();
+
+            if (me.getX() >= 0 && me.getY() >= 0 && me.getX() < 256 && me.getY() < 240) {
+                if (nes != null && nes.getMemoryMapper() != null) {
+                    nes.getMemoryMapper().setMouseState(true, me.getX(), me.getY());
+                }
+            }
+
+        }
+
+        public void mouseReleased(MouseEvent me) {
+
+            if (nes != null && nes.getMemoryMapper() != null) {
+                nes.getMemoryMapper().setMouseState(false, 0, 0);
+            }
+
+        }
+    }
+
+    public void setNotifyImageReady(boolean value) {
+        this.notifyImageReady = value;
     }
 
     public void setBgColor(int color) {
@@ -90,6 +128,10 @@ public class BufferView extends JPanel implements ScreenView {
 
     public void init() {
 
+        if (mouse == null) {
+            mouse = new MyMouseAdapter();
+            this.addMouseListener(mouse);
+        }
         setScaleMode(SCALE_NONE);
 
     }
@@ -184,6 +226,12 @@ public class BufferView extends JPanel implements ScreenView {
 
     public void imageReady(boolean skipFrame) {
 
+        if (!Globals.focused) {
+            setFocusable(true);
+            requestFocus();
+            Globals.focused = true;
+        }
+
         // Skip image drawing if minimized or frameskipping:
         if (!skipFrame) {
 
@@ -207,6 +255,11 @@ public class BufferView extends JPanel implements ScreenView {
             nes.getPpu().setRequestRenderAll(false);
             paint(getGraphics());
 
+        }
+
+        // Notify GUI, so it can write the sound buffer:
+        if (notifyImageReady) {
+            nes.getGui().imageReady(skipFrame);
         }
 
     }

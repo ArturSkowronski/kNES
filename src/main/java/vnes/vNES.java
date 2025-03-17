@@ -22,7 +22,6 @@ import java.util.Map;
 
 import vnes.applet.AppletUI;
 import vnes.applet.BufferView;
-import vnes.applet.AppletScreenView;
 import vnes.emulator.NES;
 import vnes.emulator.utils.Globals;
 
@@ -33,7 +32,7 @@ public class vNES extends Applet implements Runnable {
 
     int progress;
 
-    AppletScreenView panelScreen;
+    BufferView panelScreen;
     String rom = "";
     Font progressFont;
     public Color bgColor = Color.black.darker().darker();
@@ -57,7 +56,7 @@ public class vNES extends Applet implements Runnable {
 
     public void addScreenView() {
 
-        panelScreen = (AppletScreenView) nes.getScreenView();
+        panelScreen = (BufferView) nes.getScreenView();
         panelScreen.setFPSEnabled(properties.isFps());
 
         this.setLayout(null);
@@ -195,43 +194,43 @@ public class vNES extends Applet implements Runnable {
         String tmp;
 
         tmp = getParameter("rom");
-        if (tmp != null && !tmp.equals("")) {
+        if (tmp != null && !tmp.isEmpty()) {
             properties.setRom(tmp);
         }
         // Set instance variables for backward compatibility
         rom = properties.getRom();
 
         tmp = getParameter("scale");
-        if (tmp != null && !tmp.equals("")) {
+        if (tmp != null && !tmp.isEmpty()) {
             properties.setScale(tmp.equals("on"));
         }
         tmp = getParameter("sound");
-        if (tmp != null && !tmp.equals("")) {
+        if (tmp != null && !tmp.isEmpty()) {
             properties.setSound(tmp.equals("on"));
         }
 
         tmp = getParameter("stereo");
-        if (tmp != null && !tmp.equals("")) {
+        if (tmp != null && !tmp.isEmpty()) {
             properties.setStereo(tmp.equals("on"));
         }// Set instance variables for backward compatibility
 
         tmp = getParameter("scanlines");
-        if (tmp != null && !tmp.equals("")) {
+        if (tmp != null && !tmp.isEmpty()) {
             properties.setScanlines(tmp.equals("on"));
         }
 
         tmp = getParameter("fps");
-        if (tmp != null && !tmp.equals("")) {
+        if (tmp != null && !tmp.isEmpty()) {
             properties.setFps(tmp.equals("on"));
         }
 
         tmp = getParameter("timeemulation");
-        if (tmp != null && !tmp.equals("")) {
+        if (tmp != null && !tmp.isEmpty()) {
             properties.setTimeemulation(tmp.equals("on"));
         }
 
         tmp = getParameter("showsoundbuffer");
-        if (tmp != null && !tmp.equals("")) {
+        if (tmp != null && !tmp.isEmpty()) {
             properties.setShowsoundbuffer(tmp.equals("on"));
         }
 
@@ -239,32 +238,32 @@ public class vNES extends Applet implements Runnable {
         Map<String, String> controls = properties.getControls();
 
         tmp = getParameter("p1_up");
-        if (tmp != null && !tmp.equals("")) {
+        if (tmp != null && !tmp.isEmpty()) {
             controls.put("p1_up", "VK_" + tmp);
         }
 
         tmp = getParameter("p1_down");
-        if (tmp != null && !tmp.equals("")) {
+        if (tmp != null && !tmp.isEmpty()) {
             controls.put("p1_down", "VK_" + tmp);
         }
 
         tmp = getParameter("p1_left");
-        if (tmp != null && !tmp.equals("")) {
+        if (tmp != null && !tmp.isEmpty()) {
             controls.put("p1_left", "VK_" + tmp);
         }
 
         tmp = getParameter("p1_right");
-        if (tmp != null && !tmp.equals("")) {
+        if (tmp != null && !tmp.isEmpty()) {
             controls.put("p1_right", "VK_" + tmp);
         }
 
         tmp = getParameter("p1_a");
-        if (tmp != null && !tmp.equals("")) {
+        if (tmp != null && !tmp.isEmpty()) {
             controls.put("p1_a", "VK_" + tmp);
         }
 
         tmp = getParameter("p1_b");
-        if (tmp != null && !tmp.equals("")) {
+        if (tmp != null && !tmp.isEmpty()) {
             controls.put("p1_b", "VK_" + tmp);
         }
 

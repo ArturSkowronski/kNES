@@ -42,6 +42,7 @@ public class AppletLauncher {
                 if (romPath == null) {
                     showWelcomeScreen();
                 } else {
+                    System.out.println(romPath);
                     launchEmulator(romPath);
                 }
                 
@@ -63,7 +64,7 @@ public class AppletLauncher {
         JPanel welcomePanel = new JPanel(new BorderLayout());
         welcomePanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
         
-        JLabel titleLabel = new JLabel("vNES - NES Emulator", JLabel.CENTER);
+        JLabel titleLabel = new JLabel("kNES - Fork of vNES Emulator", JLabel.CENTER);
         titleLabel.setFont(new Font("Arial", Font.BOLD, 24));
         welcomePanel.add(titleLabel, BorderLayout.NORTH);
         
