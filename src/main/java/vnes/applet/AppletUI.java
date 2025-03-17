@@ -17,7 +17,6 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import vnes.emulator.ui.GUI;
-import vnes.emulator.ui.DisplayBuffer;
 import vnes.emulator.utils.Globals;
 import vnes.emulator.NES;
 import vnes.emulator.InputHandler;
@@ -34,7 +33,6 @@ import vnes.vNES;
  */
 public class AppletUI implements GUI {
 
-    protected DisplayBuffer displayBuffer;
     protected InputCallback[] inputCallbacks;
     protected InputHandler[] inputHandlers;
 
@@ -42,8 +40,7 @@ public class AppletUI implements GUI {
     private vNES applet;
     private KbInputHandler kbJoy1;
     private KbInputHandler kbJoy2;
-    private AppletScreenView vScreen;
-    private BufferViewAdapter screenAdapter;
+    private BufferView vScreen;
     private HiResTimer timer;
     private long t1, t2;
     private int sleepTime;
@@ -66,13 +63,10 @@ public class AppletUI implements GUI {
     public void init(NES nes, boolean showGui) {
         // Create the screen view
         this.nes = nes;
-        vScreen = new AppletScreenView(nes, 256, 240);
+        vScreen = new BufferView(nes, 256, 240);
         vScreen.setBgColor(applet.bgColor.getRGB());
         vScreen.init();
         vScreen.setNotifyImageReady(true);
-
-        // Create the buffer adapter
-        displayBuffer = new BufferViewAdapter(vScreen);
 
         // Create the input handlers
         kbJoy1 = new KbInputHandler(nes::menuListener, 0);
@@ -148,12 +142,6 @@ public class AppletUI implements GUI {
 
     @Override
     public void destroy() {
-        // Clean up resources from AbstractNESUI
-        if (displayBuffer != null) {
-            displayBuffer.destroy();
-            displayBuffer = null;
-        }
-
         for (int i = 0; i < inputHandlers.length; i++) {
             if (inputHandlers[i] != null) {
                 inputHandlers[i].reset();
@@ -168,7 +156,6 @@ public class AppletUI implements GUI {
         // Clean up additional resources
         applet = null;
         vScreen = null;
-        screenAdapter = null;
         timer = null;
     }
 
