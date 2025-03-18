@@ -17,28 +17,44 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import java.awt.event.KeyAdapter
+import java.awt.event.KeyEvent
+import javax.swing.JComponent
 import vnes.emulator.DestroyableInputHandler
+import vnes.emulator.InputHandler.KEY_A
+import vnes.emulator.InputHandler.KEY_B
+import vnes.emulator.InputHandler.KEY_DOWN
+import vnes.emulator.InputHandler.KEY_LEFT
+import vnes.emulator.InputHandler.KEY_RIGHT
+import vnes.emulator.InputHandler.KEY_SELECT
+import vnes.emulator.InputHandler.KEY_START
+import vnes.emulator.InputHandler.KEY_UP
+import vnes.emulator.InputHandler.NUM_KEYS
 import vnes.emulator.NES
 
 /**
  * Input handler for the Compose UI.
+ * 
+ * Note: This is a temporary implementation using Swing instead of Compose
+ * until the Compose UI dependencies are properly configured.
  */
 class ComposeInputHandler(private val nes: NES) : DestroyableInputHandler {
     private val keyStates = ShortArray(NUM_KEYS) { 0 }
     private val keyMapping = IntArray(NUM_KEYS) { 0 }
-    
+    private val keyAdapter = KeyInputAdapter()
+
     init {
         // Default key mappings
-        mapKey(KEY_A, 'Z'.code)
-        mapKey(KEY_B, 'X'.code)
-        mapKey(KEY_START, 10) // Enter
-        mapKey(KEY_SELECT, 32) // Space
-        mapKey(KEY_UP, 38) // Up arrow
-        mapKey(KEY_DOWN, 40) // Down arrow
-        mapKey(KEY_LEFT, 37) // Left arrow
-        mapKey(KEY_RIGHT, 39) // Right arrow
+        mapKey(KEY_A, KeyEvent.VK_Z)
+        mapKey(KEY_B, KeyEvent.VK_X)
+        mapKey(KEY_START, KeyEvent.VK_ENTER)
+        mapKey(KEY_SELECT, KeyEvent.VK_SPACE)
+        mapKey(KEY_UP, KeyEvent.VK_UP)
+        mapKey(KEY_DOWN, KeyEvent.VK_DOWN)
+        mapKey(KEY_LEFT, KeyEvent.VK_LEFT)
+        mapKey(KEY_RIGHT, KeyEvent.VK_RIGHT)
     }
-    
+
     /**
      * Gets the state of a key.
      * 
@@ -48,7 +64,7 @@ class ComposeInputHandler(private val nes: NES) : DestroyableInputHandler {
     override fun getKeyState(padKey: Int): Short {
         return keyStates[padKey]
     }
-    
+
     /**
      * Maps a pad key to a device key.
      * 
@@ -58,7 +74,7 @@ class ComposeInputHandler(private val nes: NES) : DestroyableInputHandler {
     override fun mapKey(padKey: Int, deviceKey: Int) {
         keyMapping[padKey] = deviceKey
     }
-    
+
     /**
      * Resets the input handler.
      */
@@ -67,14 +83,14 @@ class ComposeInputHandler(private val nes: NES) : DestroyableInputHandler {
             keyStates[i] = 0
         }
     }
-    
+
     /**
      * Updates the input handler.
      */
     override fun update() {
-        // Update key states based on Compose input
+        // No need to update key states here, as they are updated by the key adapter
     }
-    
+
     /**
      * Sets the state of a key.
      * 
@@ -88,11 +104,44 @@ class ComposeInputHandler(private val nes: NES) : DestroyableInputHandler {
             }
         }
     }
-    
+
+    /**
+     * Registers the key adapter with a component.
+     * 
+     * @param component The component to register with
+     */
+    fun registerKeyAdapter(component: JComponent) {
+        component.addKeyListener(keyAdapter)
+        component.isFocusable = true
+        component.requestFocus()
+    }
+
+    /**
+     * Unregisters the key adapter from a component.
+     * 
+     * @param component The component to unregister from
+     */
+    fun unregisterKeyAdapter(component: JComponent) {
+        component.removeKeyListener(keyAdapter)
+    }
+
     /**
      * Cleans up resources.
      */
     override fun destroy() {
         // Clean up resources
+    }
+
+    /**
+     * Key adapter for handling keyboard input.
+     */
+    inner class KeyInputAdapter : KeyAdapter() {
+        override fun keyPressed(e: KeyEvent) {
+            setKeyState(e.keyCode, true)
+        }
+
+        override fun keyReleased(e: KeyEvent) {
+            setKeyState(e.keyCode, false)
+        }
     }
 }
