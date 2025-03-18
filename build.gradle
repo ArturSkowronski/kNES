@@ -10,11 +10,13 @@ repositories {
 
 dependencies {
     implementation project(':vnes-emulator')
+    implementation project(':vnes-applet-ui')
+    implementation project(':vnes-compose-ui')
     testImplementation 'junit:junit:4.13.2'
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(8)
 }
 
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
@@ -38,27 +40,32 @@ sourceSets {
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
+        languageVersion = JavaLanguageVersion.of(8)
     }
     sourceCompatibility = JavaVersion.VERSION_1_8
     targetCompatibility = JavaVersion.VERSION_1_8
 }
 
+// Configure auto-provisioning of toolchains
+tasks.withType(JavaCompile).configureEach {
+    options.fork = true
+}
+
 application {
-    mainClass = 'vnes.launcher.AppletLauncher'
+    mainClass = 'vnes.VNESApplication'
 }
 
 jar {
     manifest {
         attributes(
-            'Main-Class': 'vnes.AppletLauncher',
+            'Main-Class': 'vnes.VNESApplication',
             'Permissions': 'all-permissions',
             'Application-Name': 'vNES'
         )
     }
-    
+
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    
+
     from {
         configurations.runtimeClasspath.collect { 
             it.isDirectory() ? it : zipTree(it) 
@@ -69,17 +76,17 @@ jar {
 task runApplet(type: Exec) {
     dependsOn jar
     description = 'Runs the applet using appletviewer'
-    
+
     doFirst {
         println "Attempting to run applet with appletviewer..."
         println "If this fails, you can manually run: appletviewer -J-Djava.security.policy=all.policy build/applet.html"
         println "Or use a Java 8 compatible browser with the applet plugin enabled."
     }
-    
+
     // Try to use appletviewer if available
     executable 'sh'
     args '-c', 'command -v appletviewer >/dev/null 2>&1 && appletviewer -J-Djava.security.policy=all.policy build/applet.html || echo "appletviewer not found. Please install Java 8 JDK or use a compatible browser."'
-    
+
     // Ignore failures so the build doesn't fail if appletviewer is not available
     ignoreExitValue = true
 }

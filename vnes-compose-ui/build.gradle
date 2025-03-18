@@ -1,0 +1,83 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm'
+    id 'application'
+}
+
+repositories {
+    mavenCentral()
+    google()
+    maven { url "https://maven.pkg.jetbrains.space/public/p/compose/dev" }
+    maven { url "https://packages.jetbrains.team/maven/p/skija/maven" }
+}
+
+dependencies {
+    implementation project(':vnes-emulator')
+    implementation "org.jetbrains.kotlin:kotlin-stdlib"
+
+    // Compose Desktop dependencies
+    implementation "org.jetbrains.compose.desktop:desktop:1.5.0"
+    implementation "org.jetbrains.compose.material:material:1.5.0"
+    implementation "org.jetbrains.compose.ui:ui:1.5.0"
+    implementation "org.jetbrains.compose.ui:ui-graphics:1.5.0"
+    implementation "org.jetbrains.compose.foundation:foundation:1.5.0"
+    implementation "org.jetbrains.compose.foundation:foundation-layout:1.5.0"
+    implementation "org.jetbrains.compose.runtime:runtime:1.5.0"
+    implementation "org.jetbrains.compose.ui:ui-unit:1.5.0"
+
+    // Skija dependency
+    implementation "org.jetbrains.skiko:skiko:0.7.37"
+
+    testImplementation 'junit:junit:4.13.2'
+}
+
+kotlin {
+    jvmToolchain(8)
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    kotlinOptions {
+        jvmTarget = '1.8'
+        apiVersion = '1.8'
+        languageVersion = '1.8'
+    }
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(8)
+    }
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+sourceSets {
+    main {
+        kotlin {
+            srcDirs = ['src/main/kotlin']
+        }
+        resources {
+            srcDirs = ['src/main/resources']
+        }
+    }
+}
+
+application {
+    mainClass = 'vnes.compose.ComposeMainKt'
+}
+
+jar {
+    manifest {
+        attributes(
+            'Main-Class': 'vnes.compose.ComposeMainKt',
+            'Application-Name': 'vNES Compose'
+        )
+    }
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    from {
+        configurations.runtimeClasspath.collect { file -> 
+            file.isDirectory() ? file : zipTree(file) 
+        }
+    }
+}

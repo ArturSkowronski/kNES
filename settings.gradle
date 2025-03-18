@@ -1,2 +1,11 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
 rootProject.name = 'vNES'
 include 'vnes-emulator'
+include 'vnes-applet-ui'
+include 'vnes-compose-ui'

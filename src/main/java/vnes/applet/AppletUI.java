@@ -51,7 +51,6 @@ public class AppletUI implements GUI {
      * @param applet The vNES applet
      */
     public AppletUI(vNES applet) {
-        // Initialize fields from AbstractNESUI
         this.inputCallbacks = new InputCallback[2];
         this.inputHandlers = new InputHandler[2];
 
