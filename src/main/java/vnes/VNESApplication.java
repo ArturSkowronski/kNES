@@ -19,8 +19,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 import javax.swing.*;
 import java.awt.*;
 import java.io.File;
-
-import vnes.compose.ComposeMainKt;
+import java.lang.reflect.Method;
 
 /**
  * Main application entry point for vNES.
@@ -62,13 +61,49 @@ public class VNESApplication {
         buttonPanel.setLayout(new GridLayout(2, 1, 10, 10));
         buttonPanel.setBorder(BorderFactory.createEmptyBorder(20, 50, 20, 50));
 
-        // Create the Compose UI button
-        JButton composeButton = new JButton("Launch Compose UI");
-        composeButton.addActionListener(e -> {
-            frame.dispose();
-            ComposeMainKt.main();
-        });
-        buttonPanel.add(composeButton);
+        // Check if Java version is 11 or higher for Compose UI
+        boolean isJava11OrHigher = false;
+        try {
+            String javaVersion = System.getProperty("java.version");
+            if (javaVersion.startsWith("1.")) {
+                // Old version format: 1.8.0_xxx
+                int majorVersion = Integer.parseInt(javaVersion.substring(2, 3));
+                isJava11OrHigher = majorVersion >= 11;
+            } else {
+                // New version format: 11.0.x
+                int majorVersion = Integer.parseInt(javaVersion.split("\\.")[0]);
+                isJava11OrHigher = majorVersion >= 11;
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+
+        // Create the Compose UI button if Java 11+ is available
+        if (isJava11OrHigher) {
+            JButton composeButton = new JButton("Launch Compose UI");
+            composeButton.addActionListener(e -> {
+                frame.dispose();
+                try {
+                    // Use reflection to load and call ComposeMainKt.main()
+                    Class<?> composeMainClass = Class.forName("vnes.compose.ComposeMainKt");
+                    Method mainMethod = composeMainClass.getMethod("main");
+                    mainMethod.invoke(null);
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                    JOptionPane.showMessageDialog(null, 
+                        "Failed to launch Compose UI: " + ex.getMessage(), 
+                        "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            });
+            buttonPanel.add(composeButton);
+        } else {
+            // Show a disabled button with tooltip explaining why it's disabled
+            JButton composeButton = new JButton("Launch Compose UI (Requires Java 11+)");
+            composeButton.setEnabled(false);
+            composeButton.setToolTipText("Compose UI requires Java 11 or higher. Current Java version: " 
+                + System.getProperty("java.version"));
+            buttonPanel.add(composeButton);
+        }
 
         // Add the button panel to the content panel
         panel.add(buttonPanel, BorderLayout.CENTER);

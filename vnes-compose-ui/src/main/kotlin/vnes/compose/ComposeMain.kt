@@ -111,7 +111,7 @@ fun main() = application {
                 ) {
                     // Title
                     Text(
-                        text = "vNES Emulator - Compose UI",
+                        text = "vNES Emulator - Compose UI1",
                         style = MaterialTheme.typography.h4,
                         modifier = Modifier.padding(bottom = 16.dp)
                     )

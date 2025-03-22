@@ -11,7 +11,12 @@ repositories {
 dependencies {
     implementation project(':vnes-emulator')
     implementation project(':vnes-applet-ui')
-    implementation project(':vnes-compose-ui')
+
+    // Only include the Compose UI module if it's included in the build
+    if (project.findProject(':vnes-compose-ui') != null) {
+        implementation project(':vnes-compose-ui')
+    }
+
     testImplementation 'junit:junit:4.13.2'
 }
 
