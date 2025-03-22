@@ -15,7 +15,7 @@ object Globals {
     @JvmField
     var memoryFlushValue: Short = 0xFF
 
-    const val debug: Boolean = false
+    const val debug: Boolean = true
     const val fsdebug: Boolean = false
 
     @JvmField
