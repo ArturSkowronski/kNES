@@ -39,7 +39,9 @@ if (hasProperty('includeComposeUI')) {
     }
 }
 
-// No forced value for production use
+// Always include the Compose UI module regardless of Java version
+includeComposeUI = true
+println "Forcing includeComposeUI to true to enable the module"
 
 if (includeComposeUI) {
     include 'vnes-compose-ui'

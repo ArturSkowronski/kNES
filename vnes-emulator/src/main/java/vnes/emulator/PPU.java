@@ -1048,7 +1048,19 @@ public class PPU {
 
     }
 
+    /**
+     * Renders a portion of the frame.
+     * 
+     * @param buffer The buffer to render to
+     * @param startScan The starting scanline
+     * @param scanCount The number of scanlines to render
+     */
     private void renderFramePartially(int[] buffer, int startScan, int scanCount) {
+        // Check if buffer is null to prevent NullPointerException
+        // This can happen if the buffer is not set on the PPU before rendering starts
+        if (buffer == null) {
+            return;
+        }
 
         if (f_spVisibility == 1 && !Globals.disableSprites) {
             renderSpritesPartially(startScan, scanCount, true);

@@ -44,6 +44,8 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
     private val bufferMutex = Mutex()
 
     // Flag to indicate if the image needs to be updated
+    // Using @Volatile to ensure changes are visible to all threads
+    @Volatile
     private var imageNeedsUpdate = true
 
     init {
@@ -56,6 +58,9 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
 
     /**
      * Updates the image from the current buffer
+     * 
+     * Note: This method should only be called with the bufferMutex lock held
+     * to prevent race conditions when updating the image.
      */
     private fun updateImage() {
         // Get the image's data buffer
@@ -78,9 +83,13 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
      */
     suspend fun getFrameBitmap(): ImageBitmap? {
         return bufferMutex.withLock {
-            if (imageNeedsUpdate) {
-                updateImage()
-            }
+            // Always update the image to ensure we have the latest buffer data
+            // This ensures we always return a valid bitmap, even if imageNeedsUpdate is false
+            updateImage()
+
+            // Reset the update flag
+            imageNeedsUpdate = false
+
             imageBitmap
         }
     }

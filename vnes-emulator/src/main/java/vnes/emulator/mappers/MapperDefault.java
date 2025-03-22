@@ -495,6 +495,20 @@ public class MapperDefault implements MemoryMapper {
             joy2StrobeState = 0;
         }
 
+        // Handle the case where inputHandler2 is null (e.g., when using GUIAdapter)
+        if (inputHandler2 == null) {
+            // Return default values for all buttons (not pressed)
+            if (st >= 0 && st <= 7) {
+                return 0; // All buttons not pressed
+            } else if (st == 16 || st == 17 || st == 19) {
+                return (short) 0;
+            } else if (st == 18) {
+                return (short) 1;
+            } else {
+                return 0;
+            }
+        }
+
         if (st == 0) {
             return inputHandler2.getKeyState(InputHandler.KEY_A);
         } else if (st == 1) {

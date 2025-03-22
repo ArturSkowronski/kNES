@@ -82,12 +82,17 @@ public class VNESApplication {
         if (isJava11OrHigher) {
             JButton composeButton = new JButton("Launch Compose UI");
             composeButton.addActionListener(e -> {
-                frame.dispose();
                 try {
-                    // Use reflection to load and call ComposeMainKt.main()
+                    // Use reflection to load and call ComposeMainKt.main(String[] args)
                     Class<?> composeMainClass = Class.forName("vnes.compose.ComposeMainKt");
-                    Method mainMethod = composeMainClass.getMethod("main");
-                    mainMethod.invoke(null);
+                    Method mainMethod = composeMainClass.getMethod("main", String[].class);
+                    frame.dispose();
+                    mainMethod.invoke(null, (Object) new String[0]);
+                } catch (ClassNotFoundException ex) {
+                    ex.printStackTrace();
+                    JOptionPane.showMessageDialog(null, 
+                        "Compose UI module is not included in the build. Please rebuild with: ./gradlew -PincludeComposeUI=true", 
+                        "Module Not Found", JOptionPane.ERROR_MESSAGE);
                 } catch (Exception ex) {
                     ex.printStackTrace();
                     JOptionPane.showMessageDialog(null, 

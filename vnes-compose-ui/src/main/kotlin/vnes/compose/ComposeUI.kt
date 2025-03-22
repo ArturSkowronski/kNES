@@ -25,7 +25,7 @@ import vnes.emulator.NES
 class ComposeUI {
     private var nes: NES? = null
     private var screenView: ComposeScreenView? = null
-    
+
     /**
      * Initializes the UI with the specified NES instance.
      * 
@@ -35,22 +35,27 @@ class ComposeUI {
     fun init(nes: NES, screenView: ComposeScreenView) {
         this.nes = nes
         this.screenView = screenView
+
+        // Set the buffer on the PPU to prevent NullPointerException
+        // The PPU needs a buffer to render to, and it expects this buffer to be set from outside
+        // If the buffer is not set, a NullPointerException will occur in PPU.renderFramePartially
+        nes.getPpu().setBuffer(screenView.getBuffer())
     }
-    
+
     /**
      * Starts the emulator.
      */
     fun startEmulator() {
         nes?.startEmulation()
     }
-    
+
     /**
      * Stops the emulator.
      */
     fun stopEmulator() {
         nes?.stopEmulation()
     }
-    
+
     /**
      * Loads a ROM file.
      * 
@@ -60,14 +65,14 @@ class ComposeUI {
     fun loadRom(path: String): Boolean {
         return nes?.loadRom(path) ?: false
     }
-    
+
     /**
      * Cleans up resources.
      */
     fun destroy() {
         screenView?.destroy()
         screenView = null
-        
+
         nes?.destroy()
         nes = null
     }
