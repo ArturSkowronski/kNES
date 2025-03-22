@@ -1,6 +1,7 @@
 plugins {
     id 'org.jetbrains.kotlin.jvm'
     id 'application'
+    id 'org.jetbrains.compose' version '1.4.3'
 }
 
 repositories {
@@ -15,17 +16,11 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib"
 
     // Compose Desktop dependencies
-    implementation "org.jetbrains.compose.desktop:desktop:1.5.0"
-    implementation "org.jetbrains.compose.material:material:1.5.0"
-    implementation "org.jetbrains.compose.ui:ui:1.5.0"
-    implementation "org.jetbrains.compose.ui:ui-graphics:1.5.0"
-    implementation "org.jetbrains.compose.foundation:foundation:1.5.0"
-    implementation "org.jetbrains.compose.foundation:foundation-layout:1.5.0"
-    implementation "org.jetbrains.compose.runtime:runtime:1.5.0"
-    implementation "org.jetbrains.compose.ui:ui-unit:1.5.0"
-
-    // Skija dependency
-    implementation "org.jetbrains.skiko:skiko:0.7.37"
+    implementation compose.desktop.currentOs
+    implementation compose.material
+    implementation compose.ui
+    implementation compose.foundation
+    implementation compose.runtime
 
     testImplementation 'junit:junit:4.13.2'
 }

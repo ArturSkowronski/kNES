@@ -8,4 +8,42 @@ pluginManagement {
 rootProject.name = 'vNES'
 include 'vnes-emulator'
 include 'vnes-applet-ui'
-include 'vnes-compose-ui'
+
+// Define a property to control whether to include the Compose UI module
+// This can be set via command line: ./gradlew -PincludeComposeUI=true
+// Default to checking Java version if property is not set
+boolean includeComposeUI = false
+
+if (hasProperty('includeComposeUI')) {
+    // Use the property value if provided
+    includeComposeUI = Boolean.parseBoolean(getProperty('includeComposeUI'))
+    println "includeComposeUI property set to: ${includeComposeUI}"
+} else {
+    // Otherwise, check Java version
+    String javaVersion = System.getProperty("java.version")
+    try {
+        if (javaVersion.startsWith("1.")) {
+            // Old version format: 1.8.0_xxx
+            int majorVersion = Integer.parseInt(javaVersion.substring(2, 3))
+            includeComposeUI = majorVersion >= 11
+        } else {
+            // New version format: 11.0.x
+            int majorVersion = Integer.parseInt(javaVersion.split("\\.")[0])
+            includeComposeUI = majorVersion >= 11
+        }
+        println "Java version detected: ${javaVersion}, includeComposeUI: ${includeComposeUI}"
+    } catch (Exception e) {
+        // If there's an error parsing the version, assume it's not Java 11+
+        includeComposeUI = false
+        println "Error parsing Java version: ${javaVersion}, defaulting to not include Compose UI"
+    }
+}
+
+// No forced value for production use
+
+if (includeComposeUI) {
+    include 'vnes-compose-ui'
+    println "Including vnes-compose-ui module."
+} else {
+    println "Excluding vnes-compose-ui module."
+}

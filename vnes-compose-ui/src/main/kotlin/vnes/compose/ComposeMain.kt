@@ -17,83 +17,154 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import javax.swing.JFrame
-import javax.swing.JPanel
-import javax.swing.JButton
-import javax.swing.JLabel
-import javax.swing.BoxLayout
-import javax.swing.BorderFactory
-import java.awt.BorderLayout
-import java.awt.Dimension
-import java.awt.FlowLayout
-import java.awt.Font
-import java.awt.event.ActionEvent
-import java.awt.event.ActionListener
-import javax.swing.SwingUtilities
-import javax.swing.UIManager
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.Button
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Surface
+import androidx.compose.material.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.application
+import androidx.compose.ui.window.rememberWindowState
+import kotlinx.coroutines.delay
+import vnes.emulator.NES
+import java.io.File
+import javax.swing.JFileChooser
+import javax.swing.filechooser.FileNameExtensionFilter
+
+/**
+ * Composable function that renders the NES screen.
+ * 
+ * @param screenView The ComposeScreenView to render
+ */
+@Composable
+fun NESScreenRenderer(screenView: ComposeScreenView) {
+    // State to trigger recomposition when the frame is updated
+    var frameCount by remember { mutableStateOf(0) }
+
+    // Launch a coroutine to update the frame at 60fps
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(16) // ~60fps (1000ms / 60 = 16.67ms)
+            frameCount++
+        }
+    }
+
+    // Get the current frame bitmap
+    var frameBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
+
+    // Update the frame bitmap
+    LaunchedEffect(frameCount) {
+        frameBitmap = screenView.getFrameBitmap()
+    }
+
+    // Render the frame
+    Canvas(
+        modifier = Modifier
+            .width(512.dp)
+            .height(480.dp)
+    ) {
+        frameBitmap?.let { bitmap ->
+            // Draw the image scaled to fit the canvas
+            drawImage(
+                image = bitmap
+            )
+        }
+    }
+}
 
 /**
  * Main entry point for the Compose UI.
- * 
- * Note: This is a temporary implementation using Swing instead of Compose
- * until the Compose UI dependencies are properly configured.
  */
-fun main() {
-    SwingUtilities.invokeLater {
-        try {
-            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName())
-        } catch (e: Exception) {
-            e.printStackTrace()
+fun main() = application {
+    val windowState = rememberWindowState(width = 800.dp, height = 600.dp)
+    var isEmulatorRunning by remember { mutableStateOf(false) }
+
+    // Create the UI factory and components
+    val uiFactory = remember { ComposeUIFactory() }
+    val screenView = remember { uiFactory.createScreenView(2) as ComposeScreenView }
+    val nes = remember { NES(uiFactory) }
+    val composeUI = remember { uiFactory.getComposeUI() }
+
+    // Initialize the UI with the NES instance and screen view
+    LaunchedEffect(Unit) {
+        composeUI.init(nes, screenView)
+    }
+
+    Window(
+        onCloseRequest = ::exitApplication,
+        title = "vNES Emulator",
+        state = windowState
+    ) {
+        MaterialTheme {
+            Surface(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Title
+                    Text(
+                        text = "vNES Emulator - Compose UI1",
+                        style = MaterialTheme.typography.h4,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+
+                    // Screen view
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        NESScreenRenderer(screenView)
+                    }
+
+                    // Controls
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        // Start/Stop button
+                        Button(
+                            onClick = {
+                                if (isEmulatorRunning) {
+                                    composeUI.stopEmulator()
+                                } else {
+                                    composeUI.startEmulator()
+                                }
+                                isEmulatorRunning = !isEmulatorRunning
+                            }
+                        ) {
+                            Text(if (isEmulatorRunning) "Stop Emulator" else "Start Emulator")
+                        }
+
+                        // Load ROM button
+                        Button(
+                            onClick = {
+                                val fileChooser = JFileChooser()
+                                fileChooser.fileFilter = FileNameExtensionFilter("NES ROMs", "nes")
+                                if (fileChooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                                    val file = fileChooser.selectedFile
+                                    if (composeUI.loadRom(file.absolutePath)) {
+                                        // ROM loaded successfully
+                                        if (!isEmulatorRunning) {
+                                            composeUI.startEmulator()
+                                            isEmulatorRunning = true
+                                        }
+                                    }
+                                }
+                            }
+                        ) {
+                            Text("Load ROM")
+                        }
+                    }
+                }
+            }
         }
-
-        val frame = JFrame("vNES Emulator")
-        frame.defaultCloseOperation = JFrame.EXIT_ON_CLOSE
-        frame.size = Dimension(800, 600)
-        frame.setLocationRelativeTo(null)
-
-        val mainPanel = JPanel(BorderLayout())
-
-        // Title
-        val titleLabel = JLabel("vNES Emulator - Compose UI", JLabel.CENTER)
-        titleLabel.font = Font("Arial", Font.BOLD, 24)
-        mainPanel.add(titleLabel, BorderLayout.NORTH)
-
-        // Center panel with buttons
-        val centerPanel = JPanel()
-        centerPanel.layout = BoxLayout(centerPanel, BoxLayout.Y_AXIS)
-        centerPanel.border = BorderFactory.createEmptyBorder(20, 20, 20, 20)
-
-        var isEmulatorRunning = false
-        val startStopButton = JButton("Start Emulator")
-        startStopButton.alignmentX = JButton.CENTER_ALIGNMENT
-        startStopButton.addActionListener {
-            isEmulatorRunning = !isEmulatorRunning
-            startStopButton.text = if (isEmulatorRunning) "Stop Emulator" else "Start Emulator"
-        }
-        centerPanel.add(startStopButton)
-
-        // Add some space
-        centerPanel.add(JPanel().apply { 
-            preferredSize = Dimension(0, 20)
-            maximumSize = Dimension(Short.MAX_VALUE.toInt(), 20)
-        })
-
-        val loadRomButton = JButton("Load ROM")
-        loadRomButton.alignmentX = JButton.CENTER_ALIGNMENT
-        loadRomButton.addActionListener {
-            // Load ROM functionality
-        }
-        centerPanel.add(loadRomButton)
-
-        mainPanel.add(centerPanel, BorderLayout.CENTER)
-
-        // Status bar
-        val statusPanel = JPanel(FlowLayout(FlowLayout.LEFT))
-        val statusLabel = JLabel("Ready")
-        statusPanel.add(statusLabel)
-        mainPanel.add(statusPanel, BorderLayout.SOUTH)
-
-        frame.contentPane = mainPanel
-        frame.isVisible = true
     }
 }
