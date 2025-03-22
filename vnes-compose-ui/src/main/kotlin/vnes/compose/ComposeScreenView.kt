@@ -17,28 +17,34 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import java.awt.Dimension
-import java.awt.Graphics
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.toComposeImageBitmap
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import vnes.emulator.ui.ScreenView
 import java.awt.image.BufferedImage
 import java.awt.image.DataBufferInt
-import javax.swing.JPanel
-import vnes.emulator.ui.ScreenView
 
 /**
  * Screen view for the Compose UI.
  * 
- * Note: This is a temporary implementation using Swing instead of Compose
- * until the Compose UI dependencies are properly configured.
+ * This implementation uses Compose Desktop to render the NES screen.
  */
 class ComposeScreenView(private var scale: Int) : ScreenView {
     private val width = 256
     private val height = 240
     private var buffer: IntArray = IntArray(width * height)
     private var image: BufferedImage = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB)
+    private var imageBitmap: ImageBitmap? = null
     private var scaleMode = 0
     private var showFPS = false
     private var bgColor = 0xFF333333.toInt()
-    private var panel: ScreenPanel? = null
+
+    // Mutex to protect access to the buffer and image
+    private val bufferMutex = Mutex()
+
+    // Flag to indicate if the image needs to be updated
+    private var imageNeedsUpdate = true
 
     init {
         // Initialize the buffer with the background color
@@ -46,9 +52,6 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
 
         // Create the image from the buffer
         updateImage()
-
-        // Create the panel
-        panel = ScreenPanel()
     }
 
     /**
@@ -60,6 +63,26 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
 
         // Copy the buffer data to the image's data buffer
         System.arraycopy(buffer, 0, imageData, 0, buffer.size)
+
+        // Convert to Compose ImageBitmap
+        imageBitmap = image.toComposeImageBitmap()
+
+        // Reset the update flag
+        imageNeedsUpdate = false
+    }
+
+    /**
+     * Gets the current frame as an ImageBitmap.
+     * 
+     * @return The current frame as an ImageBitmap
+     */
+    suspend fun getFrameBitmap(): ImageBitmap? {
+        return bufferMutex.withLock {
+            if (imageNeedsUpdate) {
+                updateImage()
+            }
+            imageBitmap
+        }
     }
 
     /**
@@ -103,11 +126,8 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
      */
     override fun imageReady(skipFrame: Boolean) {
         if (!skipFrame) {
-            // Update the image from the current buffer
-            updateImage()
-
-            // Repaint the panel
-            panel?.repaint()
+            // Mark the image as needing an update
+            imageNeedsUpdate = true
         }
     }
 
@@ -126,7 +146,7 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
      * @return true if hardware scaling is being used, false otherwise
      */
     override fun useHWScaling(): Boolean {
-        return false
+        return true // Compose uses hardware acceleration
     }
 
     /**
@@ -145,7 +165,6 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
      */
     override fun setScaleMode(newMode: Int) {
         scaleMode = newMode
-        updatePanelSize()
     }
 
     /**
@@ -187,25 +206,15 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
      */
     fun setScale(scale: Int) {
         this.scale = scale
-        updatePanelSize()
     }
 
     /**
-     * Updates the panel size based on the current scale.
-     */
-    private fun updatePanelSize() {
-        val scaleFactor = getScaleModeScale(scaleMode) * scale
-        panel?.preferredSize = Dimension(width * scaleFactor, height * scaleFactor)
-        panel?.revalidate()
-    }
-
-    /**
-     * Gets the panel for this screen view.
+     * Gets the current scale factor.
      * 
-     * @return The panel
+     * @return The current scale factor
      */
-    fun getPanel(): JPanel? {
-        return panel
+    fun getScale(): Int {
+        return scale
     }
 
     /**
@@ -213,29 +222,6 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
      */
     override fun destroy() {
         buffer = IntArray(0)
-        panel = null
-    }
-
-    /**
-     * Panel for displaying the screen.
-     */
-    inner class ScreenPanel : JPanel() {
-        init {
-            preferredSize = Dimension(width * scale, height * scale)
-        }
-
-        override fun paintComponent(g: Graphics) {
-            super.paintComponent(g)
-
-            // Draw the image
-            val scaleFactor = getScaleModeScale(scaleMode) * scale
-            g.drawImage(image, 0, 0, width * scaleFactor, height * scaleFactor, null)
-
-            // Draw the FPS counter if enabled
-            if (showFPS) {
-                g.color = java.awt.Color.WHITE
-                g.drawString("FPS: 60", 10, 20)
-            }
-        }
+        imageBitmap = null
     }
 }
