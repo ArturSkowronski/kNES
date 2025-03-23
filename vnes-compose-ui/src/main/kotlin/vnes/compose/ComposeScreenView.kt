@@ -66,8 +66,24 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
         // Get the image's data buffer
         val imageData = (image.raster.dataBuffer as DataBufferInt).data
 
-        // Copy the buffer data to the image's data buffer
-        System.arraycopy(buffer, 0, imageData, 0, buffer.size)
+        // Log the aggregated count of pixels in particular colors
+        val colorCounts = mutableMapOf<Int, Int>()
+        for (pixel in buffer) {
+            colorCounts[pixel] = (colorCounts[pixel] ?: 0) + 1
+        }
+
+        // Log the top 5 most common colors
+        val topColors = colorCounts.entries.sortedByDescending { it.value }.take(5)
+        println("Top 5 colors in buffer:")
+        topColors.forEach { (color, count) ->
+            println("0x${color.toString(16).toUpperCase()} : $count")
+        }
+
+        // Copy the buffer data to the image's data buffer, adding alpha channel (0xFF) to each pixel
+        for (i in buffer.indices) {
+            // Add alpha channel (0xFF) to each pixel
+            imageData[i] = buffer[i] or 0xFF000000.toInt()
+        }
 
         // Convert to Compose ImageBitmap
         imageBitmap = image.toComposeImageBitmap()

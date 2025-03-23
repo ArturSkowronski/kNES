@@ -1,4 +1,7 @@
 package vnes.emulator;
+
+import java.util.List;
+import java.util.stream.Collectors;
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project
@@ -19,6 +22,9 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 import vnes.emulator.utils.Globals;
 import vnes.emulator.utils.HiResTimer;
 import vnes.emulator.utils.NameTable;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class PPU {
 
@@ -177,6 +183,23 @@ public class PPU {
     }
 
     private int cycles = 0;
+
+    // Maps to store pixel color counts for debugging
+    private Map<Integer, Integer> currentFrameColorCounts = new HashMap<>();
+    private Map<Integer, Integer> previousFrameColorCounts = new HashMap<>();
+
+    /**
+     * Returns the top 5 most common colors in the current frame.
+     * 
+     * @return A list of Map.Entry objects containing the color (key) and count (value)
+     */
+    public List<Map.Entry<Integer, Integer>> getTopColors() {
+        return currentFrameColorCounts.entrySet()
+                .stream()
+                .sorted(Map.Entry.<Integer, Integer>comparingByValue().reversed())
+                .limit(5)
+                .collect(Collectors.toList());
+    }
 
     public PPU(NES nes) {
         this.nes = nes;
@@ -376,11 +399,6 @@ public class PPU {
     public void startVBlank() {
 
         // Start VBlank period:
-        // Do VBlank.
-        if (Globals.debug) {
-            nes.getGui().println("VBlank occurs!");
-        }
-
         // Do NMI:
         nes.getCpu().requestIrq(CPU.IRQ_NMI);
 
@@ -389,7 +407,48 @@ public class PPU {
             renderFramePartially(nes.getGui().getScreenView().getBuffer(), lastRenderedScanline + 1, 240 - lastRenderedScanline);
         }
 
+        ///Generate here debbuging info for the framebuffer. I want you to aggregate pixels per color and show it in the console. I want to show it only if changed between frames
+        // Clear current frame color counts
+        currentFrameColorCounts.clear();
+
+        // Get the buffer and count pixels by color
+        int[] frameBuffer = nes.getGui().getScreenView().getBuffer();
+        for (int i = 0; i < frameBuffer.length; i++) {
+            int color = frameBuffer[i];
+            currentFrameColorCounts.put(color, currentFrameColorCounts.getOrDefault(color, 0) + 1);
+        }
+
+        // Check if color counts have changed from previous frame
+        boolean colorCountsChanged = false;
+        if (previousFrameColorCounts.size() != currentFrameColorCounts.size()) {
+            colorCountsChanged = true;
+        } else {
+            for (Map.Entry<Integer, Integer> entry : currentFrameColorCounts.entrySet()) {
+                Integer prevCount = previousFrameColorCounts.get(entry.getKey());
+                if (prevCount == null || !prevCount.equals(entry.getValue())) {
+                    colorCountsChanged = true;
+                    break;
+                }
+            }
+        }
+
+        // Display color counts if changed
+        if (colorCountsChanged) {
+            System.out.println("Frame color counts changed:");
+            System.out.println("Color (RGB hex) : Pixel count");
+            for (Map.Entry<Integer, Integer> entry : currentFrameColorCounts.entrySet()) {
+                System.out.printf("0x%06X : %d%n", entry.getKey(), entry.getValue());
+            }
+            System.out.println("Total unique colors: " + currentFrameColorCounts.size());
+
+            // Update previous frame color counts for next comparison
+            previousFrameColorCounts.clear();
+            previousFrameColorCounts.putAll(currentFrameColorCounts);
+        }
+
         endFrame();
+
+
 
         // Notify image buffer:
         nes.getGui().getScreenView().imageReady(false);
@@ -570,6 +629,12 @@ public class PPU {
     public void endFrame() {
 
         int[] buffer = nes.getGui().getScreenView().getBuffer();
+
+        // Count colors in the buffer
+        currentFrameColorCounts.clear();
+        for (int pixel : buffer) {
+            currentFrameColorCounts.put(pixel, currentFrameColorCounts.getOrDefault(pixel, 0) + 1);
+        }
 
         // Draw spr#0 hit coordinates:
         if (showSpr0Hit) {
