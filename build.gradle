@@ -12,8 +12,26 @@ dependencies {
     implementation project(':vnes-emulator')
     implementation project(':vnes-applet-ui')
 
-    // Only include the Compose UI module if it's included in the build
-    if (project.findProject(':vnes-compose-ui') != null) {
+    // Only include the Compose UI module if Java 11 or higher is available
+    String javaVersion = System.getProperty("java.version")
+    boolean isJava11OrHigher = false
+
+    try {
+        if (javaVersion.startsWith("1.")) {
+            // Old version format: 1.8.0_xxx
+            int majorVersion = Integer.parseInt(javaVersion.substring(2, 3))
+            isJava11OrHigher = majorVersion >= 11
+        } else {
+            // New version format: 11.0.x
+            int majorVersion = Integer.parseInt(javaVersion.split("\\.")[0])
+            isJava11OrHigher = majorVersion >= 11
+        }
+    } catch (Exception e) {
+        // If there's an error parsing the version, assume it's not Java 11+
+        isJava11OrHigher = false
+    }
+
+    if (isJava11OrHigher && project.findProject(':vnes-compose-ui') != null) {
         implementation project(':vnes-compose-ui')
     }
 

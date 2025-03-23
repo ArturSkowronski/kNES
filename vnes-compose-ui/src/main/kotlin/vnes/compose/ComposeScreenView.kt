@@ -44,6 +44,8 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
     private val bufferMutex = Mutex()
 
     // Flag to indicate if the image needs to be updated
+    // Using @Volatile to ensure changes are visible to all threads
+    @Volatile
     private var imageNeedsUpdate = true
 
     init {
@@ -56,13 +58,32 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
 
     /**
      * Updates the image from the current buffer
+     * 
+     * Note: This method should only be called with the bufferMutex lock held
+     * to prevent race conditions when updating the image.
      */
     private fun updateImage() {
         // Get the image's data buffer
         val imageData = (image.raster.dataBuffer as DataBufferInt).data
 
-        // Copy the buffer data to the image's data buffer
-        System.arraycopy(buffer, 0, imageData, 0, buffer.size)
+        // Log the aggregated count of pixels in particular colors
+        val colorCounts = mutableMapOf<Int, Int>()
+        for (pixel in buffer) {
+            colorCounts[pixel] = (colorCounts[pixel] ?: 0) + 1
+        }
+
+        // Log the top 5 most common colors
+        val topColors = colorCounts.entries.sortedByDescending { it.value }.take(5)
+        println("Top 5 colors in buffer:")
+        topColors.forEach { (color, count) ->
+            println("0x${color.toString(16).toUpperCase()} : $count")
+        }
+
+        // Copy the buffer data to the image's data buffer, adding alpha channel (0xFF) to each pixel
+        for (i in buffer.indices) {
+            // Add alpha channel (0xFF) to each pixel
+            imageData[i] = buffer[i] or 0xFF000000.toInt()
+        }
 
         // Convert to Compose ImageBitmap
         imageBitmap = image.toComposeImageBitmap()
@@ -78,9 +99,13 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
      */
     suspend fun getFrameBitmap(): ImageBitmap? {
         return bufferMutex.withLock {
-            if (imageNeedsUpdate) {
-                updateImage()
-            }
+            // Always update the image to ensure we have the latest buffer data
+            // This ensures we always return a valid bitmap, even if imageNeedsUpdate is false
+            updateImage()
+
+            // Reset the update flag
+            imageNeedsUpdate = false
+
             imageBitmap
         }
     }

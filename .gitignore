@@ -1,5 +1,6 @@
 # Gradle
 .gradle/
+.history/
 build/
 
 # Java
