@@ -43,10 +43,17 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
     // Mutex to protect access to the buffer and image
     private val bufferMutex = Mutex()
 
-    // Flag to indicate if the image needs to be updated
-    // Using @Volatile to ensure changes are visible to all threads
     @Volatile
     private var imageNeedsUpdate = true
+
+    // Frame counter to force recomposition
+    private var frameCounter: Long = 0
+
+    // State that will be observed by Compose
+    private val _frameUpdateCounter = androidx.compose.runtime.mutableStateOf(0L)
+
+    // Store previous frame's top 5 colors for comparison
+    private var previousTopColors: List<Map.Entry<Int, Int>> = emptyList()
 
     init {
         // Initialize the buffer with the background color
@@ -58,38 +65,73 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
 
     /**
      * Updates the image from the current buffer
-     * 
-     * Note: This method should only be called with the bufferMutex lock held
-     * to prevent race conditions when updating the image.
      */
     private fun updateImage() {
         // Get the image's data buffer
         val imageData = (image.raster.dataBuffer as DataBufferInt).data
 
+
+        to5Colors(buffer)
+
+        for (i in buffer.indices) {
+            // Add alpha channel (0xFF) to each pixel
+            imageData[i] = buffer[i] or 0xFF000000.toInt()
+        }
+
+        // Update the image with the new pixel data
+        image.setRGB(0, 0, width, height, imageData, 0, width)
+        // Update the image bitmap
+        image.flush()
+        // Update the image bitmap with the new pixel data
+        // Convert to Compose ImageBitmap
+        imageBitmap = image.toComposeImageBitmap()
+
+        // Reset the update flag
+        imageNeedsUpdate = false
+    }
+
+    private fun to5Colors(buffer: IntArray) {
+        // Get the top 5 colors sorted by color value
         // Log the aggregated count of pixels in particular colors
         val colorCounts = mutableMapOf<Int, Int>()
         for (pixel in buffer) {
             colorCounts[pixel] = (colorCounts[pixel] ?: 0) + 1
         }
 
-        // Log the top 5 most common colors
-        val topColors = colorCounts.entries.sortedByDescending { it.value }.take(5)
-        println("Top 5 colors in buffer:")
-        topColors.forEach { (color, count) ->
-            println("0x${color.toString(16).toUpperCase()} : $count")
+
+        val topColors = colorCounts.entries.sortedBy { it.key }.take(5)
+
+        // Check if the top 5 colors have changed
+        var topColorsChanged = false
+        if (topColors.size != previousTopColors.size) {
+            topColorsChanged = true
+        } else {
+            for (i in topColors.indices) {
+                if (i >= previousTopColors.size) {
+                    topColorsChanged = true
+                    break
+                }
+                val current = topColors[i]
+                val previous = previousTopColors[i]
+                if (current.key != previous.key || current.value != previous.value) {
+                    topColorsChanged = true
+                    break
+                }
+            }
         }
 
-        // Copy the buffer data to the image's data buffer, adding alpha channel (0xFF) to each pixel
-        for (i in buffer.indices) {
-            // Add alpha channel (0xFF) to each pixel
-            imageData[i] = buffer[i] or 0xFF000000.toInt()
+        // Only log if the top 5 colors have changed
+        if (topColorsChanged) {
+            println("======================")
+            println("[ComposeScreenView] Top 5 colors in buffer (sorted by color):")
+            topColors.forEach { (color, count) ->
+                println("[ComposeScreenView] 0x${color.toString(16).uppercase()} : $count")
+            }
         }
 
-        // Convert to Compose ImageBitmap
-        imageBitmap = image.toComposeImageBitmap()
+        // Update previous top colors for next comparison
+        previousTopColors = topColors
 
-        // Reset the update flag
-        imageNeedsUpdate = false
     }
 
     /**
@@ -153,6 +195,7 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
         if (!skipFrame) {
             // Mark the image as needing an update
             imageNeedsUpdate = true
+            updateImage()
         }
     }
 
