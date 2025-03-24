@@ -35,7 +35,6 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.delay
 import vnes.emulator.NES
-import java.io.File
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
 
@@ -57,25 +56,30 @@ fun NESScreenRenderer(screenView: ComposeScreenView) {
         }
     }
 
-    // Get the current frame bitmap
-    var frameBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
-
-    // Update the frame bitmap
-    LaunchedEffect(frameCount) {
-        frameBitmap = screenView.getFrameBitmap()
-    }
-
     // Render the frame
     Canvas(
         modifier = Modifier
-            .width(512.dp)
-            .height(480.dp)
+            .width(800.dp)
+            .height(600.dp)
     ) {
-        frameBitmap?.let { bitmap ->
-            // Draw the image scaled to fit the canvas
-            drawImage(
-                image = bitmap
-            )
+        // Use the minimal dummy frame bitmap instead of the regular frame bitmap
+        // Use frameCount to force recomposition and get a new bitmap each frame
+        val bitmap = screenView.getDUMMYFrameBitmap()
+        val bitmap2 = screenView.getFrameBitmap()
+        // Draw the image scaled to fit the canvas
+        drawImage(
+            image = bitmap2!!
+        )
+        drawImage(
+            image = bitmap!!
+        )
+
+
+
+        // This is a workaround to ensure the Canvas is recomposed for each frame
+        // by making it depend on the frameCount state variable
+        if (frameCount > 0) {
+            // Do nothing, this is just to create a dependency on frameCount
         }
     }
 }
