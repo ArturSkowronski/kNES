@@ -17,18 +17,10 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import vnes.emulator.ui.ScreenView
 import java.awt.image.BufferedImage
-import java.awt.image.DataBufferInt
-import java.io.File
-import javax.imageio.ImageIO
 
 /**
  * Screen view for the Compose UI.
@@ -38,129 +30,110 @@ import javax.imageio.ImageIO
 class ComposeScreenView(private var scale: Int) : ScreenView {
     private val width = 256
     private val height = 240
+
     private var buffer: IntArray = IntArray(width * height)
-    private var image: BufferedImage = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB)
-    private var imageBitmap by mutableStateOf<ImageBitmap?>(null)
     private var scaleMode = 0
     private var showFPS = false
     private var bgColor = 0xFF333333.toInt()
 
-    // Flag to control whether to draw the buffer to the terminal
-    private var drawBufferToTerminal = false
-
-    // Mutex to protect access to the buffer and image
-    private val bufferMutex = Mutex()
-
-    // Frame counter to force recomposition
     private var frameCounter: Long = 0
 
-    // State that will be observed by Compose
-    private val _frameUpdateCounter = androidx.compose.runtime.mutableStateOf(0L)
-
-    // Store previous frame's top 5 colors for comparison
-    private var previousTopColors: List<Map.Entry<Int, Int>> = emptyList()
+    // Callback for when a new frame is ready
+    var onFrameReady: (() -> Unit)? = null
 
     init {
-        // Initialize the buffer with the background color
         buffer.fill(bgColor)
-
-        // Create the image from the buffer
-        getFrameBitmap()
     }
 
+    fun getFrameBitmap(): ImageBitmap {
+        val imageData = IntArray(buffer.size)
 
-    private fun to5Colors(buffer: IntArray) {
-        // Get the top 5 colors sorted by color value
-        // Log the aggregated count of pixels in particular colors
-        val colorCounts = mutableMapOf<Int, Int>()
-        for (pixel in buffer) {
-            colorCounts[pixel] = (colorCounts[pixel] ?: 0) + 1
-        }
-
-        val topColors = colorCounts.entries.sortedBy { it.key }.take(5)
-
-        // Check if the top 5 colors have changed and log them if they have
-        val topColorsChanged = ScreenLogger.logColorChanges(topColors, previousTopColors)
-
-        // Draw the buffer to the terminal line by line if the flag is set
-        if (drawBufferToTerminal) {
-            ScreenLogger.visualizeBufferInTerminal(buffer, width, height, topColors)
-        }
-
-        // Update previous top colors for next comparison
-        previousTopColors = topColors
-    }
-
-    /**
-     * Gets the current frame as an ImageBitmap.
-     * This method updates the image from the current buffer and returns it.
-     * 
-     * @return The current frame as an ImageBitmap
-     */
-    fun getFrameBitmap(): ImageBitmap? {
-        // Create a new buffer with alpha channel added
         frameCounter++
 
-        val imageData = IntArray(buffer.size)
         for (i in buffer.indices) {
-            // Add alpha channel (0xFF) to each pixel
-            imageData[i] = buffer[i] or 0xFF000000.toInt()
+            // Use the conversion method from ScreenLogger
+            // Make sure alpha channel is explicitly set to fully opaque
+            val color = ScreenLogger.convertColorToHSB(buffer[i])
+            imageData[i] = color or 0xFF000000.toInt()
         }
 
-        to5Colors(buffer)
+        // Log some color information for debugging
+        if (frameCounter % 60L == 0L) { // Log once per second at 60fps
+            println("[DEBUG] First few pixels in getFrameBitmap: " +
+                    "${Integer.toHexString(imageData[0])}, " +
+                    "${Integer.toHexString(imageData[1])}, " +
+                    "${Integer.toHexString(imageData[2])}")
+        }
 
-        // Create a new image from the buffer
+        // Skip the to5Colors call as it might be modifying the colors unexpectedly
+        // ScreenLogger.to5Colors(imageData, width, height)
+
+        // Create a BufferedImage with TYPE_INT_ARGB to ensure alpha channel support
         val newImage = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB).apply {
             setRGB(0, 0, width, height, imageData, 0, width)
         }
 
-        // Log the frame image to file
-        ScreenLogger.logFrameImage(newImage)
-
-        // Update the image bitmap with the new pixel data
         // Convert to Compose ImageBitmap
-        // Always update the image with new instance to trigger recomposition
-        imageBitmap = newImage.toComposeImageBitmap()
-
-        // Return the updated image bitmap
-        return imageBitmap
+        return newImage.toComposeImageBitmap()
     }
 
     /**
-     * Gets a minimal dummy frame as an ImageBitmap with color changes.
-     * This is a simplified version of getFrameBitmap() for testing purposes.
-     * The colors change between frames based on the frame counter.
-     * 
-     * @return A minimal dummy frame as an ImageBitmap
+     * Creates a safe copy of the frame bitmap for preview purposes.
+     * This method creates a smaller, simplified version of the bitmap
+     * to avoid performance issues when previewing.
+     *
+     * @return A simplified ImageBitmap suitable for preview
      */
+    fun getSafePreviewBitmap(): ImageBitmap {
+        // Create a smaller version of the bitmap (e.g., 128x120 instead of 256x240)
+        val previewWidth = width / 2
+        val previewHeight = height / 2
+        val imageData = IntArray(previewWidth * previewHeight)
+
+        // Sample the buffer to create a smaller image
+        for (y in 0 until previewHeight) {
+            for (x in 0 until previewWidth) {
+                // Sample from the original buffer (take every other pixel)
+                val srcX = x * 2
+                val srcY = y * 2
+                val srcIndex = srcY * width + srcX
+
+                // Ensure the alpha channel is set
+                val color = ScreenLogger.convertColorToHSB(buffer[srcIndex])
+                imageData[y * previewWidth + x] = color or 0xFF000000.toInt()
+            }
+        }
+
+        // Create a smaller BufferedImage
+        val previewImage = BufferedImage(previewWidth, previewHeight, BufferedImage.TYPE_INT_ARGB).apply {
+            setRGB(0, 0, previewWidth, previewHeight, imageData, 0, previewWidth)
+        }
+
+        return previewImage.toComposeImageBitmap()
+    }
+
+
     fun getDUMMYFrameBitmap(): ImageBitmap {
-        // Create a small 16x16 image with different colors
         val width = 16
         val height = 16
         val imageData = IntArray(width * height)
 
-        // Increment frame counter to ensure colors change between frames
         frameCounter++
 
-        // Use frame counter to shift colors
         val colorShift = (frameCounter % 360).toInt()
 
-        // Calculate color components with shifting hues
         val hue1 = (0 + colorShift) % 360
         val hue2 = (90 + colorShift) % 360
         val hue3 = (180 + colorShift) % 360
         val hue4 = (270 + colorShift) % 360
 
-        // Convert HSB to RGB colors
         val color1 = java.awt.Color.HSBtoRGB(hue1 / 360f, 1f, 1f) or 0xFF000000.toInt()
         val color2 = java.awt.Color.HSBtoRGB(hue2 / 360f, 1f, 1f) or 0xFF000000.toInt()
         val color3 = java.awt.Color.HSBtoRGB(hue3 / 360f, 1f, 1f) or 0xFF000000.toInt()
         val color4 = java.awt.Color.HSBtoRGB(hue4 / 360f, 1f, 1f) or 0xFF000000.toInt()
 
-        // Fill with different colors
         for (y in 0 until height) {
             for (x in 0 until width) {
-                // Create a pattern with different colors that change between frames
                 val color = when {
                     (x < width / 2 && y < height / 2) -> color1 // Top-left quadrant
                     (x >= width / 2 && y < height / 2) -> color2 // Top-right quadrant
@@ -171,20 +144,13 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
             }
         }
 
-        // Create a BufferedImage from the pixel data
         val newImage = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB).apply {
             setRGB(0, 0, width, height, imageData, 0, width)
         }
-
-        // Convert to Compose ImageBitmap and return
         return newImage.toComposeImageBitmap()
     }
 
-    /**
-     * Initializes the screen view.
-     */
     override fun init() {
-        // Initialize the screen view
     }
 
     /**
@@ -223,8 +189,9 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
         if (!skipFrame) {
             // Mark the image as needing an update
             getFrameBitmap()
-            // Increment the frame update counter to trigger recomposition in Compose
-            _frameUpdateCounter.value++
+
+            // Notify that a new frame is ready
+            onFrameReady?.invoke()
         }
     }
 
@@ -315,28 +282,9 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
     }
 
     /**
-     * Sets whether to draw the buffer to the terminal.
-     * 
-     * @param value true to enable buffer visualization, false to disable
-     */
-    fun setDrawBufferToTerminal(value: Boolean) {
-        drawBufferToTerminal = value
-    }
-
-    /**
-     * Gets whether buffer visualization is enabled.
-     * 
-     * @return true if buffer visualization is enabled, false otherwise
-     */
-    fun getDrawBufferToTerminal(): Boolean {
-        return drawBufferToTerminal
-    }
-
-    /**
      * Clean up resources used by this screen view.
      */
     override fun destroy() {
         buffer = IntArray(0)
-        imageBitmap = null
     }
 }

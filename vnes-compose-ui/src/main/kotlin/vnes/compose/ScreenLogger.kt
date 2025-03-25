@@ -26,6 +26,8 @@ import javax.imageio.ImageIO
  */
 object ScreenLogger {
 
+    // Flag to control whether to draw the buffer to the terminal
+    private var drawBufferToTerminal = false
     /**
      * Logs the current frame image to a file.
      * 
@@ -46,6 +48,32 @@ object ScreenLogger {
         } catch (e: Exception) {
             println("[DEBUG] Error writing image to file: ${e.message}")
         }
+    }
+
+
+    // Store previous frame's top 5 colors for comparison
+    private var previousTopColors: List<Map.Entry<Int, Int>> = emptyList()
+
+    fun to5Colors(buffer: IntArray, width: Int, height: Int) {
+        // Get the top 5 colors sorted by color value
+        // Log the aggregated count of pixels in particular colors
+        val colorCounts = mutableMapOf<Int, Int>()
+        for (pixel in buffer) {
+            colorCounts[pixel] = (colorCounts[pixel] ?: 0) + 1
+        }
+
+        val topColors = colorCounts.entries.sortedBy { it.key }.take(5)
+
+        // Check if the top 5 colors have changed and log them if they have
+        val topColorsChanged = logColorChanges(topColors, previousTopColors)
+
+        // Draw the buffer to the terminal line by line if the flag is set
+        if (drawBufferToTerminal) {
+            ScreenLogger.visualizeBufferInTerminal(buffer, width, height, topColors)
+        }
+
+        // Update previous top colors for next comparison
+        previousTopColors = topColors
     }
 
     /**
@@ -113,25 +141,29 @@ object ScreenLogger {
         println("======================")
         println("[ComposeScreenView] Buffer visualization:")
 
-        // Create a map of colors to ASCII characters for visualization
-        val colorToChar = mutableMapOf<Int, Char>()
-        val chars = listOf('#', '@', '*', '+', '.', ' ') // Characters to represent different colors
-
-        // Assign characters to the top colors
-        topColors.forEachIndexed { index, entry ->
-            colorToChar[entry.key] = chars[index.coerceAtMost(chars.size - 1)]
-        }
-
-        // Default character for colors not in the top 5
-        val defaultChar = ' '
+        // ANSI escape code for reset
+        val reset = "\u001B[0m"
 
         // Draw the buffer line by line
         for (y in 0 until height) {
             val line = StringBuilder()
             for (x in 0 until width) {
                 val pixel = buffer[y * width + x]
-                val char = colorToChar[pixel] ?: defaultChar
-                line.append(char)
+                val r = (pixel shr 16) and 0xFF
+                val g = (pixel shr 8) and 0xFF
+                val b = pixel and 0xFF
+
+                // Convert RGB to ANSI color code
+                // Using 8-bit color mode (256 colors)
+                // Format: \u001B[38;5;{color_code}m
+                // For simplicity, we'll use a basic mapping to the 216 color cube (6x6x6)
+                val ansiR = (r * 5 / 255)
+                val ansiG = (g * 5 / 255)
+                val ansiB = (b * 5 / 255)
+                val colorCode = 16 + (36 * ansiR) + (6 * ansiG) + ansiB
+
+                // Apply the color and add a block character
+                line.append("\u001B[38;5;${colorCode}m█$reset")
             }
             // Print every 8th line to reduce output volume
             if (y % 8 == 0) {
@@ -140,4 +172,43 @@ object ScreenLogger {
         }
         println("======================")
     }
+
+
+    /**
+     * Sets whether to draw the buffer to the terminal.
+     *
+     * @param value true to enable buffer visualization, false to disable
+     */
+    fun setDrawBufferToTerminal(value: Boolean) {
+        drawBufferToTerminal = value
+    }
+
+    /**
+     * Gets whether buffer visualization is enabled.
+     *
+     * @return true if buffer visualization is enabled, false otherwise
+     */
+    fun getDrawBufferToTerminal(): Boolean {
+        return drawBufferToTerminal
+    }
+
+    /**
+     * Converts an integer color value to HSB format and back to RGB.
+     * This is useful for color processing and normalization.
+     *
+     * @param color The integer color value to convert
+     * @return The converted color value with alpha channel
+     */
+    fun convertColorToHSB(color: Int): Int {
+        val r = (color shr 16) and 0xFF
+        val g = (color shr 8) and 0xFF
+        val b = color and 0xFF
+
+        // Convert RGB to HSB
+        val hsb = java.awt.Color.RGBtoHSB(r, g, b, null)
+
+        // Convert back to RGB with HSBtoRGB
+        return java.awt.Color.HSBtoRGB(hsb[0], hsb[1], hsb[2]) or 0xFF000000.toInt()
+    }
+
 }
