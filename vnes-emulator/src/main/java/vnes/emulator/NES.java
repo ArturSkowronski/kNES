@@ -72,10 +72,38 @@ public class NES {
         // Create UI components using the factory
         DestroyableInputHandler inputHandler = uiFactory.createInputHandler(this);
         ScreenView screenView = uiFactory.createScreenView(1);
-        
+
         // Create a GUI adapter that delegates to the factory components
         this.gui = new GUIAdapter(inputHandler, screenView);
         
+        cpuMem = new Memory(0x10000); // Main memory (internal to CPU)
+        ppuMem = new Memory(0x8000);    // VRAM memory (internal to PPU)
+        sprMem = new Memory(0x100);    // Sprite RAM  (internal to PPU)
+
+        cpu = new CPU(this);
+        ppu = new PPU(this);
+        papu = new PAPU(this);
+        palTable = new PaletteTable();
+
+        cpu.init();
+        ppu.init();
+        papu.init();
+        palTable.init();
+
+        enableSound(true);
+
+        clearCPUMemory();
+    }
+
+    public NES(NESUIFactory uiFactory, ScreenView screenView) {
+        this.uiFactory = uiFactory;
+
+        // Create UI components using the factory
+        DestroyableInputHandler inputHandler = uiFactory.createInputHandler(this);
+
+        // Create a GUI adapter that delegates to the factory components
+        this.gui = new GUIAdapter(inputHandler, screenView);
+
         cpuMem = new Memory(0x10000); // Main memory (internal to CPU)
         ppuMem = new Memory(0x8000);    // VRAM memory (internal to PPU)
         sprMem = new Memory(0x100);    // Sprite RAM  (internal to PPU)

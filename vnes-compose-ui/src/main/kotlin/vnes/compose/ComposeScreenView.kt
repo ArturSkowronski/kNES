@@ -19,11 +19,8 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import vnes.emulator.ui.ScreenView
 import java.awt.image.BufferedImage
-import java.awt.image.DataBufferInt
 
 /**
  * Screen view for the Compose UI.
@@ -33,88 +30,127 @@ import java.awt.image.DataBufferInt
 class ComposeScreenView(private var scale: Int) : ScreenView {
     private val width = 256
     private val height = 240
+
     private var buffer: IntArray = IntArray(width * height)
-    private var image: BufferedImage = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB)
-    private var imageBitmap: ImageBitmap? = null
     private var scaleMode = 0
     private var showFPS = false
     private var bgColor = 0xFF333333.toInt()
 
-    // Mutex to protect access to the buffer and image
-    private val bufferMutex = Mutex()
+    private var frameCounter: Long = 0
 
-    // Flag to indicate if the image needs to be updated
-    // Using @Volatile to ensure changes are visible to all threads
-    @Volatile
-    private var imageNeedsUpdate = true
+    // Callback for when a new frame is ready
+    var onFrameReady: (() -> Unit)? = null
 
     init {
-        // Initialize the buffer with the background color
         buffer.fill(bgColor)
-
-        // Create the image from the buffer
-        updateImage()
     }
 
-    /**
-     * Updates the image from the current buffer
-     * 
-     * Note: This method should only be called with the bufferMutex lock held
-     * to prevent race conditions when updating the image.
-     */
-    private fun updateImage() {
-        // Get the image's data buffer
-        val imageData = (image.raster.dataBuffer as DataBufferInt).data
+    fun getFrameBitmap(): ImageBitmap {
+        val imageData = IntArray(buffer.size)
 
-        // Log the aggregated count of pixels in particular colors
-        val colorCounts = mutableMapOf<Int, Int>()
-        for (pixel in buffer) {
-            colorCounts[pixel] = (colorCounts[pixel] ?: 0) + 1
-        }
+        frameCounter++
 
-        // Log the top 5 most common colors
-        val topColors = colorCounts.entries.sortedByDescending { it.value }.take(5)
-        println("Top 5 colors in buffer:")
-        topColors.forEach { (color, count) ->
-            println("0x${color.toString(16).toUpperCase()} : $count")
-        }
-
-        // Copy the buffer data to the image's data buffer, adding alpha channel (0xFF) to each pixel
         for (i in buffer.indices) {
-            // Add alpha channel (0xFF) to each pixel
-            imageData[i] = buffer[i] or 0xFF000000.toInt()
+            // Use the conversion method from ScreenLogger
+            // Make sure alpha channel is explicitly set to fully opaque
+            val color = ScreenLogger.convertColorToHSB(buffer[i])
+            imageData[i] = color or 0xFF000000.toInt()
+        }
+
+        // Log some color information for debugging
+        if (frameCounter % 60L == 0L) { // Log once per second at 60fps
+            println("[DEBUG] First few pixels in getFrameBitmap: " +
+                    "${Integer.toHexString(imageData[0])}, " +
+                    "${Integer.toHexString(imageData[1])}, " +
+                    "${Integer.toHexString(imageData[2])}")
+        }
+
+        // Skip the to5Colors call as it might be modifying the colors unexpectedly
+        // ScreenLogger.to5Colors(imageData, width, height)
+
+        // Create a BufferedImage with TYPE_INT_ARGB to ensure alpha channel support
+        val newImage = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB).apply {
+            setRGB(0, 0, width, height, imageData, 0, width)
         }
 
         // Convert to Compose ImageBitmap
-        imageBitmap = image.toComposeImageBitmap()
-
-        // Reset the update flag
-        imageNeedsUpdate = false
+        return newImage.toComposeImageBitmap()
     }
 
     /**
-     * Gets the current frame as an ImageBitmap.
-     * 
-     * @return The current frame as an ImageBitmap
+     * Creates a safe copy of the frame bitmap for preview purposes.
+     * This method creates a smaller, simplified version of the bitmap
+     * to avoid performance issues when previewing.
+     *
+     * @return A simplified ImageBitmap suitable for preview
      */
-    suspend fun getFrameBitmap(): ImageBitmap? {
-        return bufferMutex.withLock {
-            // Always update the image to ensure we have the latest buffer data
-            // This ensures we always return a valid bitmap, even if imageNeedsUpdate is false
-            updateImage()
+    fun getSafePreviewBitmap(): ImageBitmap {
+        // Create a smaller version of the bitmap (e.g., 128x120 instead of 256x240)
+        val previewWidth = width / 2
+        val previewHeight = height / 2
+        val imageData = IntArray(previewWidth * previewHeight)
 
-            // Reset the update flag
-            imageNeedsUpdate = false
+        // Sample the buffer to create a smaller image
+        for (y in 0 until previewHeight) {
+            for (x in 0 until previewWidth) {
+                // Sample from the original buffer (take every other pixel)
+                val srcX = x * 2
+                val srcY = y * 2
+                val srcIndex = srcY * width + srcX
 
-            imageBitmap
+                // Ensure the alpha channel is set
+                val color = ScreenLogger.convertColorToHSB(buffer[srcIndex])
+                imageData[y * previewWidth + x] = color or 0xFF000000.toInt()
+            }
         }
+
+        // Create a smaller BufferedImage
+        val previewImage = BufferedImage(previewWidth, previewHeight, BufferedImage.TYPE_INT_ARGB).apply {
+            setRGB(0, 0, previewWidth, previewHeight, imageData, 0, previewWidth)
+        }
+
+        return previewImage.toComposeImageBitmap()
     }
 
-    /**
-     * Initializes the screen view.
-     */
+
+    fun getDUMMYFrameBitmap(): ImageBitmap {
+        val width = 16
+        val height = 16
+        val imageData = IntArray(width * height)
+
+        frameCounter++
+
+        val colorShift = (frameCounter % 360).toInt()
+
+        val hue1 = (0 + colorShift) % 360
+        val hue2 = (90 + colorShift) % 360
+        val hue3 = (180 + colorShift) % 360
+        val hue4 = (270 + colorShift) % 360
+
+        val color1 = java.awt.Color.HSBtoRGB(hue1 / 360f, 1f, 1f) or 0xFF000000.toInt()
+        val color2 = java.awt.Color.HSBtoRGB(hue2 / 360f, 1f, 1f) or 0xFF000000.toInt()
+        val color3 = java.awt.Color.HSBtoRGB(hue3 / 360f, 1f, 1f) or 0xFF000000.toInt()
+        val color4 = java.awt.Color.HSBtoRGB(hue4 / 360f, 1f, 1f) or 0xFF000000.toInt()
+
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val color = when {
+                    (x < width / 2 && y < height / 2) -> color1 // Top-left quadrant
+                    (x >= width / 2 && y < height / 2) -> color2 // Top-right quadrant
+                    (x < width / 2 && y >= height / 2) -> color3 // Bottom-left quadrant
+                    else -> color4 // Bottom-right quadrant
+                }
+                imageData[y * width + x] = color
+            }
+        }
+
+        val newImage = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB).apply {
+            setRGB(0, 0, width, height, imageData, 0, width)
+        }
+        return newImage.toComposeImageBitmap()
+    }
+
     override fun init() {
-        // Initialize the screen view
     }
 
     /**
@@ -152,7 +188,10 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
     override fun imageReady(skipFrame: Boolean) {
         if (!skipFrame) {
             // Mark the image as needing an update
-            imageNeedsUpdate = true
+            getFrameBitmap()
+
+            // Notify that a new frame is ready
+            onFrameReady?.invoke()
         }
     }
 
@@ -247,6 +286,5 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
      */
     override fun destroy() {
         buffer = IntArray(0)
-        imageBitmap = null
     }
 }

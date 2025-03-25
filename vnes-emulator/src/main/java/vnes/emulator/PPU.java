@@ -418,33 +418,53 @@ public class PPU {
             currentFrameColorCounts.put(color, currentFrameColorCounts.getOrDefault(color, 0) + 1);
         }
 
-        // Check if color counts have changed from previous frame
-        boolean colorCountsChanged = false;
-        if (previousFrameColorCounts.size() != currentFrameColorCounts.size()) {
-            colorCountsChanged = true;
+        // Get the top 5 colors sorted by color value
+        List<Map.Entry<Integer, Integer>> top5Colors = currentFrameColorCounts.entrySet()
+            .stream()
+            .sorted(Map.Entry.comparingByKey())
+            .limit(5)
+            .collect(Collectors.toList());
+
+        // Get the previous top 5 colors
+        List<Map.Entry<Integer, Integer>> prevTop5Colors = previousFrameColorCounts.entrySet()
+            .stream()
+            .sorted(Map.Entry.comparingByKey())
+            .limit(5)
+            .collect(Collectors.toList());
+
+        // Check if the top 5 colors have changed
+        boolean top5ColorsChanged = false;
+        if (top5Colors.size() != prevTop5Colors.size()) {
+            top5ColorsChanged = true;
         } else {
-            for (Map.Entry<Integer, Integer> entry : currentFrameColorCounts.entrySet()) {
-                Integer prevCount = previousFrameColorCounts.get(entry.getKey());
-                if (prevCount == null || !prevCount.equals(entry.getValue())) {
-                    colorCountsChanged = true;
+            for (int i = 0; i < top5Colors.size(); i++) {
+                if (i >= prevTop5Colors.size()) {
+                    top5ColorsChanged = true;
+                    break;
+                }
+                Map.Entry<Integer, Integer> current = top5Colors.get(i);
+                Map.Entry<Integer, Integer> previous = prevTop5Colors.get(i);
+                if (!current.getKey().equals(previous.getKey()) || 
+                    !current.getValue().equals(previous.getValue())) {
+                    top5ColorsChanged = true;
                     break;
                 }
             }
         }
 
-        // Display color counts if changed
-        if (colorCountsChanged) {
-            System.out.println("Frame color counts changed:");
-            System.out.println("Color (RGB hex) : Pixel count");
-            for (Map.Entry<Integer, Integer> entry : currentFrameColorCounts.entrySet()) {
-                System.out.printf("0x%06X : %d%n", entry.getKey(), entry.getValue());
-            }
+        // Display top 5 colors only if they changed
+        if (top5ColorsChanged) {
+            System.out.println("======================");
+            System.out.println("[PPU] Top 5 colors in buffer (sorted by color):");
+            top5Colors.forEach(entry -> {
+                System.out.println("[PPU] 0x" + Integer.toHexString(entry.getKey()).toUpperCase() + " : " + entry.getValue());
+            });
             System.out.println("Total unique colors: " + currentFrameColorCounts.size());
-
-            // Update previous frame color counts for next comparison
-            previousFrameColorCounts.clear();
-            previousFrameColorCounts.putAll(currentFrameColorCounts);
         }
+
+        // Update previous frame color counts for next comparison
+        previousFrameColorCounts.clear();
+        previousFrameColorCounts.putAll(currentFrameColorCounts);
 
         endFrame();
 

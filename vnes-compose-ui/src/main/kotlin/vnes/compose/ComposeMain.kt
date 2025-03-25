@@ -26,16 +26,12 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.delay
 import vnes.emulator.NES
-import java.io.File
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
 
@@ -49,7 +45,18 @@ fun NESScreenRenderer(screenView: ComposeScreenView) {
     // State to trigger recomposition when the frame is updated
     var frameCount by remember { mutableStateOf(0) }
 
-    // Launch a coroutine to update the frame at 60fps
+    // Set up the callback to trigger recomposition when a new frame is ready
+    DisposableEffect(Unit) {
+        screenView.onFrameReady = {
+            frameCount++
+        }
+
+        onDispose {
+            screenView.onFrameReady = null
+        }
+    }
+
+    // Launch a coroutine to update the frame at 60fps as a fallback
     LaunchedEffect(Unit) {
         while (true) {
             delay(16) // ~60fps (1000ms / 60 = 16.67ms)
@@ -57,25 +64,24 @@ fun NESScreenRenderer(screenView: ComposeScreenView) {
         }
     }
 
-    // Get the current frame bitmap
-    var frameBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
-
-    // Update the frame bitmap
-    LaunchedEffect(frameCount) {
-        frameBitmap = screenView.getFrameBitmap()
-    }
-
     // Render the frame
     Canvas(
         modifier = Modifier
-            .width(512.dp)
-            .height(480.dp)
+            .width(800.dp)
+            .height(600.dp)
     ) {
-        frameBitmap?.let { bitmap ->
-            // Draw the image scaled to fit the canvas
-            drawImage(
-                image = bitmap
-            )
+        // Get the actual frame bitmap
+        val bitmap = screenView.getFrameBitmap()
+
+        // Draw the image scaled to fit the canvas
+        drawImage(
+            image = bitmap!!
+        )
+
+        // This is a workaround to ensure the Canvas is recomposed for each frame
+        // by making it depend on the frameCount state variable
+        if (frameCount > 0) {
+            // Do nothing, this is just to create a dependency on frameCount
         }
     }
 }
@@ -90,7 +96,7 @@ fun main() = application {
     // Create the UI factory and components
     val uiFactory = remember { ComposeUIFactory() }
     val screenView = remember { uiFactory.createScreenView(2) as ComposeScreenView }
-    val nes = remember { NES(uiFactory) }
+    val nes = remember { NES(uiFactory, screenView) }
     val composeUI = remember { uiFactory.getComposeUI() }
 
     // Initialize the UI with the NES instance and screen view

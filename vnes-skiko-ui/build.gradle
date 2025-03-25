@@ -1,26 +1,17 @@
 plugins {
     id 'org.jetbrains.kotlin.jvm'
     id 'application'
-    id 'org.jetbrains.compose' version '1.4.3'
 }
 
 repositories {
     mavenCentral()
     google()
-    maven { url "https://maven.pkg.jetbrains.space/public/p/compose/dev" }
     maven { url "https://packages.jetbrains.team/maven/p/skija/maven" }
 }
 
 dependencies {
     implementation project(':vnes-emulator')
     implementation "org.jetbrains.kotlin:kotlin-stdlib"
-
-    // Compose Desktop dependencies
-    implementation compose.desktop.currentOs
-    implementation compose.material
-    implementation compose.ui
-    implementation compose.foundation
-    implementation compose.runtime
 
     // Skiko dependency for hardware-accelerated rendering
     implementation "org.jetbrains.skiko:skiko:0.7.90"
@@ -64,14 +55,14 @@ sourceSets {
 }
 
 application {
-    mainClass = 'vnes.compose.ComposeMainKt'
+    mainClass = 'vnes.skiko.SkikoMainKt'
 }
 
 jar {
     manifest {
         attributes(
-            'Main-Class': 'vnes.compose.ComposeMainKt',
-            'Application-Name': 'vNES Compose'
+            'Main-Class': 'vnes.skiko.SkikoMainKt',
+            'Application-Name': 'vNES Skiko'
         )
     }
 
