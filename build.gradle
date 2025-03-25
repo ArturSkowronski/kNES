@@ -11,6 +11,7 @@ repositories {
 dependencies {
     implementation project(':vnes-emulator')
     implementation project(':vnes-applet-ui')
+    implementation project(':vnes-skiko-ui')
 
     // Only include the Compose UI module if Java 11 or higher is available
     String javaVersion = System.getProperty("java.version")
