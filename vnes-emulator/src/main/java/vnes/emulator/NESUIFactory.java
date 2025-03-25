@@ -30,7 +30,7 @@ public interface NESUIFactory {
      * @return A DestroyableInputHandler implementation
      */
     DestroyableInputHandler createInputHandler(NES nes);
-    
+
     /**
      * Creates a rendering surface that implements ScreenView interface
      * 
@@ -38,12 +38,21 @@ public interface NESUIFactory {
      * @return A ScreenView implementation
      */
     ScreenView createScreenView(int scale);
-    
+
     /**
      * Optional: Configuration for UI-specific settings
      * 
      * @param enableAudio Whether audio should be enabled
      * @param fpsLimit The maximum FPS to target, or 0 for unlimited
+     * @param enablePpuLogging Whether PPU logging should be enabled
      */
-    default void configureUISettings(boolean enableAudio, int fpsLimit) {}
+    default void configureUISettings(boolean enableAudio, int fpsLimit, boolean enablePpuLogging) {}
+
+    /**
+     * @deprecated Use {@link #configureUISettings(boolean, int, boolean)} instead
+     */
+    @Deprecated
+    default void configureUISettings(boolean enableAudio, int fpsLimit) {
+        configureUISettings(enableAudio, fpsLimit, true);
+    }
 }

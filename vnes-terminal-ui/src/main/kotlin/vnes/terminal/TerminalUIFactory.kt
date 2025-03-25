@@ -1,4 +1,4 @@
-package vnes.skiko
+package vnes.terminal
 
 /*
 vNES
@@ -23,10 +23,10 @@ import vnes.emulator.NESUIFactory
 import vnes.emulator.ui.ScreenView
 
 /**
- * Factory for creating Skiko UI components for the NES emulator.
+ * Factory for creating Terminal UI components for the NES emulator.
  */
-class SkikoUIFactory : NESUIFactory {
-    private val skikoUI = SkikoUI()
+class TerminalUIFactory : NESUIFactory {
+    private val terminalUI = TerminalUI()
 
     /**
      * Creates an input handler for the NES emulator.
@@ -35,7 +35,7 @@ class SkikoUIFactory : NESUIFactory {
      * @return A DestroyableInputHandler implementation
      */
     override fun createInputHandler(nes: NES): DestroyableInputHandler {
-        return SkikoInputHandler(nes)
+        return TerminalInputHandler(nes)
     }
 
     /**
@@ -45,7 +45,7 @@ class SkikoUIFactory : NESUIFactory {
      * @return A ScreenView implementation
      */
     override fun createScreenView(scale: Int): ScreenView {
-        return SkikoScreenView(scale)
+        return TerminalScreenView(scale)
     }
 
     /**
@@ -56,7 +56,8 @@ class SkikoUIFactory : NESUIFactory {
      * @param enablePpuLogging Whether PPU logging should be enabled
      */
     override fun configureUISettings(enableAudio: Boolean, fpsLimit: Int, enablePpuLogging: Boolean) {
-        // Configure Skiko-specific settings
+        // Configure Terminal-specific settings
+        // Terminal UI doesn't support audio, so we ignore the enableAudio parameter
     }
 
     /**
@@ -70,11 +71,11 @@ class SkikoUIFactory : NESUIFactory {
     }
 
     /**
-     * Gets the SkikoUI instance.
+     * Gets the TerminalUI instance.
      * 
-     * @return The SkikoUI instance
+     * @return The TerminalUI instance
      */
-    fun getSkikoUI(): SkikoUI {
-        return skikoUI
+    fun getTerminalUI(): TerminalUI {
+        return terminalUI
     }
 }

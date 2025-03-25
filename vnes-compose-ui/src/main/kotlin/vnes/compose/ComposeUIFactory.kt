@@ -27,7 +27,7 @@ import vnes.emulator.ui.ScreenView
  */
 class ComposeUIFactory : NESUIFactory {
     private val composeUI = ComposeUI()
-    
+
     /**
      * Creates an input handler for the NES emulator.
      * 
@@ -37,7 +37,7 @@ class ComposeUIFactory : NESUIFactory {
     override fun createInputHandler(nes: NES): DestroyableInputHandler {
         return ComposeInputHandler(nes)
     }
-    
+
     /**
      * Creates a screen view for the NES emulator.
      * 
@@ -47,7 +47,18 @@ class ComposeUIFactory : NESUIFactory {
     override fun createScreenView(scale: Int): ScreenView {
         return ComposeScreenView(scale)
     }
-    
+
+    /**
+     * Configures UI-specific settings.
+     * 
+     * @param enableAudio Whether audio should be enabled
+     * @param fpsLimit The maximum FPS to target, or 0 for unlimited
+     * @param enablePpuLogging Whether PPU logging should be enabled
+     */
+    override fun configureUISettings(enableAudio: Boolean, fpsLimit: Int, enablePpuLogging: Boolean) {
+        // Configure Compose-specific settings
+    }
+
     /**
      * Configures UI-specific settings.
      * 
@@ -55,9 +66,9 @@ class ComposeUIFactory : NESUIFactory {
      * @param fpsLimit The maximum FPS to target, or 0 for unlimited
      */
     override fun configureUISettings(enableAudio: Boolean, fpsLimit: Int) {
-        // Configure Compose-specific settings
+        configureUISettings(enableAudio, fpsLimit, true)
     }
-    
+
     /**
      * Gets the ComposeUI instance.
      * 

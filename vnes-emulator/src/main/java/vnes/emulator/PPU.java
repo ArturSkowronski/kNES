@@ -39,7 +39,16 @@ public class PPU {
         this.showSoundBuffer = showSoundBuffer;
     }
 
+    public boolean isEnablePpuLogging() {
+        return enablePpuLogging;
+    }
+
+    public void setEnablePpuLogging(boolean enablePpuLogging) {
+        this.enablePpuLogging = enablePpuLogging;
+    }
+
     private boolean showSoundBuffer = false;
+    private boolean enablePpuLogging = true;
     private boolean clipTVcolumn = true;
     private boolean clipTVrow = false;
     // Control Flags Register 1:
@@ -452,8 +461,8 @@ public class PPU {
             }
         }
 
-        // Display top 5 colors only if they changed
-        if (top5ColorsChanged) {
+        // Display top 5 colors only if they changed and logging is enabled
+        if (top5ColorsChanged && enablePpuLogging) {
             System.out.println("======================");
             System.out.println("[PPU] Top 5 colors in buffer (sorted by color):");
             top5Colors.forEach(entry -> {

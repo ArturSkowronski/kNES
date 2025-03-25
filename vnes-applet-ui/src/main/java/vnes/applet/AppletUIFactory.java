@@ -27,7 +27,7 @@ import vnes.applet.input.KbInputHandler;
  */
 public class AppletUIFactory implements NESUIFactory {
     private final AppletUI appletUI;
-    
+
     /**
      * Creates a new AppletUIFactory.
      */
@@ -46,12 +46,17 @@ public class AppletUIFactory implements NESUIFactory {
         bufferView.setScale(scale);
         return bufferView;
     }
-    
+
     @Override
-    public void configureUISettings(boolean enableAudio, int fpsLimit) {
+    public void configureUISettings(boolean enableAudio, int fpsLimit, boolean enablePpuLogging) {
         // Configure applet-specific settings
     }
-    
+
+    @Override
+    public void configureUISettings(boolean enableAudio, int fpsLimit) {
+        configureUISettings(enableAudio, fpsLimit, true);
+    }
+
     /**
      * Gets the AppletUI instance.
      * 
