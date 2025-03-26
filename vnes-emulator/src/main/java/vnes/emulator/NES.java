@@ -60,7 +60,7 @@ public class NES {
 
         clearCPUMemory();
     }
-    
+
     /**
      * Creates a new NES instance using the provided UI factory.
      * 
@@ -68,14 +68,14 @@ public class NES {
      */
     public NES(NESUIFactory uiFactory) {
         this.uiFactory = uiFactory;
-        
+
         // Create UI components using the factory
         DestroyableInputHandler inputHandler = uiFactory.createInputHandler(this);
         ScreenView screenView = uiFactory.createScreenView(1);
 
         // Create a GUI adapter that delegates to the factory components
         this.gui = new GUIAdapter(inputHandler, screenView);
-        
+
         cpuMem = new Memory(0x10000); // Main memory (internal to CPU)
         ppuMem = new Memory(0x8000);    // VRAM memory (internal to PPU)
         sprMem = new Memory(0x100);    // Sprite RAM  (internal to PPU)
@@ -122,7 +122,7 @@ public class NES {
 
         clearCPUMemory();
     }
-    
+
     /**
      * Sets the UI factory for this NES instance.
      * This can be used to change the UI implementation at runtime.
@@ -230,11 +230,23 @@ public class NES {
     }
 
     public void clearCPUMemory() {
+        // Initialize RAM with a mix of values (0x00, 0xFF, and random bytes)
+        // This is more accurate to real NES behavior and fixes issues with games like SMB
+        java.util.Random random = new java.util.Random();
 
-        short flushval = Globals.memoryFlushValue;
         for (int i = 0; i < 0x2000; i++) {
-            cpuMem.mem[i] = flushval;
+            // Use a mix of values: 0x00, 0xFF, and random bytes
+            int r = random.nextInt(100);
+            if (r < 33) {
+                cpuMem.mem[i] = 0x00;
+            } else if (r < 66) {
+                cpuMem.mem[i] = (short)0xFF;
+            } else {
+                cpuMem.mem[i] = (short)(random.nextInt(256));
+            }
         }
+
+        // Set specific values that are important for proper operation
         for (int p = 0; p < 4; p++) {
             int i = p * 0x800;
             cpuMem.mem[i + 0x008] = 0xF7;
@@ -242,7 +254,6 @@ public class NES {
             cpuMem.mem[i + 0x00A] = 0xDF;
             cpuMem.mem[i + 0x00F] = 0xBF;
         }
-
     }
 
     public CPU getCpu() {
