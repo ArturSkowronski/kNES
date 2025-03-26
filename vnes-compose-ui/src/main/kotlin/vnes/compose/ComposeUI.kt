@@ -25,6 +25,7 @@ import vnes.emulator.NES
 class ComposeUI {
     private var nes: NES? = null
     private var screenView: ComposeScreenView? = null
+    private var inputHandler: ComposeInputHandler? = null
 
     /**
      * Initializes the UI with the specified NES instance.
@@ -43,6 +44,16 @@ class ComposeUI {
         // The PPU needs a buffer to render to, and it expects this buffer to be set from outside
         // If the buffer is not set, a NullPointerException will occur in PPU.renderFramePartially
         nes.getPpu().setBuffer(screenView.getBuffer())
+    }
+
+    /**
+     * Sets the input handler for this UI.
+     * This is necessary to connect the input handler to the NES instance.
+     * 
+     * @param inputHandler The input handler to use
+     */
+    fun setInputHandler(inputHandler: ComposeInputHandler) {
+        this.inputHandler = inputHandler
     }
 
     /**
@@ -75,6 +86,9 @@ class ComposeUI {
     fun destroy() {
         screenView?.destroy()
         screenView = null
+
+        inputHandler?.destroy()
+        inputHandler = null
 
         nes?.destroy()
         nes = null

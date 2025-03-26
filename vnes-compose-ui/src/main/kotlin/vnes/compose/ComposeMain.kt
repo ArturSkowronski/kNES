@@ -18,6 +18,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.Button
 import androidx.compose.material.MaterialTheme
@@ -25,14 +26,24 @@ import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import kotlinx.coroutines.delay
 import vnes.emulator.NES
+import java.awt.event.KeyEvent
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
+
 
 /**
  * Composable function that renders the NES screen.
@@ -88,6 +99,7 @@ fun NESScreenRenderer(screenView: ComposeScreenView) {
 /**
  * Main entry point for the Compose UI.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 fun main() = application {
     val windowState = rememberWindowState(width = 800.dp, height = 600.dp)
     var isEmulatorRunning by remember { mutableStateOf(false) }
@@ -98,18 +110,101 @@ fun main() = application {
     val nes = remember { NES(uiFactory, screenView) }
     val composeUI = remember { uiFactory.getComposeUI() }
 
+    // Get the input handler from the UI factory
+    val inputHandler = remember { uiFactory.createInputHandler(nes) as ComposeInputHandler }
+
     // Initialize the UI with the NES instance and screen view
     LaunchedEffect(Unit) {
         composeUI.init(nes, screenView)
+        composeUI.setInputHandler(inputHandler)
     }
+
+    // Define a function to map Compose key codes to AWT key codes
+    @OptIn(ExperimentalComposeUiApi::class)
+    fun mapKeyCode(key: Key): Int {
+        return when (key) {
+            Key.Z -> KeyEvent.VK_Z
+            Key.X -> KeyEvent.VK_X
+            Key.Spacebar -> KeyEvent.VK_ENTER
+            Key.V -> KeyEvent.VK_SPACE
+            Key.DirectionUp -> KeyEvent.VK_UP
+            Key.DirectionDown -> KeyEvent.VK_DOWN
+            Key.DirectionLeft -> KeyEvent.VK_LEFT
+            Key.DirectionRight -> KeyEvent.VK_RIGHT
+            else -> 0
+        }
+    }
+
+    // Define a function to map AWT key codes to their names
+    fun getKeyName(keyCode: Int): String {
+        return when (keyCode) {
+            KeyEvent.VK_Z -> "Z"
+            KeyEvent.VK_X -> "X"
+            KeyEvent.VK_ENTER -> "ENTER"
+            KeyEvent.VK_SPACE -> "SPACE"
+            KeyEvent.VK_UP -> "UP"
+            KeyEvent.VK_DOWN -> "DOWN"
+            KeyEvent.VK_LEFT -> "LEFT"
+            KeyEvent.VK_RIGHT -> "RIGHT"
+            else -> "UNKNOWN"
+        }
+    }
+
+    // Create a focus requester
+    val focusRequester = remember { FocusRequester() }
 
     Window(
         onCloseRequest = ::exitApplication,
         title = "kNES Emulator",
-        state = windowState
+        state = windowState,
+        onKeyEvent = { event ->
+            // Always consume key events to ensure they're processed by the emulator
+            val keyCode = if (event.key == Key.Enter) {
+                KeyEvent.VK_ENTER
+            } else {
+                mapKeyCode(event.key)
+            }
+
+            if (keyCode != 0) {
+                System.out.println("Key event: ${event.type} ${event.key} keyCode: $keyCode (${getKeyName(keyCode)})")
+
+                when (event.type) {
+                    KeyEventType.KeyDown -> {
+                        inputHandler.setKeyState(keyCode, true)
+                        true
+                    }
+                    KeyEventType.KeyUp -> {
+                        inputHandler.setKeyState(keyCode, false)
+                        true
+                    }
+                    else -> true  // Always consume key events
+                }
+            } else {
+                false
+            }
+        },
+        focusable = true  // Make the window focusable
     ) {
+        // Request focus when the window is first composed
+        LaunchedEffect(Unit) {
+            focusRequester.requestFocus()
+        }
+
+        // Periodically request focus to ensure window always has focus
+        LaunchedEffect(Unit) {
+            while (true) {
+                delay(1000) // Request focus every second
+                focusRequester.requestFocus()
+            }
+        }
+
         MaterialTheme {
-            Surface(modifier = Modifier.fillMaxSize()) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .focusRequester(focusRequester)
+                    .focusable()
+            ) {
                 Column(
                     modifier = Modifier.fillMaxSize().padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -143,6 +238,8 @@ fun main() = application {
                                     composeUI.startEmulator()
                                 }
                                 isEmulatorRunning = !isEmulatorRunning
+                                // Request focus after button click
+                                focusRequester.requestFocus()
                             }
                         ) {
                             Text(if (isEmulatorRunning) "Stop Emulator" else "Start Emulator")
@@ -163,6 +260,8 @@ fun main() = application {
                                         }
                                     }
                                 }
+                                // Request focus after file chooser is closed
+                                focusRequester.requestFocus()
                             }
                         ) {
                             Text("Load ROM")
