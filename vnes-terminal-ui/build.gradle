@@ -6,19 +6,14 @@ plugins {
 repositories {
     mavenCentral()
     google()
-    maven { url "https://packages.jetbrains.team/maven/p/skija/maven" }
 }
 
 dependencies {
     implementation project(':vnes-emulator')
     implementation "org.jetbrains.kotlin:kotlin-stdlib"
-
-    // Skiko dependency for hardware-accelerated rendering
-    implementation "org.jetbrains.skiko:skiko:0.7.90"
-
-    // Add platform-specific Skiko dependencies to ensure native libraries are included
-    implementation "org.jetbrains.skiko:skiko-awt-runtime-macos-x64:0.7.90"
-    implementation "org.jetbrains.skiko:skiko-awt-runtime-macos-arm64:0.7.90"
+    
+    // Terminal UI doesn't need any special rendering libraries
+    // as it uses the console for output
 
     testImplementation 'junit:junit:4.13.2'
 }
@@ -55,14 +50,14 @@ sourceSets {
 }
 
 application {
-    mainClass = 'vnes.skiko.SkikoMainKt'
+    mainClass = 'vnes.terminal.TerminalMainKt'
 }
 
 jar {
     manifest {
         attributes(
-            'Main-Class': 'vnes.skiko.SkikoMainKt',
-            'Application-Name': 'vNES Skiko'
+            'Main-Class': 'vnes.terminal.TerminalMainKt',
+            'Application-Name': 'vNES Terminal'
         )
     }
 

@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import kotlinx.coroutines.delay
 import vnes.emulator.NES
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
@@ -44,10 +43,20 @@ import javax.swing.filechooser.FileNameExtensionFilter
 fun NESScreenRenderer(screenView: ComposeScreenView) {
     // State to trigger recomposition when the frame is updated
     var frameCount by remember { mutableStateOf(0) }
+    // State to store the current bitmap
+    var currentBitmap by remember { mutableStateOf(screenView.getFrameBitmap()) }
+    // Get the scale from the screenView
+    val scale = screenView.getScale()
+
+    // Calculate the scaled dimensions
+    val scaledWidth = 256 * scale
+    val scaledHeight = 240 * scale
 
     // Set up the callback to trigger recomposition when a new frame is ready
     DisposableEffect(Unit) {
         screenView.onFrameReady = {
+            // Update the bitmap when a new frame is ready
+            currentBitmap = screenView.getFrameBitmap()
             frameCount++
         }
 
@@ -56,26 +65,16 @@ fun NESScreenRenderer(screenView: ComposeScreenView) {
         }
     }
 
-    // Launch a coroutine to update the frame at 60fps as a fallback
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(16) // ~60fps (1000ms / 60 = 16.67ms)
-            frameCount++
-        }
-    }
-
     // Render the frame
     Canvas(
         modifier = Modifier
-            .width(800.dp)
-            .height(600.dp)
+            .width(scaledWidth.dp)
+            .height(scaledHeight.dp)
     ) {
-        // Get the actual frame bitmap
-        val bitmap = screenView.getFrameBitmap()
-
         // Draw the image scaled to fit the canvas
         drawImage(
-            image = bitmap!!
+            image = currentBitmap,
+            dstSize = androidx.compose.ui.unit.IntSize(scaledWidth, scaledHeight)
         )
 
         // This is a workaround to ensure the Canvas is recomposed for each frame
@@ -106,7 +105,7 @@ fun main() = application {
 
     Window(
         onCloseRequest = ::exitApplication,
-        title = "vNES Emulator",
+        title = "kNES Emulator",
         state = windowState
     ) {
         MaterialTheme {
@@ -117,7 +116,7 @@ fun main() = application {
                 ) {
                     // Title
                     Text(
-                        text = "vNES Emulator - Compose UI1",
+                        text = "kNES Emulator - Compose UI",
                         style = MaterialTheme.typography.h4,
                         modifier = Modifier.padding(bottom = 16.dp)
                     )

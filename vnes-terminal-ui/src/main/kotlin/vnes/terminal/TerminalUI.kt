@@ -1,4 +1,4 @@
-package vnes.compose
+package vnes.terminal
 
 /*
 vNES
@@ -20,24 +20,21 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 import vnes.emulator.NES
 
 /**
- * Main UI class for the Compose implementation.
+ * Main UI class for the Terminal implementation.
  */
-class ComposeUI {
+class TerminalUI {
     private var nes: NES? = null
-    private var screenView: ComposeScreenView? = null
+    private var screenView: TerminalScreenView? = null
 
     /**
      * Initializes the UI with the specified NES instance.
      * 
      * @param nes The NES instance to use
-     * @param screenView The ComposeScreenView to use for rendering
+     * @param screenView The TerminalScreenView to use for rendering
      */
-    fun init(nes: NES, screenView: ComposeScreenView) {
+    fun init(nes: NES, screenView: TerminalScreenView) {
         this.nes = nes
         this.screenView = screenView
-
-        // Set the NES instance on the screen view
-        screenView.setNES(nes)
 
         // Set the buffer on the PPU to prevent NullPointerException
         // The PPU needs a buffer to render to, and it expects this buffer to be set from outside
@@ -49,6 +46,7 @@ class ComposeUI {
      * Starts the emulator.
      */
     fun startEmulator() {
+        println("Starting NES emulation in terminal mode...")
         nes?.startEmulation()
     }
 
@@ -56,6 +54,7 @@ class ComposeUI {
      * Stops the emulator.
      */
     fun stopEmulator() {
+        println("Stopping NES emulation...")
         nes?.stopEmulation()
     }
 
@@ -66,6 +65,7 @@ class ComposeUI {
      * @return True if the ROM was loaded successfully, false otherwise
      */
     fun loadRom(path: String): Boolean {
+        println("Loading ROM: $path")
         return nes?.loadRom(path) ?: false
     }
 
@@ -73,6 +73,7 @@ class ComposeUI {
      * Cleans up resources.
      */
     fun destroy() {
+        println("Cleaning up resources...")
         screenView?.destroy()
         screenView = null
 
