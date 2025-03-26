@@ -70,13 +70,13 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
             imageData[i] = color or 0xFF000000.toInt()
         }
 
-        // Log some color information for debugging
-        if (frameCounter % 60L == 0L) { // Log once per second at 60fps
-            println("[DEBUG] First few pixels in getFrameBitmap: " +
-                    "${Integer.toHexString(imageData[0])}, " +
-                    "${Integer.toHexString(imageData[1])}, " +
-                    "${Integer.toHexString(imageData[2])}")
-        }
+//        // Log some color information for debugging
+//        if (frameCounter % 60L == 0L) { // Log once per second at 60fps
+//            println("[DEBUG] First few pixels in getFrameBitmap: " +
+//                    "${Integer.toHexString(imageData[0])}, " +
+//                    "${Integer.toHexString(imageData[1])}, " +
+//                    "${Integer.toHexString(imageData[2])}")
+//        }
 
         // Skip the to5Colors call as it might be modifying the colors unexpectedly
         // ScreenLogger.to5Colors(imageData, width, height)

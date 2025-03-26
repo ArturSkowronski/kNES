@@ -48,7 +48,7 @@ public class PPU {
     }
 
     private boolean showSoundBuffer = false;
-    private boolean enablePpuLogging = true;
+    private boolean enablePpuLogging = false;
     private boolean clipTVcolumn = true;
     private boolean clipTVrow = false;
     // Control Flags Register 1:

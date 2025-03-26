@@ -27,6 +27,7 @@ import vnes.emulator.ui.ScreenView
  */
 class ComposeUIFactory : NESUIFactory {
     private val composeUI = ComposeUI()
+    private var inputHandler: ComposeInputHandler? = null
 
     /**
      * Creates an input handler for the NES emulator.
@@ -35,7 +36,10 @@ class ComposeUIFactory : NESUIFactory {
      * @return A DestroyableInputHandler implementation
      */
     override fun createInputHandler(nes: NES): DestroyableInputHandler {
-        return ComposeInputHandler(nes)
+        if (inputHandler == null) {
+            inputHandler = ComposeInputHandler(nes)
+        }
+        return inputHandler!!
     }
 
     /**
