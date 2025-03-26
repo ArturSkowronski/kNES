@@ -17,8 +17,8 @@ dependencies {
     implementation "org.jetbrains.skiko:skiko:0.7.90"
 
     // Add platform-specific Skiko dependencies to ensure native libraries are included
-    implementation "org.jetbrains.skiko:skiko-awt-runtime-macos-x64:0.7.85"
-    implementation "org.jetbrains.skiko:skiko-awt-runtime-macos-arm64:0.7.85"
+    implementation "org.jetbrains.skiko:skiko-awt-runtime-macos-x64:0.7.90"
+    implementation "org.jetbrains.skiko:skiko-awt-runtime-macos-arm64:0.7.90"
 
     testImplementation 'junit:junit:4.13.2'
 }
