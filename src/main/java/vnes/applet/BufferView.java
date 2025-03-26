@@ -46,7 +46,7 @@ public class BufferView extends JPanel implements ScreenView {
     private int[] pix_scaled;
     private int scaleMode;
     // FPS counter variables:
-    private boolean showFPS = false;
+    private boolean showFPS = true;
     private long prevFrameTime;
     private String fps;
     private int fpsCounter;

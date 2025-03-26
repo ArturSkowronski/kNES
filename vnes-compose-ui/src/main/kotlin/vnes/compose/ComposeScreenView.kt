@@ -19,7 +19,10 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import vnes.emulator.NES
 import vnes.emulator.ui.ScreenView
+import vnes.emulator.utils.Globals
+import vnes.emulator.utils.HiResTimer
 import java.awt.image.BufferedImage
 
 /**
@@ -38,11 +41,21 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
 
     private var frameCounter: Long = 0
 
+    // Timing control variables
+    private val timer = HiResTimer()
+    private var t1: Long = 0
+    private var t2: Long = 0
+    private var sleepTime: Int = 0
+
+    // NES instance
+    private var nes: NES? = null
+
     // Callback for when a new frame is ready
     var onFrameReady: (() -> Unit)? = null
 
     init {
         buffer.fill(bgColor)
+        t1 = timer.currentMicros()
     }
 
     fun getFrameBitmap(): ImageBitmap {
@@ -112,44 +125,6 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
         return previewImage.toComposeImageBitmap()
     }
 
-
-    fun getDUMMYFrameBitmap(): ImageBitmap {
-        val width = 16
-        val height = 16
-        val imageData = IntArray(width * height)
-
-        frameCounter++
-
-        val colorShift = (frameCounter % 360).toInt()
-
-        val hue1 = (0 + colorShift) % 360
-        val hue2 = (90 + colorShift) % 360
-        val hue3 = (180 + colorShift) % 360
-        val hue4 = (270 + colorShift) % 360
-
-        val color1 = java.awt.Color.HSBtoRGB(hue1 / 360f, 1f, 1f) or 0xFF000000.toInt()
-        val color2 = java.awt.Color.HSBtoRGB(hue2 / 360f, 1f, 1f) or 0xFF000000.toInt()
-        val color3 = java.awt.Color.HSBtoRGB(hue3 / 360f, 1f, 1f) or 0xFF000000.toInt()
-        val color4 = java.awt.Color.HSBtoRGB(hue4 / 360f, 1f, 1f) or 0xFF000000.toInt()
-
-        for (y in 0 until height) {
-            for (x in 0 until width) {
-                val color = when {
-                    (x < width / 2 && y < height / 2) -> color1 // Top-left quadrant
-                    (x >= width / 2 && y < height / 2) -> color2 // Top-right quadrant
-                    (x < width / 2 && y >= height / 2) -> color3 // Bottom-left quadrant
-                    else -> color4 // Bottom-right quadrant
-                }
-                imageData[y * width + x] = color
-            }
-        }
-
-        val newImage = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB).apply {
-            setRGB(0, 0, width, height, imageData, 0, width)
-        }
-        return newImage.toComposeImageBitmap()
-    }
-
     override fun init() {
     }
 
@@ -186,6 +161,39 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
      * @param skipFrame Whether this frame should be skipped
      */
     override fun imageReady(skipFrame: Boolean) {
+        // Sound stuff:
+        nes?.let { nes ->
+            val tmp = nes.getPapu().bufferIndex
+            if (Globals.enableSound && Globals.timeEmulation && tmp > 0) {
+                val min_avail = nes.getPapu().line.getBufferSize() - 4 * tmp
+
+                var timeToSleep = nes.getPapu().getMillisToAvailableAbove(min_avail)
+                do {
+                    try {
+                        Thread.sleep(timeToSleep.toLong())
+                    } catch (e: InterruptedException) {
+                        // Ignore
+                    }
+                    timeToSleep = nes.getPapu().getMillisToAvailableAbove(min_avail)
+                } while (timeToSleep > 0)
+
+                nes.getPapu().writeBuffer()
+            }
+        }
+
+        // Sleep a bit if sound is disabled:
+        if (Globals.timeEmulation && !Globals.enableSound) {
+            sleepTime = Globals.frameTime
+            t2 = timer.currentMicros()
+            val elapsedTime = t2 - t1
+            if (elapsedTime < sleepTime) {
+                timer.sleepMicros(sleepTime - elapsedTime)
+            }
+        }
+
+        // Update timer
+        t1 = timer.currentMicros()
+
         if (!skipFrame) {
             // Mark the image as needing an update
             getFrameBitmap()
@@ -282,9 +290,19 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
     }
 
     /**
+     * Sets the NES instance for this screen view.
+     * 
+     * @param nes The NES instance to use
+     */
+    fun setNES(nes: NES) {
+        this.nes = nes
+    }
+
+    /**
      * Clean up resources used by this screen view.
      */
     override fun destroy() {
         buffer = IntArray(0)
+        nes = null
     }
 }

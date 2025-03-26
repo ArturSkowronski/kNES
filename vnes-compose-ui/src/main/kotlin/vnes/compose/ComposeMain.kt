@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import kotlinx.coroutines.delay
 import vnes.emulator.NES
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
@@ -106,7 +105,7 @@ fun main() = application {
 
     Window(
         onCloseRequest = ::exitApplication,
-        title = "vNES Emulator",
+        title = "kNES Emulator",
         state = windowState
     ) {
         MaterialTheme {
@@ -117,7 +116,7 @@ fun main() = application {
                 ) {
                     // Title
                     Text(
-                        text = "vNES Emulator - Compose UI1",
+                        text = "kNES Emulator - Compose UI",
                         style = MaterialTheme.typography.h4,
                         modifier = Modifier.padding(bottom = 16.dp)
                     )

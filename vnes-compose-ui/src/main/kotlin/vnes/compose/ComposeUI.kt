@@ -36,6 +36,9 @@ class ComposeUI {
         this.nes = nes
         this.screenView = screenView
 
+        // Set the NES instance on the screen view
+        screenView.setNES(nes)
+
         // Set the buffer on the PPU to prevent NullPointerException
         // The PPU needs a buffer to render to, and it expects this buffer to be set from outside
         // If the buffer is not set, a NullPointerException will occur in PPU.renderFramePartially
