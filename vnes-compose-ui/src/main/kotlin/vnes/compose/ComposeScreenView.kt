@@ -19,6 +19,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import vnes.compose.utils.ScreenLogger
 import vnes.emulator.NES
 import vnes.emulator.ui.ScreenView
 import vnes.emulator.utils.Globals

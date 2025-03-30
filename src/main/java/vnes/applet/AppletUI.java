@@ -19,8 +19,8 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 import vnes.emulator.ui.GUI;
 import vnes.emulator.utils.Globals;
 import vnes.emulator.NES;
-import vnes.emulator.InputHandler;
-import vnes.emulator.InputCallback;
+import vnes.emulator.input.InputHandler;
+import vnes.emulator.input.InputCallback;
 import vnes.emulator.DestroyableInputHandler;
 import vnes.applet.input.KbInputHandler;
 import vnes.emulator.utils.HiResTimer;

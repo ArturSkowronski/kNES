@@ -16,6 +16,8 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import vnes.emulator.input.InputHandler;
+
 /**
  * Interface for input handlers that need to be explicitly destroyed.
  * This interface extends InputHandler and adds a destroy method.
