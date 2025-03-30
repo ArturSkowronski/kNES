@@ -17,19 +17,17 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
-import javax.swing.JComponent
 import vnes.emulator.DestroyableInputHandler
-import vnes.emulator.InputHandler.KEY_A
-import vnes.emulator.InputHandler.KEY_B
-import vnes.emulator.InputHandler.KEY_DOWN
-import vnes.emulator.InputHandler.KEY_LEFT
-import vnes.emulator.InputHandler.KEY_RIGHT
-import vnes.emulator.InputHandler.KEY_SELECT
-import vnes.emulator.InputHandler.KEY_START
-import vnes.emulator.InputHandler.KEY_UP
-import vnes.emulator.InputHandler.NUM_KEYS
+import vnes.emulator.input.InputHandler.KEY_A
+import vnes.emulator.input.InputHandler.KEY_B
+import vnes.emulator.input.InputHandler.KEY_DOWN
+import vnes.emulator.input.InputHandler.KEY_LEFT
+import vnes.emulator.input.InputHandler.KEY_RIGHT
+import vnes.emulator.input.InputHandler.KEY_SELECT
+import vnes.emulator.input.InputHandler.KEY_START
+import vnes.emulator.input.InputHandler.KEY_UP
+import vnes.emulator.input.InputHandler.NUM_KEYS
 import vnes.emulator.NES
 import java.io.BufferedReader
 import java.io.InputStreamReader

@@ -1,4 +1,4 @@
-package vnes.compose
+package vnes.compose.utils
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
@@ -15,16 +15,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.Graphics
 import java.awt.Graphics2D
-import java.awt.event.ActionEvent
-import java.awt.event.ActionListener
 import java.awt.image.BufferedImage
 import javax.swing.*
 import kotlin.math.max
-import kotlin.math.min
 
 /**
  * Utility class for previewing image objects.

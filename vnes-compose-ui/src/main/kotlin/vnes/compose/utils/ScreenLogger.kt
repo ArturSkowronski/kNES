@@ -1,4 +1,4 @@
-package vnes.compose
+package vnes.compose.utils
 
 /*
 vNES
@@ -17,6 +17,7 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import java.awt.Color
 import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.ImageIO
@@ -69,7 +70,7 @@ object ScreenLogger {
 
         // Draw the buffer to the terminal line by line if the flag is set
         if (drawBufferToTerminal) {
-            ScreenLogger.visualizeBufferInTerminal(buffer, width, height, topColors)
+            visualizeBufferInTerminal(buffer, width, height, topColors)
         }
 
         // Update previous top colors for next comparison
@@ -205,10 +206,10 @@ object ScreenLogger {
         val b = color and 0xFF
 
         // Convert RGB to HSB
-        val hsb = java.awt.Color.RGBtoHSB(r, g, b, null)
+        val hsb = Color.RGBtoHSB(r, g, b, null)
 
         // Convert back to RGB with HSBtoRGB
-        return java.awt.Color.HSBtoRGB(hsb[0], hsb[1], hsb[2]) or 0xFF000000.toInt()
+        return Color.HSBtoRGB(hsb[0], hsb[1], hsb[2]) or 0xFF000000.toInt()
     }
 
 }

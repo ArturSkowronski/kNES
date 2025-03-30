@@ -18,7 +18,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import vnes.emulator.NES;
 import vnes.emulator.*;
-import vnes.emulator.InputHandler;
+import vnes.emulator.input.InputHandler;
 
 public class MapperDefault implements MemoryMapper {
 
