@@ -71,7 +71,7 @@ public class NES {
         this.uiFactory = uiFactory;
 
         // Create UI components using the factory
-        DestroyableInputHandler inputHandler = uiFactory.createInputHandler(this);
+        InputHandler inputHandler = uiFactory.createInputHandler(this);
         ScreenView screenView = uiFactory.createScreenView(1);
 
         // Create a GUI adapter that delegates to the factory components
@@ -100,7 +100,7 @@ public class NES {
         this.uiFactory = uiFactory;
 
         // Create UI components using the factory
-        DestroyableInputHandler inputHandler = uiFactory.createInputHandler(this);
+        InputHandler inputHandler = uiFactory.createInputHandler(this);
 
         // Create a GUI adapter that delegates to the factory components
         this.gui = new GUIAdapter(inputHandler, screenView);

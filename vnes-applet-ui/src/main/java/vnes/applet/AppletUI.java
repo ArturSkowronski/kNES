@@ -20,17 +20,17 @@ import java.awt.*;
 import java.awt.event.*;
 import javax.swing.*;
 
-import vnes.emulator.DestroyableInputHandler;
+import vnes.emulator.input.InputHandler;
 import vnes.emulator.NES;
 import vnes.emulator.ui.ScreenView;
 
 /**
  * Main UI class for the Applet implementation.
  */
-public class AppletUI extends JPanel implements DestroyableInputHandler {
+public class AppletUI extends JPanel implements InputHandler {
     private NES nes;
     private BufferView bufferView;
-    
+
     /**
      * Creates a new AppletUI.
      */
@@ -38,7 +38,7 @@ public class AppletUI extends JPanel implements DestroyableInputHandler {
         setLayout(new BorderLayout());
         setFocusable(true);
     }
-    
+
     /**
      * Initializes the UI with the specified NES instance.
      * 
@@ -48,35 +48,35 @@ public class AppletUI extends JPanel implements DestroyableInputHandler {
     public void init(NES nes, BufferView bufferView) {
         this.nes = nes;
         this.bufferView = bufferView;
-        
+
         // Add the buffer view to the center of the panel
         add(bufferView, BorderLayout.CENTER);
-        
+
         // Request focus for keyboard input
         bufferView.requestFocus();
     }
-    
+
     @Override
     public short getKeyState(int padKey) {
         // Delegate to the input handler
         return 0;
     }
-    
+
     @Override
     public void mapKey(int padKey, int deviceKey) {
         // Delegate to the input handler
     }
-    
+
     @Override
     public void reset() {
         // Reset the UI state
     }
-    
+
     @Override
     public void update() {
         // Update the UI state
     }
-    
+
     @Override
     public void destroy() {
         // Clean up resources
@@ -84,7 +84,7 @@ public class AppletUI extends JPanel implements DestroyableInputHandler {
             bufferView.destroy();
             bufferView = null;
         }
-        
+
         nes = null;
     }
 }

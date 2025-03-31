@@ -2,12 +2,14 @@ package vnes.emulator.input
 
 interface InputHandler {
     fun getKeyState(padKey: Int): Short
-
     fun mapKey(padKey: Int, deviceKey: Int)
-
     fun reset()
-
     fun update()
+
+    /**
+     * Clean up resources used by this input handler.
+     */
+    fun destroy()
 
     companion object {
         const val KEY_A: Int = 0

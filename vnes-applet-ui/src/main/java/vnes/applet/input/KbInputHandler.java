@@ -19,17 +19,19 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 import java.awt.event.*;
 import javax.swing.*;
 
-import vnes.emulator.DestroyableInputHandler;
+import vnes.emulator.input.InputHandler;
 import vnes.emulator.NES;
+
+import static vnes.emulator.input.InputHandler.*;  // Import constants
 
 /**
  * Keyboard input handler for the Applet UI.
  */
-public class KbInputHandler implements DestroyableInputHandler, KeyListener {
+public class KbInputHandler implements InputHandler, KeyListener {
     private final NES nes;
     private final short[] keyState = new short[NUM_KEYS];
     private final int[] keyMapping = new int[NUM_KEYS];
-    
+
     /**
      * Creates a new KbInputHandler.
      * 
@@ -37,7 +39,7 @@ public class KbInputHandler implements DestroyableInputHandler, KeyListener {
      */
     public KbInputHandler(NES nes) {
         this.nes = nes;
-        
+
         // Default key mappings
         mapKey(KEY_A, KeyEvent.VK_Z);
         mapKey(KEY_B, KeyEvent.VK_X);
@@ -48,56 +50,56 @@ public class KbInputHandler implements DestroyableInputHandler, KeyListener {
         mapKey(KEY_LEFT, KeyEvent.VK_LEFT);
         mapKey(KEY_RIGHT, KeyEvent.VK_RIGHT);
     }
-    
+
     @Override
     public short getKeyState(int padKey) {
         return keyState[padKey];
     }
-    
+
     @Override
     public void mapKey(int padKey, int deviceKey) {
         keyMapping[padKey] = deviceKey;
     }
-    
+
     @Override
     public void reset() {
         for (int i = 0; i < keyState.length; i++) {
             keyState[i] = 0;
         }
     }
-    
+
     @Override
     public void update() {
         // Update key states
     }
-    
+
     @Override
     public void keyPressed(KeyEvent e) {
         int keyCode = e.getKeyCode();
-        
+
         for (int i = 0; i < keyMapping.length; i++) {
             if (keyMapping[i] == keyCode) {
                 keyState[i] = 0x41;
             }
         }
     }
-    
+
     @Override
     public void keyReleased(KeyEvent e) {
         int keyCode = e.getKeyCode();
-        
+
         for (int i = 0; i < keyMapping.length; i++) {
             if (keyMapping[i] == keyCode) {
                 keyState[i] = 0x40;
             }
         }
     }
-    
+
     @Override
     public void keyTyped(KeyEvent e) {
         // Not used
     }
-    
+
     /**
      * Registers this input handler with a component.
      * 
@@ -106,7 +108,7 @@ public class KbInputHandler implements DestroyableInputHandler, KeyListener {
     public void registerWith(JComponent component) {
         component.addKeyListener(this);
     }
-    
+
     @Override
     public void destroy() {
         // Clean up resources

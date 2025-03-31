@@ -1,6 +1,5 @@
 package vnes.compose.input
 
-import vnes.emulator.DestroyableInputHandler
 import vnes.emulator.input.InputHandler
 import vnes.emulator.NES
 import java.awt.event.KeyAdapter
@@ -13,7 +12,7 @@ import javax.swing.JComponent
  * Note: This is a temporary implementation using Swing instead of Compose
  * until the Compose UI dependencies are properly configured.
  */
-class ComposeInputHandler(private val nes: NES) : DestroyableInputHandler {
+class ComposeInputHandler(private val nes: NES) : InputHandler {
     private val keyStates = ShortArray(InputHandler.NUM_KEYS) { 0 }
     private val keyMapping = IntArray(InputHandler.NUM_KEYS) { 0 }
     private val keyAdapter = KeyInputAdapter()

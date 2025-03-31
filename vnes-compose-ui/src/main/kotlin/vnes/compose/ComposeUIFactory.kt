@@ -18,7 +18,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import vnes.compose.input.ComposeInputHandler
-import vnes.emulator.DestroyableInputHandler
+import vnes.emulator.input.InputHandler
 import vnes.emulator.NES
 import vnes.emulator.NESUIFactory
 import vnes.emulator.ui.ScreenView
@@ -34,9 +34,9 @@ class ComposeUIFactory : NESUIFactory {
      * Creates an input handler for the NES emulator.
      * 
      * @param nes The NES instance to use
-     * @return A DestroyableInputHandler implementation
+     * @return An InputHandler implementation
      */
-    override fun createInputHandler(nes: NES): DestroyableInputHandler {
+    override fun createInputHandler(nes: NES): InputHandler {
         if (inputHandler == null) {
             inputHandler = ComposeInputHandler(nes)
         }

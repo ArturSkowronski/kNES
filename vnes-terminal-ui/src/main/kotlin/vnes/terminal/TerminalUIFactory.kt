@@ -17,7 +17,7 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.emulator.DestroyableInputHandler
+import vnes.emulator.input.InputHandler
 import vnes.emulator.NES
 import vnes.emulator.NESUIFactory
 import vnes.emulator.ui.ScreenView
@@ -32,9 +32,9 @@ class TerminalUIFactory : NESUIFactory {
      * Creates an input handler for the NES emulator.
      * 
      * @param nes The NES instance to use
-     * @return A DestroyableInputHandler implementation
+     * @return An InputHandler implementation
      */
-    override fun createInputHandler(nes: NES): DestroyableInputHandler {
+    override fun createInputHandler(nes: NES): InputHandler {
         return TerminalInputHandler(nes)
     }
 
