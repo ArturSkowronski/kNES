@@ -16,24 +16,24 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.emulator.channels.ChannelDM;
-import vnes.emulator.channels.ChannelNoise;
-import vnes.emulator.channels.ChannelSquare;
-import vnes.emulator.channels.ChannelTriangle;
-import vnes.emulator.channels.IAudioContext;
-import vnes.emulator.channels.IChannel;
-import vnes.emulator.channels.IChannelRegistry;
+import vnes.emulator.papu.*;
+import vnes.emulator.papu.channels.ChannelDM;
+import vnes.emulator.papu.channels.ChannelNoise;
+import vnes.emulator.papu.channels.ChannelSquare;
+import vnes.emulator.papu.channels.ChannelTriangle;
 import vnes.emulator.producers.ChannelRegistryProducer;
 import vnes.emulator.utils.Globals;
 
 import javax.sound.sampled.*;
 
-public final class PAPU implements IAudioContext {
+public final class PAPU implements IAudioContext, DMCSampler {
+    // Current DMC address for sample loading
+    private int currentDmcAddress;
     private final MemoryMapper memoryMapper;
     Memory cpuMem;
     Mixer mixer;
     CPU cpu;
-    private IChannelRegistry registry;
+    private ChannelRegistry registry;
 
     public SourceDataLine line;
     ChannelSquare square1;
@@ -111,12 +111,61 @@ public final class PAPU implements IAudioContext {
     int extraCycles;
     int maxCycles;
 
+    /**
+     * Get the IRQ requester for interrupt handling.
+     * @return The IRQ requester
+     */
+    @Override
+    public IIrqRequester getIrqRequester() {
+        return cpu;
+    }
+    
+    /**
+     * Get the CPU for backward compatibility.
+     * @deprecated Use getIrqRequester() instead
+     */
+
+    @Deprecated
     public CPU getCPU() {
         return cpu;
     }
 
-    public MemoryMapper getMemoryMapper() {
-        return memoryMapper;
+    /**
+     * Get the DMC sampler for sample loading operations.
+     * @return The DMC sampler (this)
+     */
+    @Override
+    public DMCSampler getDmcSampler() {
+        return this;
+    }
+
+    /**
+     * Loads a 7-bit sample from the specified memory address
+     * @param address CPU memory address (0x0000-0xFFFF)
+     * @return Unsigned 7-bit sample value (0-127)
+     */
+    @Override
+    public int loadSample(int address) {
+        currentDmcAddress = address;
+        return memoryMapper.load(address);
+    }
+    
+    /**
+     * @return true if there's a pending memory read operation
+     */
+    @Override
+    public boolean hasPendingRead() {
+        // Delegate to memory mapper if it has a method for this
+        // For now, return false as default implementation
+        return false;
+    }
+    
+    /**
+     * @return Current address pointer for sample loading
+     */
+    @Override
+    public int getCurrentAddress() {
+        return currentDmcAddress;
     }
 
 
@@ -238,7 +287,7 @@ public final class PAPU implements IAudioContext {
     public void writeReg(int address, short value) {
         // Use registry to route register writes to appropriate channels
         if (address >= 0x4000 && address <= 0x4013) {
-            IChannel channel = registry.getChannel(address);
+            PAPUChannel channel = registry.getChannel(address);
             if (channel != null) {
                 channel.writeReg(address, value);
             }
@@ -456,7 +505,7 @@ public final class PAPU implements IAudioContext {
 
         // Frame IRQ handling:
         if (frameIrqEnabled && frameIrqActive) {
-            getCPU().requestIrq(CPU.IRQ_NORMAL);
+            getIrqRequester().requestIrq(CPU.IRQ_NORMAL);
         }
 
         // Clock frame counter at double CPU speed:
