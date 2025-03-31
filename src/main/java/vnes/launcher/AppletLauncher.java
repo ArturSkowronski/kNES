@@ -1,5 +1,5 @@
 package vnes.launcher;
-import vnes.vNES;
+import vnes.applet.AppletMain;
 
 import java.applet.*;
 import java.awt.*;
@@ -18,7 +18,7 @@ import javax.swing.filechooser.FileNameExtensionFilter;
  */
 public class AppletLauncher {
     private static JFrame frame;
-    private static vNES applet;
+    private static AppletMain applet;
     private static AppletStubImpl stub;
     private static String romPath = null;
     
@@ -134,7 +134,7 @@ public class AppletLauncher {
             }
             
             // Create the applet instance
-            applet = new vNES();
+            applet = new AppletMain();
             
             // Create and set the AppletStub with the ROM path
             stub = new AppletStubImpl(applet, "vnes.nes");

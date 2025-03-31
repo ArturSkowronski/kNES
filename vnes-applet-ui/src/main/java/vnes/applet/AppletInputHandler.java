@@ -1,4 +1,4 @@
-package vnes.applet.input;
+package vnes.applet;
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project
@@ -21,14 +21,14 @@ import vnes.emulator.input.InputHandler;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 
-public class KbInputHandler implements KeyListener, InputHandler {
+public class AppletInputHandler implements KeyListener, InputHandler {
 
     boolean[] allKeysState;
     int[] keyMapping;
     int id;
     Runnable menuInterface;
 
-    public KbInputHandler(Runnable menuInterface, int id) {
+    public AppletInputHandler(Runnable menuInterface, int id) {
         this.id = id;
         this.menuInterface = menuInterface;
         allKeysState = new boolean[255];

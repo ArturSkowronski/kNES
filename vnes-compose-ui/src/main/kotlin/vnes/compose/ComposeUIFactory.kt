@@ -17,7 +17,7 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.compose.input.ComposeInputHandler
+import vnes.compose.ComposeInputHandler
 import vnes.emulator.input.InputHandler
 import vnes.emulator.NES
 import vnes.emulator.NESUIFactory

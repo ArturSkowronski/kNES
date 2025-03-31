@@ -1,4 +1,4 @@
-package vnes;
+package vnes.applet.utils;
 
 import java.util.HashMap;
 import java.util.Map;
