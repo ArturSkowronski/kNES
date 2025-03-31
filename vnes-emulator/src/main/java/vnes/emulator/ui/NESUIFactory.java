@@ -1,4 +1,4 @@
-package vnes.emulator;
+package vnes.emulator.ui;
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project
@@ -16,8 +16,8 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import vnes.emulator.NES;
 import vnes.emulator.input.InputHandler;
-import vnes.emulator.ui.ScreenView;
 
 /**
  * Factory interface for creating UI components for the NES emulator.

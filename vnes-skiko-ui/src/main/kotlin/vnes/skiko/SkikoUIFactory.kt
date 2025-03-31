@@ -19,7 +19,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import vnes.emulator.input.InputHandler
 import vnes.emulator.NES
-import vnes.emulator.NESUIFactory
+import vnes.emulator.ui.NESUIFactory
 import vnes.emulator.ui.ScreenView
 
 /**

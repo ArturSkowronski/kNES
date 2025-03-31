@@ -19,6 +19,8 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 import vnes.emulator.input.InputHandler;
 import vnes.emulator.producers.ChannelRegistryProducer;
 import vnes.emulator.ui.GUI;
+import vnes.emulator.ui.GUIAdapter;
+import vnes.emulator.ui.NESUIFactory;
 import vnes.emulator.ui.ScreenView;
 
 import vnes.emulator.utils.Globals;
