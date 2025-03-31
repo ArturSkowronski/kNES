@@ -22,25 +22,23 @@ import vnes.emulator.NES;
 import vnes.emulator.input.InputHandler;
 import vnes.emulator.input.InputCallback;
 import vnes.emulator.DestroyableInputHandler;
-import vnes.applet.input.KbInputHandler;
 import vnes.emulator.utils.HiResTimer;
-import vnes.vNES;
 
 /**
  * AWT-specific implementation of the UI interface.
  * This class implements the GUI interface directly, providing all necessary
  * functionality for the NES emulator UI.
  */
-public class AppletUI implements GUI {
+public class AppletGUI implements GUI {
 
     protected InputCallback[] inputCallbacks;
     protected InputHandler[] inputHandlers;
 
     private NES nes;
-    private vNES applet;
-    private KbInputHandler kbJoy1;
-    private KbInputHandler kbJoy2;
-    private BufferView vScreen;
+    private AppletMain applet;
+    private AppletInputHandler kbJoy1;
+    private AppletInputHandler kbJoy2;
+    private AppletScreenView vScreen;
     private HiResTimer timer;
     private long t1, t2;
     private int sleepTime;
@@ -50,7 +48,7 @@ public class AppletUI implements GUI {
      *
      * @param applet The vNES applet
      */
-    public AppletUI(vNES applet) {
+    public AppletGUI(AppletMain applet) {
         this.inputCallbacks = new InputCallback[2];
         this.inputHandlers = new InputHandler[2];
 
@@ -62,14 +60,14 @@ public class AppletUI implements GUI {
     public void init(NES nes, boolean showGui) {
         // Create the screen view
         this.nes = nes;
-        vScreen = new BufferView(nes, 256, 240);
+        vScreen = new AppletScreenView(nes, 256, 240);
         vScreen.setBgColor(applet.bgColor.getRGB());
         vScreen.init();
         vScreen.setNotifyImageReady(true);
 
         // Create the input handlers
-        kbJoy1 = new KbInputHandler(nes::menuListener, 0);
-        kbJoy2 = new KbInputHandler(nes::menuListener, 1);
+        kbJoy1 = new AppletInputHandler(nes::menuListener, 0);
+        kbJoy2 = new AppletInputHandler(nes::menuListener, 1);
 
         // Set the input handlers
         inputHandlers[0] = kbJoy1;
@@ -169,7 +167,7 @@ public class AppletUI implements GUI {
     }
 
     @Override
-    public BufferView getScreenView() {
+    public AppletScreenView getScreenView() {
         return vScreen;
     }
 

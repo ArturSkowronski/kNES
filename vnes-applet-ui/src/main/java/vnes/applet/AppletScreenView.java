@@ -26,7 +26,7 @@ import vnes.emulator.Scale;
 import vnes.emulator.ui.ScreenView;
 import vnes.emulator.utils.Globals;
 
-public class BufferView extends JPanel implements ScreenView {
+public class AppletScreenView extends JPanel implements ScreenView {
 
     // vnes.emulator.Scale modes:
     public static final int SCALE_NONE = 0;
@@ -56,7 +56,7 @@ public class BufferView extends JPanel implements ScreenView {
     private boolean notifyImageReady;
 
     // Constructor
-    public BufferView(NES nes, int width, int height) {
+    public AppletScreenView(NES nes, int width, int height) {
 
         super(false);
         this.nes = nes;
