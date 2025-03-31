@@ -16,6 +16,7 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import vnes.emulator.input.InputHandler;
 import vnes.emulator.ui.ScreenView;
 
 /**
@@ -27,9 +28,9 @@ public interface NESUIFactory {
      * Creates a UI controller that handles input and lifecycle management
      * 
      * @param nes The NES instance to associate with the input handler
-     * @return A DestroyableInputHandler implementation
+     * @return An InputHandler implementation
      */
-    DestroyableInputHandler createInputHandler(NES nes);
+    InputHandler createInputHandler(NES nes);
 
     /**
      * Creates a rendering surface that implements ScreenView interface

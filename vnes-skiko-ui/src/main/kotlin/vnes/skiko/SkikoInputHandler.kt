@@ -20,24 +20,24 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
 import javax.swing.JComponent
-import vnes.emulator.DestroyableInputHandler
-import vnes.emulator.input.InputHandler.KEY_A
-import vnes.emulator.input.InputHandler.KEY_B
-import vnes.emulator.input.InputHandler.KEY_DOWN
-import vnes.emulator.input.InputHandler.KEY_LEFT
-import vnes.emulator.input.InputHandler.KEY_RIGHT
-import vnes.emulator.input.InputHandler.KEY_SELECT
-import vnes.emulator.input.InputHandler.KEY_START
-import vnes.emulator.input.InputHandler.KEY_UP
-import vnes.emulator.input.InputHandler.NUM_KEYS
 import vnes.emulator.NES
+import vnes.emulator.input.InputHandler
+import vnes.emulator.input.InputHandler.Companion.KEY_A
+import vnes.emulator.input.InputHandler.Companion.KEY_B
+import vnes.emulator.input.InputHandler.Companion.KEY_DOWN
+import vnes.emulator.input.InputHandler.Companion.KEY_LEFT
+import vnes.emulator.input.InputHandler.Companion.KEY_RIGHT
+import vnes.emulator.input.InputHandler.Companion.KEY_SELECT
+import vnes.emulator.input.InputHandler.Companion.KEY_START
+import vnes.emulator.input.InputHandler.Companion.KEY_UP
+import vnes.emulator.input.InputHandler.Companion.NUM_KEYS
 
 /**
  * Input handler for the Skiko UI.
  * 
  * This implementation uses AWT/Swing for keyboard input.
  */
-class SkikoInputHandler(private val nes: NES) : DestroyableInputHandler {
+class SkikoInputHandler(private val nes: NES) : InputHandler {
     private val keyStates = ShortArray(NUM_KEYS) { 0 }
     private val keyMapping = IntArray(NUM_KEYS) { 0 }
     private val keyAdapter = KeyInputAdapter()

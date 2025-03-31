@@ -22,12 +22,19 @@ import vnes.emulator.input.InputHandler;
 import vnes.emulator.utils.HiResTimer;
 
 /**
- * Legacy UI interface that extends the platform-agnostic NESUICore.
- * This interface maintains backward compatibility with AWT-specific implementations
- * while providing a bridge to the new platform-agnostic interface.
+ * UI interface for the NES emulator.
+ * This interface defines the core functionality required by any UI implementation,
+ * without dependencies on specific UI frameworks like AWT or Compose.
+ * It combines both platform-agnostic UI functionality and legacy UI requirements.
  */
-public interface GUI extends UiInfoMessageBus {
+public interface GUI {
 
+    // Methods from UiInfoMessageBus
+    void showErrorMsg(String message);
+    void showLoadProgress(int percentComplete);
+    void destroy();
+
+    // GUI-specific methods
     InputHandler getJoy1();
     InputHandler getJoy2();
     ScreenView getScreenView();

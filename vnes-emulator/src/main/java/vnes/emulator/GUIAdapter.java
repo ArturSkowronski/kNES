@@ -26,70 +26,68 @@ import vnes.emulator.utils.HiResTimer;
  * created by a NESUIFactory.
  */
 public class GUIAdapter implements GUI {
-    private final DestroyableInputHandler inputHandler;
+    private final InputHandler inputHandler;
     private final ScreenView screenView;
     private final HiResTimer timer;
-    private NES nes;
-    
+
     /**
      * Creates a new GUIAdapter with the specified components.
      * 
      * @param inputHandler The input handler to use
      * @param screenView The screen view to use
      */
-    public GUIAdapter(DestroyableInputHandler inputHandler, ScreenView screenView) {
+    public GUIAdapter(InputHandler inputHandler, ScreenView screenView) {
         this.inputHandler = inputHandler;
         this.screenView = screenView;
         this.timer = new HiResTimer();
     }
-    
+
     @Override
     public InputHandler getJoy1() {
         return inputHandler;
     }
-    
+
     @Override
     public InputHandler getJoy2() {
         // Currently only supporting one input handler
         return null;
     }
-    
+
     @Override
     public ScreenView getScreenView() {
         return screenView;
     }
-    
+
     @Override
     public HiResTimer getTimer() {
         return timer;
     }
-    
+
     @Override
     public void imageReady(boolean skipFrame) {
         screenView.imageReady(skipFrame);
     }
-    
+
     @Override
     public void init(NES nes, boolean showGui) {
-        this.nes = nes;
         screenView.init();
     }
-    
+
     @Override
     public void println(String s) {
         System.out.println(s);
     }
-    
+
     @Override
     public void showErrorMsg(String msg) {
         System.err.println("ERROR: " + msg);
     }
-    
+
     @Override
     public void showLoadProgress(int percentComplete) {
         // Default implementation does nothing
     }
-    
+
     /**
      * Cleans up resources used by this GUI adapter.
      */
@@ -97,7 +95,7 @@ public class GUIAdapter implements GUI {
         if (inputHandler != null) {
             inputHandler.destroy();
         }
-        
+
         if (screenView != null) {
             screenView.destroy();
         }
