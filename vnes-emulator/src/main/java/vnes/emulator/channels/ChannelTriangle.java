@@ -16,11 +16,9 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.emulator.PAPU;
+public class ChannelTriangle implements IChannel {
 
-public class ChannelTriangle implements PapuChannel {
-
-    PAPU papu;
+    IAudioContext audioContext;
     public boolean isEnabled;
     public boolean sampleCondition;
     boolean lengthCounterEnable;
@@ -35,8 +33,19 @@ public class ChannelTriangle implements PapuChannel {
     public int sampleValue;
     int tmp;
 
-    public ChannelTriangle(PAPU papu) {
-        this.papu = papu;
+    public ChannelTriangle(IAudioContext audioContext) {
+        this.audioContext = audioContext;
+    }
+
+    @Override
+    public void writeReg(int address, short value) {
+        writeReg(address, value & 0xFF);
+    }
+
+    @Override
+    public void clock() {
+        // Implementation of clock method required by IChannel
+        // This should update the channel state on each clock cycle
     }
 
     public void clockLengthCounter() {
@@ -103,7 +112,7 @@ public class ChannelTriangle implements PapuChannel {
             // Programmable timer, length counter
             progTimerMax &= 0xFF;
             progTimerMax |= ((value & 0x07) << 8);
-            lengthCounter = papu.getLengthMax(value & 0xF8);
+            lengthCounter = audioContext.getLengthMax(value & 0xF8);
             lcHalt = true;
 
         }
@@ -170,6 +179,6 @@ public class ChannelTriangle implements PapuChannel {
     }
 
     public void destroy() {
-        papu = null;
+        audioContext = null;
     }
 }

@@ -16,11 +16,9 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.emulator.PAPU;
+public class ChannelSquare implements IChannel {
 
-public class ChannelSquare implements PapuChannel {
-
-    PAPU papu;
+    IAudioContext audioContext;
     static int[] dutyLookup;
     static int[] impLookup;
     boolean sqr1;
@@ -49,11 +47,21 @@ public class ChannelSquare implements PapuChannel {
     public int sampleValue;
     int vol;
 
-    public ChannelSquare(PAPU papu, boolean square1) {
-
-        this.papu = papu;
+    public ChannelSquare(IAudioContext audioContext, boolean square1) {
+        this.audioContext = audioContext;
         sqr1 = square1;
-
+    }
+    
+    @Override
+    public void clock() {
+        // Implementation of clock method required by IChannel
+        // This method would be called during the audio processing cycle
+    }
+    
+    @Override
+    public void writeReg(int address, short value) {
+        // Convert short to int and call the existing method
+        writeReg(address, (int)value);
     }
 
     public void clockLengthCounter() {
@@ -182,7 +190,8 @@ public class ChannelSquare implements PapuChannel {
             progTimerMax |= ((value & 0x7) << 8);
 
             if (isEnabled) {
-                lengthCounter = papu.getLengthMax(value & 0xF8);
+                // Use audioContext directly
+                lengthCounter = audioContext.getLengthMax(value & 0xF8);
             }
 
             envReset = true;
@@ -234,7 +243,7 @@ public class ChannelSquare implements PapuChannel {
     }
 
     public void destroy() {
-        papu = null;
+        audioContext = null;
     }
 
 

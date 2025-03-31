@@ -20,15 +20,20 @@ import vnes.emulator.channels.ChannelDM;
 import vnes.emulator.channels.ChannelNoise;
 import vnes.emulator.channels.ChannelSquare;
 import vnes.emulator.channels.ChannelTriangle;
+import vnes.emulator.channels.IAudioContext;
+import vnes.emulator.channels.IChannel;
+import vnes.emulator.channels.IChannelRegistry;
+import vnes.emulator.producers.ChannelRegistryProducer;
 import vnes.emulator.utils.Globals;
 
 import javax.sound.sampled.*;
 
-public final class PAPU {
+public final class PAPU implements IAudioContext {
     private final MemoryMapper memoryMapper;
     Memory cpuMem;
     Mixer mixer;
     CPU cpu;
+    private IChannelRegistry registry;
 
     public SourceDataLine line;
     ChannelSquare square1;
@@ -114,6 +119,11 @@ public final class PAPU {
         return memoryMapper;
     }
 
+
+
+    /**
+     * New constructor that accepts a channel registry
+     */
     public PAPU(NES nes) {
         cpuMem = nes.getCpuMemory();
         memoryMapper = nes.getMemoryMapper();
@@ -125,12 +135,6 @@ public final class PAPU {
         bufferIndex = 0;
         frameIrqEnabled = false;
         initCounter = 2048;
-
-        square1 = new ChannelSquare(this, true);
-        square2 = new ChannelSquare(this, false);
-        triangle = new ChannelTriangle(this);
-        noise = new ChannelNoise(this);
-        dmc = new ChannelDM(this);
 
         masterVolume = 256;
         panning = new int[]{
@@ -152,8 +156,14 @@ public final class PAPU {
         frameIrqCounterMax = 4;
     }
 
-    public void init(){
+    public void init(ChannelRegistryProducer channelRegistryProducer){
         // Init sound registers:
+        this.registry = channelRegistryProducer.produce(this);
+        square1 = (ChannelSquare) registry.getChannel(0x4000);
+        square2 = (ChannelSquare) registry.getChannel(0x4004);
+        triangle = (ChannelTriangle) registry.getChannel(0x4008);
+        noise = (ChannelNoise) registry.getChannel(0x400C);
+        dmc = (ChannelDM) registry.getChannel(0x4010);
         for (int i = 0; i < 0x14; i++) {
             if (i == 0x10) {
                 writeReg(0x4010, (short) 0x10);
@@ -226,48 +236,12 @@ public final class PAPU {
     }
 
     public void writeReg(int address, short value) {
-
-        if (address >= 0x4000 && address < 0x4004) {
-
-            // Square Wave 1 Control
-            square1.writeReg(address, value);
-        ////System.out.println("Square Write");
-
-        } else if (address >= 0x4004 && address < 0x4008) {
-
-            // Square 2 Control
-            square2.writeReg(address, value);
-
-        } else if (address >= 0x4008 && address < 0x400C) {
-
-            // Triangle Control
-            triangle.writeReg(address, value);
-
-        } else if (address >= 0x400C && address <= 0x400F) {
-
-            // Noise Control
-            noise.writeReg(address, value);
-
-        } else if (address == 0x4010) {
-
-            // DMC Play mode & DMA frequency
-            dmc.writeReg(address, value);
-
-        } else if (address == 0x4011) {
-
-            // DMC Delta Counter
-            dmc.writeReg(address, value);
-
-        } else if (address == 0x4012) {
-
-            // DMC Play code starting address
-            dmc.writeReg(address, value);
-
-        } else if (address == 0x4013) {
-
-            // DMC Play code length
-            dmc.writeReg(address, value);
-
+        // Use registry to route register writes to appropriate channels
+        if (address >= 0x4000 && address <= 0x4013) {
+            IChannel channel = registry.getChannel(address);
+            if (channel != null) {
+                channel.writeReg(address, value);
+            }
         } else if (address == 0x4015) {
 
             // Channel enable

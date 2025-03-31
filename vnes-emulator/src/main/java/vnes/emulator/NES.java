@@ -17,6 +17,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import vnes.emulator.input.InputHandler;
+import vnes.emulator.producers.ChannelRegistryProducer;
 import vnes.emulator.ui.GUI;
 import vnes.emulator.ui.ScreenView;
 
@@ -54,7 +55,7 @@ public class NES {
 
         cpu.init();
         ppu.init();
-        papu.init();
+        papu.init(new ChannelRegistryProducer());
         palTable.init();
 
         enableSound(true);
@@ -88,7 +89,7 @@ public class NES {
 
         cpu.init();
         ppu.init();
-        papu.init();
+        papu.init(new ChannelRegistryProducer());
         palTable.init();
 
         enableSound(true);
@@ -116,7 +117,7 @@ public class NES {
 
         cpu.init();
         ppu.init();
-        papu.init();
+        papu.init(new ChannelRegistryProducer());
         palTable.init();
 
         enableSound(true);
