@@ -19,13 +19,14 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 import vnes.emulator.NES;
 import vnes.emulator.*;
 import vnes.emulator.input.InputHandler;
+import vnes.emulator.rom.ROMData;
 
 public class MapperDefault implements MemoryMapper {
 
     public Memory cpuMem;
     public Memory ppuMem;
     public short[] cpuMemArray;
-    public ROM rom;
+    public ROMData rom;
     public CPU cpu;
     public PPU ppu;
     public PAPU papu;
@@ -538,7 +539,9 @@ public class MapperDefault implements MemoryMapper {
         }
     }
 
-    public void loadROM(ROM rom) {
+    public void loadROM(ROMData romData) {
+
+        this.rom = romData;
 
         if (!rom.isValid() || rom.getRomBankCount() < 1) {
             //System.out.println("NoMapper: Invalid ROM! Unable to load.");
@@ -596,7 +599,7 @@ public class MapperDefault implements MemoryMapper {
 
         if (rom.hasBatteryRam()) {
 
-            short[] ram = rom.getBatteryRam();
+            short[] ram = rom.saveBatteryRam();
             if (ram != null && ram.length == 0x2000) {
 
                 // Load Battery RAM into memory:

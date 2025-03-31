@@ -18,6 +18,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import vnes.emulator.input.InputHandler;
 import vnes.emulator.producers.ChannelRegistryProducer;
+import vnes.emulator.producers.MapperProducer;
 import vnes.emulator.ui.GUI;
 import vnes.emulator.ui.GUIAdapter;
 import vnes.emulator.ui.NESUIFactory;
@@ -316,8 +317,10 @@ public class NES {
 
             reset();
 
-            memMapper = rom.createMapper();
+            MapperProducer mapperProducer = new MapperProducer(gui::showErrorMsg);
+            memMapper =  mapperProducer.produce(rom);
             memMapper.init(this);
+
             cpu.setMapper(memMapper);
             memMapper.loadROM(rom);
             ppu.setMirroring(rom.getMirroringType());
