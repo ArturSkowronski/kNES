@@ -23,10 +23,11 @@ instructions and invokes emulation of the PPU and pAPU.
 */
 
 
+import vnes.emulator.channels.IIrqRequester;
 import vnes.emulator.utils.Globals;
 import vnes.emulator.utils.Misc;
 
-public final class CPU implements Runnable {
+public final class CPU implements Runnable, IIrqRequester {
 
 	// Thread:
 	Thread myThread;

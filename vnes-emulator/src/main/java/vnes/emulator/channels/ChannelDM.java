@@ -96,7 +96,7 @@ public class ChannelDM implements IChannel {
         }
 
         if (irqGenerated) {
-            audioContext.getCPU().requestIrq(irqNormal);
+            audioContext.getIrqRequester().requestIrq(irqNormal);
         }
 
     }
@@ -135,9 +135,9 @@ public class ChannelDM implements IChannel {
 
     private void nextSample() {
 
-        // Fetch byte:
-        data = audioContext.getMemoryMapper().load(playAddress);
-        audioContext.getCPU().haltCycles(4);
+        // Fetch byte using DMCSampler instead of direct MemoryMapper access
+        data = audioContext.getDmcSampler().loadSample(playAddress);
+        audioContext.getIrqRequester().haltCycles(4);
 
         playLengthCounter--;
         playAddress++;
