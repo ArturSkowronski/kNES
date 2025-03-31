@@ -21,7 +21,6 @@ import vnes.emulator.utils.Globals;
 import vnes.emulator.NES;
 import vnes.emulator.input.InputHandler;
 import vnes.emulator.input.InputCallback;
-import vnes.emulator.DestroyableInputHandler;
 import vnes.emulator.utils.HiResTimer;
 
 /**
@@ -142,9 +141,7 @@ public class AppletGUI implements GUI {
         for (int i = 0; i < inputHandlers.length; i++) {
             if (inputHandlers[i] != null) {
                 inputHandlers[i].reset();
-                if (inputHandlers[i] instanceof DestroyableInputHandler) {
-                    ((DestroyableInputHandler) inputHandlers[i]).destroy();
-                }
+                inputHandlers[i].destroy();
                 inputHandlers[i] = null;
             }
             inputCallbacks[i] = null;

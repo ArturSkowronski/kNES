@@ -18,16 +18,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import java.awt.event.KeyEvent
-import vnes.emulator.DestroyableInputHandler
-import vnes.emulator.input.InputHandler.KEY_A
-import vnes.emulator.input.InputHandler.KEY_B
-import vnes.emulator.input.InputHandler.KEY_DOWN
-import vnes.emulator.input.InputHandler.KEY_LEFT
-import vnes.emulator.input.InputHandler.KEY_RIGHT
-import vnes.emulator.input.InputHandler.KEY_SELECT
-import vnes.emulator.input.InputHandler.KEY_START
-import vnes.emulator.input.InputHandler.KEY_UP
-import vnes.emulator.input.InputHandler.NUM_KEYS
+import vnes.emulator.input.InputHandler
 import vnes.emulator.NES
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -39,22 +30,22 @@ import java.util.concurrent.TimeUnit
  * 
  * This implementation uses a simple command-line interface for input.
  */
-class TerminalInputHandler(private val nes: NES) : DestroyableInputHandler {
-    private val keyStates = ShortArray(NUM_KEYS) { 0 }
-    private val keyMapping = IntArray(NUM_KEYS) { 0 }
+class TerminalInputHandler(private val nes: NES) : InputHandler {
+    private val keyStates = ShortArray(InputHandler.Companion.NUM_KEYS) { 0 }
+    private val keyMapping = IntArray(InputHandler.Companion.NUM_KEYS) { 0 }
     private val executor = Executors.newSingleThreadExecutor()
     private var running = true
 
     init {
         // Default key mappings (these are just for reference, as we'll use commands instead)
-        mapKey(KEY_A, KeyEvent.VK_Z)
-        mapKey(KEY_B, KeyEvent.VK_X)
-        mapKey(KEY_START, KeyEvent.VK_ENTER)
-        mapKey(KEY_SELECT, KeyEvent.VK_SPACE)
-        mapKey(KEY_UP, KeyEvent.VK_UP)
-        mapKey(KEY_DOWN, KeyEvent.VK_DOWN)
-        mapKey(KEY_LEFT, KeyEvent.VK_LEFT)
-        mapKey(KEY_RIGHT, KeyEvent.VK_RIGHT)
+        mapKey(InputHandler.Companion.KEY_A, KeyEvent.VK_Z)
+        mapKey(InputHandler.Companion.KEY_B, KeyEvent.VK_X)
+        mapKey(InputHandler.Companion.KEY_START, KeyEvent.VK_ENTER)
+        mapKey(InputHandler.Companion.KEY_SELECT, KeyEvent.VK_SPACE)
+        mapKey(InputHandler.Companion.KEY_UP, KeyEvent.VK_UP)
+        mapKey(InputHandler.Companion.KEY_DOWN, KeyEvent.VK_DOWN)
+        mapKey(InputHandler.Companion.KEY_LEFT, KeyEvent.VK_LEFT)
+        mapKey(InputHandler.Companion.KEY_RIGHT, KeyEvent.VK_RIGHT)
 
         // Start a thread to read commands from the console
         startCommandReader()
@@ -95,17 +86,17 @@ class TerminalInputHandler(private val nes: NES) : DestroyableInputHandler {
      */
     private fun processCommand(command: String) {
         when (command.trim().lowercase()) {
-            "a" -> setKeyState(KEY_A, true)
-            "b" -> setKeyState(KEY_B, true)
-            "start" -> setKeyState(KEY_START, true)
-            "select" -> setKeyState(KEY_SELECT, true)
-            "up" -> setKeyState(KEY_UP, true)
-            "down" -> setKeyState(KEY_DOWN, true)
-            "left" -> setKeyState(KEY_LEFT, true)
-            "right" -> setKeyState(KEY_RIGHT, true)
+            "a" -> setKeyState(InputHandler.Companion.KEY_A, true)
+            "b" -> setKeyState(InputHandler.Companion.KEY_B, true)
+            "start" -> setKeyState(InputHandler.Companion.KEY_START, true)
+            "select" -> setKeyState(InputHandler.Companion.KEY_SELECT, true)
+            "up" -> setKeyState(InputHandler.Companion.KEY_UP, true)
+            "down" -> setKeyState(InputHandler.Companion.KEY_DOWN, true)
+            "left" -> setKeyState(InputHandler.Companion.KEY_LEFT, true)
+            "right" -> setKeyState(InputHandler.Companion.KEY_RIGHT, true)
             "release" -> {
                 // Release all buttons
-                for (i in 0 until NUM_KEYS) {
+                for (i in 0 until InputHandler.Companion.NUM_KEYS) {
                     keyStates[i] = 0x40
                 }
                 println("All buttons released")
@@ -139,14 +130,14 @@ class TerminalInputHandler(private val nes: NES) : DestroyableInputHandler {
      */
     private fun getKeyName(padKey: Int): String {
         return when (padKey) {
-            KEY_A -> "A"
-            KEY_B -> "B"
-            KEY_START -> "Start"
-            KEY_SELECT -> "Select"
-            KEY_UP -> "Up"
-            KEY_DOWN -> "Down"
-            KEY_LEFT -> "Left"
-            KEY_RIGHT -> "Right"
+            InputHandler.Companion.KEY_A -> "A"
+            InputHandler.Companion.KEY_B -> "B"
+            InputHandler.Companion.KEY_START -> "Start"
+            InputHandler.Companion.KEY_SELECT -> "Select"
+            InputHandler.Companion.KEY_UP -> "Up"
+            InputHandler.Companion.KEY_DOWN -> "Down"
+            InputHandler.Companion.KEY_LEFT -> "Left"
+            InputHandler.Companion.KEY_RIGHT -> "Right"
             else -> "Unknown"
         }
     }
