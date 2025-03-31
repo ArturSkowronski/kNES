@@ -23,7 +23,7 @@ instructions and invokes emulation of the PPU and pAPU.
 */
 
 
-import vnes.emulator.channels.IIrqRequester;
+import vnes.emulator.papu.IIrqRequester;
 import vnes.emulator.utils.Globals;
 import vnes.emulator.utils.Misc;
 

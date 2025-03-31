@@ -16,7 +16,11 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.emulator.channels.*;
+import vnes.emulator.papu.*;
+import vnes.emulator.papu.channels.ChannelDM;
+import vnes.emulator.papu.channels.ChannelNoise;
+import vnes.emulator.papu.channels.ChannelSquare;
+import vnes.emulator.papu.channels.ChannelTriangle;
 import vnes.emulator.producers.ChannelRegistryProducer;
 import vnes.emulator.utils.Globals;
 
@@ -283,7 +287,7 @@ public final class PAPU implements IAudioContext, DMCSampler {
     public void writeReg(int address, short value) {
         // Use registry to route register writes to appropriate channels
         if (address >= 0x4000 && address <= 0x4013) {
-            IChannel channel = registry.getChannel(address);
+            PAPUChannel channel = registry.getChannel(address);
             if (channel != null) {
                 channel.writeReg(address, value);
             }
