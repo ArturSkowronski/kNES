@@ -16,7 +16,6 @@ class ChannelRegistryProducer {
         val noise = ChannelNoise(audioContext)
         val dmc = ChannelDM(audioContext)
 
-        // Register channels with registry
         registry.registerChannel(0x4000, 0x4003, square1)
         registry.registerChannel(0x4004, 0x4007, square2)
         registry.registerChannel(0x4008, 0x400B, triangle)

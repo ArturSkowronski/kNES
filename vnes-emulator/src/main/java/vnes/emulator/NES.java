@@ -48,103 +48,49 @@ public class NES {
 
     private boolean isRunning = false;
 
-    private NESUIFactory uiFactory;
-
+    /**
+     * Constructor that takes a GUI directly.
+     * 
+     * @param gui The GUI implementation to use
+     */
     public NES(GUI gui) {
         this.gui = gui;
-
-        cpuMem = new Memory(0x10000); // Main memory (internal to CPU)
-        ppuMem = new Memory(0x8000);    // VRAM memory (internal to PPU)
-        sprMem = new Memory(0x100);    // Sprite RAM  (internal to PPU)
-
-        cpu = new CPU(this);
-        ppu = new PPU(this);
-        papu = new PAPU(this);
-        palTable = new PaletteTable();
-
-        cpu.init(
-            getMemoryAccess(),
-            getCpuMemory()
-        );
-        ppu.init();
-        papu.init(new ChannelRegistryProducer());
-        palTable.init();
-
-        enableSound(true);
-
-        clearCPUMemory();
+        initializeConstructor();
     }
 
     /**
-     * Creates a new NES instance using the provided UI factory.
+     * Constructor that creates a GUI using a factory and screen view.
      * 
      * @param uiFactory The factory to create UI components
+     * @param screenView The screen view to use
      */
-    public NES(NESUIFactory uiFactory) {
-        this.uiFactory = uiFactory;
-
-        // Create UI components using the factory
-        InputHandler inputHandler = uiFactory.createInputHandler(this);
-        ScreenView screenView = uiFactory.createScreenView(1);
-
-        // Create a GUI adapter that delegates to the factory components
-        this.gui = new GUIAdapter(inputHandler, screenView);
-
-        cpuMem = new Memory(0x10000); // Main memory (internal to CPU)
-        ppuMem = new Memory(0x8000);    // VRAM memory (internal to PPU)
-        sprMem = new Memory(0x100);    // Sprite RAM  (internal to PPU)
-
-        cpu = new CPU(this);
-        ppu = new PPU(this);
-        papu = new PAPU(this);
-        palTable = new PaletteTable();
-
-        cpu.init(getMemoryAccess(), getCpuMemory());
-        ppu.init();
-        papu.init(new ChannelRegistryProducer());
-        palTable.init();
-
-        enableSound(true);
-
-        clearCPUMemory();
-    }
-
     public NES(NESUIFactory uiFactory, ScreenView screenView) {
-        this.uiFactory = uiFactory;
-
-        // Create UI components using the factory
         InputHandler inputHandler = uiFactory.createInputHandler(this);
-
-        // Create a GUI adapter that delegates to the factory components
         this.gui = new GUIAdapter(inputHandler, screenView);
-
-        cpuMem = new Memory(0x10000); // Main memory (internal to CPU)
-        ppuMem = new Memory(0x8000);    // VRAM memory (internal to PPU)
-        sprMem = new Memory(0x100);    // Sprite RAM  (internal to PPU)
-
-        cpu = new CPU(this);
-        ppu = new PPU(this);
-        papu = new PAPU(this);
-        palTable = new PaletteTable();
-
-        cpu.init(getMemoryAccess(), getCpuMemory());
-        ppu.init();
-        papu.init(new ChannelRegistryProducer());
-        palTable.init();
-
-        enableSound(true);
-
-        clearCPUMemory();
+        initializeConstructor();
     }
 
     /**
-     * Sets the UI factory for this NES instance.
-     * This can be used to change the UI implementation at runtime.
-     * 
-     * @param uiFactory The new UI factory to use
+     * Initialize common components used by all constructors.
      */
-    public void setUIFactory(NESUIFactory uiFactory) {
-        this.uiFactory = uiFactory;
+    private void initializeConstructor() {
+        cpuMem = new Memory(0x10000); // Main memory (internal to CPU)
+        ppuMem = new Memory(0x8000);  // VRAM memory (internal to PPU)
+        sprMem = new Memory(0x100);   // Sprite RAM  (internal to PPU)
+
+        cpu = new CPU(this);
+        ppu = new PPU(this);
+        papu = new PAPU(this);
+        palTable = new PaletteTable();
+
+        cpu.init(getMemoryAccess(), getCpuMemory());
+        ppu.init();
+        papu.init(new ChannelRegistryProducer());
+        palTable.init();
+
+        enableSound(true);
+
+        clearCPUMemory();
     }
 
     public ScreenView getScreenView() {
