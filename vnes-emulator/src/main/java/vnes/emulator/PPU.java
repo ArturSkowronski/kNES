@@ -19,6 +19,7 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import vnes.emulator.cpu.CPU;
 import vnes.emulator.ppu.PPUCycles;
 import vnes.emulator.utils.Globals;
 import vnes.emulator.utils.HiResTimer;

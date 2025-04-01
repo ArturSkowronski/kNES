@@ -16,6 +16,7 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import vnes.emulator.cpu.CPU;
 import vnes.emulator.input.InputHandler;
 import vnes.emulator.memory.MemoryAccess;
 import vnes.emulator.producers.ChannelRegistryProducer;
@@ -24,7 +25,6 @@ import vnes.emulator.ui.GUI;
 import vnes.emulator.ui.GUIAdapter;
 import vnes.emulator.ui.NESUIFactory;
 import vnes.emulator.ui.ScreenView;
-
 import vnes.emulator.utils.Globals;
 import vnes.emulator.utils.PaletteTable;
 
@@ -78,10 +78,10 @@ public class NES {
         ppuMem = new Memory(0x8000);  // VRAM memory (internal to PPU)
         sprMem = new Memory(0x100);   // Sprite RAM  (internal to PPU)
 
-        cpu = new CPU(this);
         ppu = new PPU(this);
         papu = new PAPU(this);
         palTable = new PaletteTable();
+        cpu = new CPU(papu, ppu);
 
         cpu.init(getMemoryAccess(), getCpuMemory());
         ppu.init();

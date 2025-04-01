@@ -16,6 +16,7 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import vnes.emulator.cpu.CPU;
 import vnes.emulator.cpu.CPUIIrqRequester;
 import vnes.emulator.papu.*;
 import vnes.emulator.papu.channels.ChannelDM;
