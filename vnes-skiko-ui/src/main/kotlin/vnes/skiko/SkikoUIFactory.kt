@@ -18,7 +18,6 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import vnes.emulator.input.InputHandler
-import vnes.emulator.NES
 import vnes.emulator.ui.NESUIFactory
 import vnes.emulator.ui.ScreenView
 
@@ -31,11 +30,10 @@ class SkikoUIFactory : NESUIFactory {
     /**
      * Creates an input handler for the NES emulator.
      * 
-     * @param nes The NES instance to use
      * @return An InputHandler implementation
      */
-    override fun createInputHandler(nes: NES): InputHandler {
-        return SkikoInputHandler(nes)
+    override fun createInputHandler(): InputHandler {
+        return SkikoInputHandler()
     }
 
     /**

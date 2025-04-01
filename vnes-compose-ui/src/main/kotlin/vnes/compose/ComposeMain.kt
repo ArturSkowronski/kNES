@@ -112,7 +112,7 @@ fun main() = application {
     val composeUI = remember { uiFactory.getComposeUI() }
 
     // Get the input handler from the UI factory
-    val inputHandler = remember { uiFactory.createInputHandler(nes) as ComposeInputHandler }
+    val inputHandler = remember { uiFactory.createInputHandler() as ComposeInputHandler }
 
     // Initialize the UI with the NES instance and screen view
     LaunchedEffect(Unit) {

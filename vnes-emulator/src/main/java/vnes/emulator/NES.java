@@ -65,7 +65,7 @@ public class NES {
      * @param screenView The screen view to use
      */
     public NES(NESUIFactory uiFactory, ScreenView screenView) {
-        InputHandler inputHandler = uiFactory.createInputHandler(this);
+        InputHandler inputHandler = uiFactory.createInputHandler();
         this.gui = new GUIAdapter(inputHandler, screenView);
         initializeConstructor();
     }

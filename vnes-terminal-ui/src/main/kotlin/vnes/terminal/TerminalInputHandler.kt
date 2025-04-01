@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit
  * 
  * This implementation uses a simple command-line interface for input.
  */
-class TerminalInputHandler(private val nes: NES) : InputHandler {
+class TerminalInputHandler() : InputHandler {
     private val keyStates = ShortArray(InputHandler.Companion.NUM_KEYS) { 0 }
     private val keyMapping = IntArray(InputHandler.Companion.NUM_KEYS) { 0 }
     private val executor = Executors.newSingleThreadExecutor()
@@ -103,7 +103,6 @@ class TerminalInputHandler(private val nes: NES) : InputHandler {
             }
             "quit" -> {
                 println("Exiting emulator...")
-                nes.stopEmulation()
                 running = false
                 System.exit(0)
             }

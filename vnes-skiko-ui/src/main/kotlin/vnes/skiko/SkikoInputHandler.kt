@@ -37,7 +37,7 @@ import vnes.emulator.input.InputHandler.Companion.NUM_KEYS
  * 
  * This implementation uses AWT/Swing for keyboard input.
  */
-class SkikoInputHandler(private val nes: NES) : InputHandler {
+class SkikoInputHandler() : InputHandler {
     private val keyStates = ShortArray(NUM_KEYS) { 0 }
     private val keyMapping = IntArray(NUM_KEYS) { 0 }
     private val keyAdapter = KeyInputAdapter()
