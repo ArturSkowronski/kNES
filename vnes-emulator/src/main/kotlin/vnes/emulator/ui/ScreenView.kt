@@ -1,4 +1,5 @@
-package vnes.emulator.ui;
+package vnes.emulator.ui
+
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project
@@ -21,93 +22,93 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  * This interface defines methods for manipulating and displaying the NES screen
  * without dependencies on specific UI frameworks.
  */
-public interface ScreenView {
-    
+interface ScreenView {
+
     /**
      * Initialize the screen view.
      */
-    void init();
-    
+    fun init()
+
     /**
      * Get the buffer of pixel data for the screen.
-     * 
+     *
      * @return Array of pixel data in RGB format
      */
-    int[] getBuffer();
-    
+    fun getBuffer(): IntArray
+
     /**
      * Get the width of the buffer.
-     * 
+     *
      * @return The width in pixels
      */
-    int getBufferWidth();
-    
+    fun getBufferWidth(): Int
+
     /**
      * Get the height of the buffer.
-     * 
+     *
      * @return The height in pixels
      */
-    int getBufferHeight();
-    
+    fun getBufferHeight(): Int
+
     /**
      * Notify that an image is ready to be displayed.
-     * 
+     *
      * @param skipFrame Whether this frame should be skipped
      */
-    void imageReady(boolean skipFrame);
-    
+    fun imageReady(skipFrame: Boolean)
+
     /**
      * Check if scaling is enabled for this screen view.
-     * 
+     *
      * @return true if scaling is enabled, false otherwise
      */
-    boolean scalingEnabled();
-    
+    fun scalingEnabled(): Boolean
+
     /**
      * Check if hardware scaling is being used.
-     * 
+     *
      * @return true if hardware scaling is being used, false otherwise
      */
-    boolean useHWScaling();
-    
+    fun useHWScaling(): Boolean
+
     /**
      * Get the current scale mode.
-     * 
+     *
      * @return The current scale mode
      */
-    int getScaleMode();
-    
+    fun getScaleMode(): Int
+
     /**
      * Set the scale mode for the screen view.
-     * 
+     *
      * @param newMode The new scale mode
      */
-    void setScaleMode(int newMode);
-    
+    fun setScaleMode(newMode: Int)
+
     /**
      * Get the scale factor for a given scale mode.
-     * 
+     *
      * @param mode The scale mode
      * @return The scale factor
      */
-    int getScaleModeScale(int mode);
-    
+    fun getScaleModeScale(mode: Int): Int
+
     /**
      * Set whether to show the FPS counter.
-     * 
-     * @param val true to show FPS, false to hide
+     *
+     * @param enabled true to show FPS, false to hide
      */
-    void setFPSEnabled(boolean val);
-    
+    fun setFPSEnabled(enabled: Boolean)
+
     /**
      * Set the background color.
-     * 
+     *
      * @param color The background color in RGB format
      */
-    void setBgColor(int color);
-    
+    fun setBgColor(color: Int)
+
     /**
      * Clean up resources used by this screen view.
      */
-    void destroy();
+    fun destroy()
 }

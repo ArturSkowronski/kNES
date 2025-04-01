@@ -33,7 +33,7 @@ public final class PAPU implements PAPUAudioContext, PAPUDMCSampler, PAPUClockFr
     private final MemoryMapper memoryMapper;
     Memory cpuMem;
     Mixer mixer;
-    CPU cpu;
+    CPUIIrqRequester cpu;
     private ChannelRegistry registry;
 
     public SourceDataLine line;
@@ -121,15 +121,6 @@ public final class PAPU implements PAPUAudioContext, PAPUDMCSampler, PAPUClockFr
         return cpu;
     }
     
-    /**
-     * Get the CPU for backward compatibility.
-     * @deprecated Use getIrqRequester() instead
-     */
-
-    @Deprecated
-    public CPU getCPU() {
-        return cpu;
-    }
 
     /**
      * Get the DMC sampler for sample loading operations.
