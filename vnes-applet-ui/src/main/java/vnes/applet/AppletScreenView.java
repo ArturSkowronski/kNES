@@ -16,15 +16,18 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import java.awt.*;
-import java.awt.event.*;
-import java.awt.image.*;
-import javax.swing.*;
-
 import vnes.emulator.NES;
 import vnes.emulator.Scale;
 import vnes.emulator.ui.ScreenView;
 import vnes.emulator.utils.Globals;
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferInt;
+import java.awt.image.VolatileImage;
 
 public class AppletScreenView extends JPanel implements ScreenView {
 

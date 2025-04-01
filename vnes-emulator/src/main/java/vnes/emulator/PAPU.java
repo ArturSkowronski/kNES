@@ -24,11 +24,12 @@ import vnes.emulator.papu.channels.ChannelNoise;
 import vnes.emulator.papu.channels.ChannelSquare;
 import vnes.emulator.papu.channels.ChannelTriangle;
 import vnes.emulator.producers.ChannelRegistryProducer;
+import vnes.emulator.ui.PAPU_Applet_Functionality;
 import vnes.emulator.utils.Globals;
 
 import javax.sound.sampled.*;
 
-public final class PAPU implements PAPUAudioContext, PAPUDMCSampler, PAPUClockFrame {
+public final class PAPU implements PAPU_Applet_Functionality, PAPUAudioContext, PAPUDMCSampler, PAPUClockFrame {
     private int currentDmcAddress;
     private final MemoryMapper memoryMapper;
     Memory cpuMem;
@@ -56,6 +57,11 @@ public final class PAPU implements PAPUAudioContext, PAPUDMCSampler, PAPUClockFr
     short channelEnableValue;
     byte b1, b2, b3, b4;
     int bufferSize = 2048;
+
+    public int getBufferIndex() {
+        return bufferIndex;
+    }
+
     public int bufferIndex;
     int sampleRate = 44100;
     boolean frameIrqEnabled;

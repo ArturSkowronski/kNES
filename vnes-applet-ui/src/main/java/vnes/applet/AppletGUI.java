@@ -16,11 +16,12 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.emulator.ui.GUI;
-import vnes.emulator.utils.Globals;
 import vnes.emulator.NES;
-import vnes.emulator.input.InputHandler;
 import vnes.emulator.input.InputCallback;
+import vnes.emulator.input.InputHandler;
+import vnes.emulator.ui.GUI;
+import vnes.emulator.ui.PAPU_Applet_Functionality;
+import vnes.emulator.utils.Globals;
 import vnes.emulator.utils.HiResTimer;
 
 /**
@@ -33,7 +34,7 @@ public class AppletGUI implements GUI {
     protected InputCallback[] inputCallbacks;
     protected InputHandler[] inputHandlers;
 
-    private NES nes;
+    private PAPU_Applet_Functionality papuProvider;
     private AppletMain applet;
     private AppletInputHandler kbJoy1;
     private AppletInputHandler kbJoy2;
@@ -56,9 +57,9 @@ public class AppletGUI implements GUI {
     }
 
     @Override
-    public void init(NES nes, boolean showGui) {
+    public void init(NES nes, PAPU_Applet_Functionality papu_applet_functionality, boolean showGui) {
         // Create the screen view
-        this.nes = nes;
+        papuProvider = papu_applet_functionality;
         vScreen = new AppletScreenView(nes, 256, 240);
         vScreen.setBgColor(applet.bgColor.getRGB());
         vScreen.init();
@@ -99,19 +100,19 @@ public class AppletGUI implements GUI {
     @Override
     public void imageReady(boolean skipFrame) {
         // Sound stuff:
-        int tmp = nes.getPapu().bufferIndex;
+        int tmp = papuProvider.getBufferIndex();
         if (Globals.enableSound && Globals.timeEmulation && tmp > 0) {
-            int min_avail = nes.getPapu().line.getBufferSize() - 4 * tmp;
+            int min_avail = papuProvider.getLine().getBufferSize() - 4 * tmp;
 
-            long timeToSleep = nes.getPapu().getMillisToAvailableAbove(min_avail);
+            long timeToSleep = papuProvider.getMillisToAvailableAbove(min_avail);
             do {
                 try {
                     Thread.sleep(timeToSleep);
                 } catch (InterruptedException e) {
                 }
-            } while ((timeToSleep = nes.getPapu().getMillisToAvailableAbove(min_avail)) > 0);
+            } while ((timeToSleep = papuProvider.getMillisToAvailableAbove(min_avail)) > 0);
 
-            nes.getPapu().writeBuffer();
+            papuProvider.writeBuffer();
         }
 
         // Sleep a bit if sound is disabled:

@@ -21,10 +21,7 @@ import vnes.emulator.input.InputHandler;
 import vnes.emulator.memory.MemoryAccess;
 import vnes.emulator.producers.ChannelRegistryProducer;
 import vnes.emulator.producers.MapperProducer;
-import vnes.emulator.ui.GUI;
-import vnes.emulator.ui.GUIAdapter;
-import vnes.emulator.ui.NESUIFactory;
-import vnes.emulator.ui.ScreenView;
+import vnes.emulator.ui.*;
 import vnes.emulator.utils.Globals;
 import vnes.emulator.utils.PaletteTable;
 

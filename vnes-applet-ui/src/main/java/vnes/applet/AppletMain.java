@@ -47,7 +47,7 @@ public class AppletMain extends Applet implements Runnable {
         nes.enableSound(properties.isSound());
         nes.reset();
 
-        gui.init(nes, false);
+        gui.init(nes, nes.getPapu(), false);
 
         Globals.appletMode = true;
         Globals.memoryFlushValue = 0x00; // make SMB1 hacked version work.

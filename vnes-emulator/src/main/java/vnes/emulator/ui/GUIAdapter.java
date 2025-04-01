@@ -68,7 +68,7 @@ public class GUIAdapter implements GUI {
     }
 
     @Override
-    public void init(NES nes, boolean showGui) {
+    public void init(NES nesProvider, PAPU_Applet_Functionality papu_applet_functionality, boolean showGui) {
         screenView.init();
     }
 

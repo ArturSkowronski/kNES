@@ -40,6 +40,6 @@ public interface GUI {
     ScreenView getScreenView();
     HiResTimer getTimer();
     void imageReady(boolean skipFrame);
-    void init(NES nes, boolean showGui);
+    void init(NES nes, PAPU_Applet_Functionality papu_applet_functionality, boolean showGui);
     void println(String s);
 }
