@@ -48,12 +48,4 @@ public interface NESUIFactory {
      * @param enablePpuLogging Whether PPU logging should be enabled
      */
     default void configureUISettings(boolean enableAudio, int fpsLimit, boolean enablePpuLogging) {}
-
-    /**
-     * @deprecated Use {@link #configureUISettings(boolean, int, boolean)} instead
-     */
-    @Deprecated
-    default void configureUISettings(boolean enableAudio, int fpsLimit) {
-        configureUISettings(enableAudio, fpsLimit, true);
-    }
 }

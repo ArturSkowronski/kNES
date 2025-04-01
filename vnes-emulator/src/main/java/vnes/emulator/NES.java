@@ -17,6 +17,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import vnes.emulator.input.InputHandler;
+import vnes.emulator.memory.MemoryAccess;
 import vnes.emulator.producers.ChannelRegistryProducer;
 import vnes.emulator.producers.MapperProducer;
 import vnes.emulator.ui.GUI;
@@ -33,15 +34,20 @@ public class NES {
     private CPU cpu;
     private PPU ppu;
     private PAPU papu;
+
     private Memory cpuMem;
     private Memory ppuMem;
     private Memory sprMem;
+
     private MemoryMapper memMapper;
 
     private PaletteTable palTable;
+
     private ROM rom;
     private String romFile;
+
     private boolean isRunning = false;
+
     private NESUIFactory uiFactory;
 
     public NES(GUI gui) {
@@ -56,7 +62,10 @@ public class NES {
         papu = new PAPU(this);
         palTable = new PaletteTable();
 
-        cpu.init();
+        cpu.init(
+            getMemoryAccess(),
+            getCpuMemory()
+        );
         ppu.init();
         papu.init(new ChannelRegistryProducer());
         palTable.init();
@@ -90,7 +99,7 @@ public class NES {
         papu = new PAPU(this);
         palTable = new PaletteTable();
 
-        cpu.init();
+        cpu.init(getMemoryAccess(), getCpuMemory());
         ppu.init();
         papu.init(new ChannelRegistryProducer());
         palTable.init();
@@ -118,7 +127,7 @@ public class NES {
         papu = new PAPU(this);
         palTable = new PaletteTable();
 
-        cpu.init();
+        cpu.init(getMemoryAccess(), getCpuMemory());
         ppu.init();
         papu.init(new ChannelRegistryProducer());
         palTable.init();
@@ -265,9 +274,9 @@ public class NES {
         return cpu;
     }
 
-    public PPU getPpu() {
-        return ppu;
-    }
+   	public PPU getPpu() {
+		return ppu;
+	}
 
     public PAPU getPapu() {
         return papu;
@@ -297,6 +306,10 @@ public class NES {
         return memMapper;
     }
 
+    public MemoryAccess getMemoryAccess() {
+        return memMapper;
+    }
+
     public PaletteTable getPalTable() {
         return palTable;
     }
@@ -318,7 +331,7 @@ public class NES {
             reset();
 
             MapperProducer mapperProducer = new MapperProducer(gui::showErrorMsg);
-            memMapper =  mapperProducer.produce(rom);
+            memMapper = mapperProducer.produce(rom);
             memMapper.init(this);
 
             cpu.setMapper(memMapper);
@@ -344,7 +357,10 @@ public class NES {
         clearCPUMemory();
 
         cpu.reset();
-        cpu.init();
+        cpu.init(
+            getMemoryAccess(),
+            getCpuMemory()
+        );
         ppu.reset();
         palTable.reset();
         papu.reset(this);

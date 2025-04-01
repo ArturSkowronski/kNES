@@ -1,9 +1,9 @@
 package vnes.emulator.papu.channels
 
-import vnes.emulator.papu.IAudioContext
+import vnes.emulator.papu.PAPUAudioContext
 import vnes.emulator.papu.PAPUChannel
 
-class ChannelSquare(var audioContext: IAudioContext?, var sqr1: Boolean) : PAPUChannel {
+class ChannelSquare(var audioContext: PAPUAudioContext?, var sqr1: Boolean) : PAPUChannel {
     @JvmField
     var isEnabled: Boolean = false
     var lengthCounterEnable: Boolean = false

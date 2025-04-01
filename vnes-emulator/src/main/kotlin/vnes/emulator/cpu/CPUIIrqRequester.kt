@@ -1,10 +1,10 @@
-package vnes.emulator.papu
+package vnes.emulator.cpu
 
 /**
  * Interface for requesting IRQs (Interrupt Requests).
  * This decouples audio channels from direct CPU access.
  */
-interface IIrqRequester {
+interface CPUIIrqRequester {
     /**
      * Request an interrupt of the specified type.
      *

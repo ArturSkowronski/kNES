@@ -1,9 +1,9 @@
 package vnes.emulator.papu.channels
 
-import vnes.emulator.papu.IAudioContext
+import vnes.emulator.papu.PAPUAudioContext
 import vnes.emulator.papu.PAPUChannel
 
-class ChannelNoise(var audioContext: IAudioContext?) : PAPUChannel {
+class ChannelNoise(var audioContext: PAPUAudioContext?) : PAPUChannel {
     @JvmField
     var isEnabled: Boolean = false
     var envDecayDisable: Boolean = false

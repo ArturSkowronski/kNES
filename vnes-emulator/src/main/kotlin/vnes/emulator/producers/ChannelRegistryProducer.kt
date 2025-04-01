@@ -1,14 +1,14 @@
 package vnes.emulator.producers
 
 import vnes.emulator.papu.ChannelRegistry
-import vnes.emulator.papu.IAudioContext
+import vnes.emulator.papu.PAPUAudioContext
 import vnes.emulator.papu.channels.ChannelDM
 import vnes.emulator.papu.channels.ChannelNoise
 import vnes.emulator.papu.channels.ChannelSquare
 import vnes.emulator.papu.channels.ChannelTriangle
 
 class ChannelRegistryProducer {
-    fun produce(audioContext: IAudioContext?): ChannelRegistry {
+    fun produce(audioContext: PAPUAudioContext?): ChannelRegistry {
         val registry = ChannelRegistry()
         val square1 = ChannelSquare(audioContext, true)
         val square2 = ChannelSquare(audioContext, false)

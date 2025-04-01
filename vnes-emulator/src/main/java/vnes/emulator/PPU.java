@@ -19,6 +19,7 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import vnes.emulator.ppu.PPUCycles;
 import vnes.emulator.utils.Globals;
 import vnes.emulator.utils.HiResTimer;
 import vnes.emulator.utils.NameTable;
@@ -26,7 +27,7 @@ import vnes.emulator.utils.NameTable;
 import java.util.HashMap;
 import java.util.Map;
 
-public class PPU {
+public class PPU implements PPUCycles {
 
     private NES nes;
     private HiResTimer timer;

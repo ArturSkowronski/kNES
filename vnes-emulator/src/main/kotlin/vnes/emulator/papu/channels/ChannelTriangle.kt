@@ -1,9 +1,9 @@
 package vnes.emulator.papu.channels
 
-import vnes.emulator.papu.IAudioContext
+import vnes.emulator.papu.PAPUAudioContext
 import vnes.emulator.papu.PAPUChannel
 
-class ChannelTriangle(var audioContext: IAudioContext?) : PAPUChannel {
+class ChannelTriangle(var audioContext: PAPUAudioContext?) : PAPUChannel {
     @JvmField
     var isEnabled: Boolean = false
     @JvmField

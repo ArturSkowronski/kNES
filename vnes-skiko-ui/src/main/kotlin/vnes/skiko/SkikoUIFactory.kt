@@ -60,16 +60,6 @@ class SkikoUIFactory : NESUIFactory {
     }
 
     /**
-     * Configures UI-specific settings.
-     * 
-     * @param enableAudio Whether audio should be enabled
-     * @param fpsLimit The maximum FPS to target, or 0 for unlimited
-     */
-    override fun configureUISettings(enableAudio: Boolean, fpsLimit: Int) {
-        configureUISettings(enableAudio, fpsLimit, true)
-    }
-
-    /**
      * Gets the SkikoUI instance.
      * 
      * @return The SkikoUI instance

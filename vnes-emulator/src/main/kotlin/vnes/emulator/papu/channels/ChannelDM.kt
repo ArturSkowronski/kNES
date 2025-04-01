@@ -1,9 +1,9 @@
 package vnes.emulator.papu.channels
 
-import vnes.emulator.papu.IAudioContext
+import vnes.emulator.papu.PAPUAudioContext
 import vnes.emulator.papu.PAPUChannel
 
-class ChannelDM(private var audioContext: IAudioContext?) : PAPUChannel {
+class ChannelDM(private var audioContext: PAPUAudioContext?) : PAPUChannel {
     @JvmField
     var isEnabled: Boolean = false
     var hasSample: Boolean = false
@@ -104,7 +104,7 @@ class ChannelDM(private var audioContext: IAudioContext?) : PAPUChannel {
     private fun nextSample() {
         // Fetch byte using DMCSampler instead of direct MemoryMapper access
 
-        data = audioContext!!.dmcSampler.loadSample(playAddress)
+        data = audioContext!!.PAPUDMCSampler.loadSample(playAddress)
         audioContext!!.irqRequester.haltCycles(4)
 
         playLengthCounter--

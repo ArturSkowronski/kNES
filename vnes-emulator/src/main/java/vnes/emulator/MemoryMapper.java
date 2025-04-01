@@ -16,35 +16,22 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import vnes.emulator.memory.MemoryAccess;
 import vnes.emulator.rom.ROMData;
 
-public interface MemoryMapper {
-
+public interface MemoryMapper extends MemoryAccess {
     void init(NES nes);
-
     void loadROM(ROMData romData);
-
     void write(int address, short value);
-
     short load(int address);
-
     short joy1Read();
-
     short joy2Read();
-
     void reset();
-
     void clockIrqCounter();
-
     void loadBatteryRam();
-
     void destroy();
-
     void stateLoad(ByteBuffer buf);
-
     void stateSave(ByteBuffer buf);
-
     void setMouseState(boolean pressed, int x, int y);
-
     void latchAccess(int address);
 }

@@ -16,6 +16,7 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import vnes.emulator.cpu.CPUIIrqRequester;
 import vnes.emulator.papu.*;
 import vnes.emulator.papu.channels.ChannelDM;
 import vnes.emulator.papu.channels.ChannelNoise;
@@ -26,8 +27,7 @@ import vnes.emulator.utils.Globals;
 
 import javax.sound.sampled.*;
 
-public final class PAPU implements IAudioContext, DMCSampler {
-    // Current DMC address for sample loading
+public final class PAPU implements PAPUAudioContext, PAPUDMCSampler, PAPUClockFrame {
     private int currentDmcAddress;
     private final MemoryMapper memoryMapper;
     Memory cpuMem;
@@ -116,7 +116,7 @@ public final class PAPU implements IAudioContext, DMCSampler {
      * @return The IRQ requester
      */
     @Override
-    public IIrqRequester getIrqRequester() {
+    public CPUIIrqRequester getIrqRequester() {
         return cpu;
     }
     
@@ -135,7 +135,7 @@ public final class PAPU implements IAudioContext, DMCSampler {
      * @return The DMC sampler (this)
      */
     @Override
-    public DMCSampler getDmcSampler() {
+    public PAPUDMCSampler getPAPUDMCSampler() {
         return this;
     }
 

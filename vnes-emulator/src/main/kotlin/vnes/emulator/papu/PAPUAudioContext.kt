@@ -1,17 +1,19 @@
 package vnes.emulator.papu
 
-interface IAudioContext {
+import vnes.emulator.cpu.CPUIIrqRequester
+
+interface PAPUAudioContext {
     /**
      * Get the IRQ requester for interrupt handling.
      * @return The IRQ requester
      */
-    val irqRequester: IIrqRequester
+    val irqRequester: CPUIIrqRequester
 
     /**
      * Get the DMC sampler for sample loading operations.
      * @return The DMC sampler
      */
-    val dmcSampler: DMCSampler
+    val PAPUDMCSampler: PAPUDMCSampler
     val sampleRate: Int
     fun clockFrameCounter(cycles: Int)
     fun updateChannelEnable(value: Int)

@@ -23,21 +23,21 @@ instructions and invokes emulation of the PPU and pAPU.
 */
 
 
-import vnes.emulator.papu.IIrqRequester;
+import vnes.emulator.cpu.CPUIIrqRequester;
+import vnes.emulator.memory.MemoryAccess;
+import vnes.emulator.papu.PAPUClockFrame;
+import vnes.emulator.ppu.PPUCycles;
 import vnes.emulator.utils.Globals;
 import vnes.emulator.utils.Misc;
 
-public final class CPU implements Runnable, IIrqRequester {
+public final class CPU implements Runnable, CPUIIrqRequester {
 
-	// Thread:
 	Thread myThread;
 
-	// References to other parts of NES :
 	private NES nes;
-	private MemoryMapper mmap;
+	private MemoryAccess mmap;
 	private short[] mem;
 
-	// CPU Registers:
 	public int REG_ACC_NEW;
 	public int REG_X_NEW;
 	public int REG_Y_NEW;
@@ -45,7 +45,6 @@ public final class CPU implements Runnable, IIrqRequester {
 	public int REG_PC_NEW;
 	public int REG_SP;
 
-	// Status flags:
 	private int F_CARRY_NEW;
 	private int F_ZERO_NEW;
 	private int F_INTERRUPT_NEW;
@@ -79,14 +78,15 @@ public final class CPU implements Runnable, IIrqRequester {
 	}
 
 	// Initialize:
-	public void init(){
+	public void init(MemoryAccess memoryAccess,
+					 Memory cpuMemoryAccess){
 
 		// Get Op data:
 		opdata = CpuInfo.getOpData();
 
-		// Get Memory Mapper:
-		this.mmap = nes.getMemoryMapper();
-
+		// Get Memory Access:
+		this.mmap = memoryAccess;
+		this.mem = cpuMemoryAccess.mem;
 		// Reset crash flag:
 		crash = false;
 
@@ -115,7 +115,6 @@ public final class CPU implements Runnable, IIrqRequester {
 			cyclesToHalt = buf.readInt();
 
 		}
-
 	}
 
 	public void stateSave(ByteBuffer buf){
@@ -218,18 +217,14 @@ public final class CPU implements Runnable, IIrqRequester {
 	// Emulates cpu instructions until stopped.
 	public void emulate(){
 
-
 		// NES Memory
 		// (when memory mappers switch ROM banks
 		// this will be written to, no need to
 		// update reference):
-		mem = nes.getCpuMemory().mem;
 
 		// References to other parts of NES:
-		MemoryMapper mmap = nes.getMemoryMapper();
-		PPU ppu  = nes.getPpu();
-		PAPU papu = nes.getPapu();
-
+		PPUCycles ppu  = nes.getPpu();
+		PAPUClockFrame papu = nes.getPapu();
 
 		// Registers:
 		int REG_ACC 	= REG_ACC_NEW;
@@ -1073,7 +1068,7 @@ public final class CPU implements Runnable, IIrqRequester {
 					// *******
 
 					// Return from interrupt. Pull status and PC from stack.
-					
+
 					temp = pull();
 					F_CARRY     = (temp   )&1;
 					F_ZERO      = ((temp>>1)&1)==0?1:0;
@@ -1100,10 +1095,10 @@ public final class CPU implements Runnable, IIrqRequester {
 					// *******
 
 					// Return from subroutine. Pull PC from stack.
-					
+
 					REG_PC = pull();
 					REG_PC += (pull()<<8);
-					
+
 					if(REG_PC==0xFFFF){
 						return;
 					}
@@ -1265,7 +1260,7 @@ public final class CPU implements Runnable, IIrqRequester {
 					if(!crash){
 						crash = true;
 						stopRunning = true;
-						nes.getGui().showErrorMsg("Game crashed, invalid opcode at address $"+ Misc.hex16(opaddr));
+						System.out.println("Game crashed, invalid opcode at address $"+ Misc.hex16(opaddr));
 					}
 					break;
 
@@ -1287,11 +1282,11 @@ public final class CPU implements Runnable, IIrqRequester {
 				ppu.setCycles(cycleCount*3);
 				ppu.emulateCycles();			
 			}
-			
+
 			if(emulateSound){
 				papu.clockFrameCounter(cycleCount);
 			}
-			
+
 		} // End of run loop.
 
 		// Save registers:
@@ -1316,7 +1311,7 @@ public final class CPU implements Runnable, IIrqRequester {
 	private int load(int addr){
 		return addr<0x2000 ? mem[addr&0x7FF] : mmap.load(addr);
 	}
-	
+
 	private int load16bit(int addr){
 		return addr<0x1FFF ?
 			mem[addr&0x7FF] | (mem[(addr+1)&0x7FF]<<8)
@@ -1324,7 +1319,7 @@ public final class CPU implements Runnable, IIrqRequester {
 			mmap.load(addr) | (mmap.load(addr+1)<<8)
 			;
 	}
-	
+
 	private void write(int addr, short val){
 		if(addr < 0x2000){
 			mem[addr&0x7FF] = val;
@@ -1427,8 +1422,13 @@ public final class CPU implements Runnable, IIrqRequester {
 		this.crash = value;
 	}
 
-	public void setMapper(MemoryMapper mapper){
-		mmap = mapper;
+	/**
+	 * Sets the memory access component for the CPU.
+	 * 
+	 * @param memoryAccess the memory access component to use
+	 */
+	public void setMapper(MemoryAccess memoryAccess){
+		mmap = memoryAccess;
 	}
 
 	public void destroy(){
