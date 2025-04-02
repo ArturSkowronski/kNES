@@ -28,9 +28,8 @@ public class AppletInputHandler implements KeyListener, InputHandler {
     int id;
     Runnable menuInterface;
 
-    public AppletInputHandler(Runnable menuInterface, int id) {
+    public AppletInputHandler(int id) {
         this.id = id;
-        this.menuInterface = menuInterface;
         allKeysState = new boolean[255];
         keyMapping = new int[InputHandler.NUM_KEYS];
     }

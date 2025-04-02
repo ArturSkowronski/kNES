@@ -1,4 +1,5 @@
-package vnes.emulator.ui;
+package vnes.emulator.ui
+
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project
@@ -16,10 +17,8 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
-import vnes.emulator.NES;
-import vnes.emulator.input.InputHandler;
-import vnes.emulator.utils.HiResTimer;
+import vnes.emulator.input.InputHandler
+import vnes.emulator.utils.HiResTimer
 
 /**
  * UI interface for the NES emulator.
@@ -27,19 +26,19 @@ import vnes.emulator.utils.HiResTimer;
  * without dependencies on specific UI frameworks like AWT or Compose.
  * It combines both platform-agnostic UI functionality and legacy UI requirements.
  */
-public interface GUI {
+interface GUI {
 
     // Methods from UiInfoMessageBus
-    void showErrorMsg(String message);
-    void showLoadProgress(int percentComplete);
-    void destroy();
+    fun showErrorMsg(message: String)
+    fun showLoadProgress(percentComplete: Int)
+    fun destroy()
 
     // GUI-specific methods
-    InputHandler getJoy1();
-    InputHandler getJoy2();
-    ScreenView getScreenView();
-    HiResTimer getTimer();
-    void imageReady(boolean skipFrame);
-    void init(NES nes, PAPU_Applet_Functionality papu_applet_functionality, boolean showGui);
-    void println(String s);
+    fun getJoy1(): InputHandler
+    fun getJoy2(): InputHandler?
+    fun getScreenView(): ScreenView
+    fun getTimer(): HiResTimer
+    fun imageReady(skipFrame: Boolean)
+    fun init(papuAppletFunctionality: PAPU_Applet_Functionality, showGui: Boolean)
+    fun println(s: String)
 }

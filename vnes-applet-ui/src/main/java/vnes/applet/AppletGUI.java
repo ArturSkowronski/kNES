@@ -16,7 +16,6 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.emulator.NES;
 import vnes.emulator.input.InputCallback;
 import vnes.emulator.input.InputHandler;
 import vnes.emulator.ui.GUI;
@@ -57,17 +56,17 @@ public class AppletGUI implements GUI {
     }
 
     @Override
-    public void init(NES nes, PAPU_Applet_Functionality papu_applet_functionality, boolean showGui) {
+    public void init(PAPU_Applet_Functionality papu_applet_functionality, boolean showGui) {
         // Create the screen view
         papuProvider = papu_applet_functionality;
-        vScreen = new AppletScreenView(nes, 256, 240);
+        vScreen = new AppletScreenView( this,256, 240);
         vScreen.setBgColor(applet.bgColor.getRGB());
         vScreen.init();
         vScreen.setNotifyImageReady(true);
 
         // Create the input handlers
-        kbJoy1 = new AppletInputHandler(nes::menuListener, 0);
-        kbJoy2 = new AppletInputHandler(nes::menuListener, 1);
+        kbJoy1 = new AppletInputHandler(0);
+        kbJoy2 = new AppletInputHandler(1);
 
         // Set the input handlers
         inputHandlers[0] = kbJoy1;
