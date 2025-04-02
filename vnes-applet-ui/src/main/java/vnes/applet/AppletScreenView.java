@@ -16,15 +16,12 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.emulator.NES;
-import vnes.emulator.Scale;
+import vnes.emulator.ui.GUI;
 import vnes.emulator.ui.ScreenView;
 import vnes.emulator.utils.Globals;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
 import java.awt.image.VolatileImage;
@@ -38,7 +35,7 @@ public class AppletScreenView extends JPanel implements ScreenView {
     public static final int SCALE_NORMAL = 3;
     public static final int SCALE_SCANLINE = 4;
     public static final int SCALE_RASTER = 5;
-    protected NES nes;
+    private final GUI gui;
     private BufferedImage img;
     private VolatileImage vimg;
     private boolean usingMenu = false;
@@ -55,48 +52,18 @@ public class AppletScreenView extends JPanel implements ScreenView {
     private int fpsCounter;
     private final Font fpsFont = new Font("Verdana", Font.BOLD, 10);
     private int bgColor = Color.white.darker().getRGB();
-    private MyMouseAdapter mouse;
     private boolean notifyImageReady;
 
     // Constructor
-    public AppletScreenView(NES nes, int width, int height) {
+    public AppletScreenView(GUI gui, int width, int height) {
 
         super(false);
-        this.nes = nes;
+        this.gui = gui;
+//        this.nes = nes;
         this.width = width;
         this.height = height;
         this.scaleMode = -1;
 
-    }
-
-    private class MyMouseAdapter extends MouseAdapter {
-
-        long lastClickTime = 0;
-
-        public void mouseClicked(MouseEvent me) {
-            setFocusable(true);
-            requestFocus();
-        }
-
-        public void mousePressed(MouseEvent me) {
-            setFocusable(true);
-            requestFocus();
-
-            if (me.getX() >= 0 && me.getY() >= 0 && me.getX() < 256 && me.getY() < 240) {
-                if (nes != null && nes.getMemoryMapper() != null) {
-                    nes.getMemoryMapper().setMouseState(true, me.getX(), me.getY());
-                }
-            }
-
-        }
-
-        public void mouseReleased(MouseEvent me) {
-
-            if (nes != null && nes.getMemoryMapper() != null) {
-                nes.getMemoryMapper().setMouseState(false, 0, 0);
-            }
-
-        }
     }
 
     public void setNotifyImageReady(boolean value) {
@@ -131,10 +98,6 @@ public class AppletScreenView extends JPanel implements ScreenView {
 
     public void init() {
 
-        if (mouse == null) {
-            mouse = new MyMouseAdapter();
-            this.addMouseListener(mouse);
-        }
         setScaleMode(SCALE_NONE);
 
     }
@@ -200,7 +163,7 @@ public class AppletScreenView extends JPanel implements ScreenView {
         if (scaleMode == SCALE_NONE || scaleMode == SCALE_HW2X || scaleMode == SCALE_HW3X) {
 
             pix = raster;
-            nes.getPpu().setBuffer(raster);
+//            nes.getPpu().setBuffer(raster);
 
         } else {
 
@@ -238,31 +201,14 @@ public class AppletScreenView extends JPanel implements ScreenView {
         // Skip image drawing if minimized or frameskipping:
         if (!skipFrame) {
 
-            if (scaleMode != SCALE_NONE) {
-
-                if (scaleMode == SCALE_NORMAL) {
-
-                    Scale.doNormalScaling(pix, pix_scaled, nes.getPpu().getScanlineChanged());
-
-                } else if (scaleMode == SCALE_SCANLINE) {
-
-                    Scale.doScanlineScaling(pix, pix_scaled, nes.getPpu().getScanlineChanged());
-
-                } else if (scaleMode == SCALE_RASTER) {
-
-                    Scale.doRasterScaling(pix, pix_scaled, nes.getPpu().getScanlineChanged());
-
-                }
-            }
-
-            nes.getPpu().setRequestRenderAll(false);
+//            nes.getPpu().setRequestRenderAll(false);
             paint(getGraphics());
 
         }
 
         // Notify GUI, so it can write the sound buffer:
         if (notifyImageReady) {
-            nes.getGui().imageReady(skipFrame);
+            gui.imageReady(skipFrame);
         }
 
     }
@@ -379,7 +325,7 @@ public class AppletScreenView extends JPanel implements ScreenView {
             // Update FPS count:
             if (--fpsCounter <= 0) {
 
-                long ct = nes.getGui().getTimer().currentMicros();
+                long ct = gui.getTimer().currentMicros();
                 long frameT = (ct - prevFrameTime) / 45;
                 if (frameT == 0) {
                     fps = "FPS: -";
@@ -435,7 +381,7 @@ public class AppletScreenView extends JPanel implements ScreenView {
 
     public void destroy() {
 
-        nes = null;
+//        nes = null;
         img = null;
 
     }
