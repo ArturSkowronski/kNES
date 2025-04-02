@@ -1199,7 +1199,7 @@ class CPU // Constructor:
     }
 
     private fun doNonMaskableInterrupt(status: Int) {
-        val temp = mmap!!.load(0x2000).toInt() // Read PPU status.
+        val temp = mmap!!.load(0x2000).toInt() // Read vnes.emulator.PPU status.
         if ((temp and 128) != 0) { // Check whether VBlank Interrupts are enabled
 
             REG_PC_NEW++

@@ -200,7 +200,7 @@ public class AppletScreenView extends JPanel implements ScreenView {
         if (scaleMode == SCALE_NONE || scaleMode == SCALE_HW2X || scaleMode == SCALE_HW3X) {
 
             pix = raster;
-            nes.getPpu().setBuffer(raster);
+            nes.getPpu().buffer = raster;
 
         } else {
 
@@ -242,15 +242,15 @@ public class AppletScreenView extends JPanel implements ScreenView {
 
                 if (scaleMode == SCALE_NORMAL) {
 
-                    Scale.doNormalScaling(pix, pix_scaled, nes.getPpu().getScanlineChanged());
+                    Scale.doNormalScaling(pix, pix_scaled, nes.getPpu().scanlineChanged);
 
                 } else if (scaleMode == SCALE_SCANLINE) {
 
-                    Scale.doScanlineScaling(pix, pix_scaled, nes.getPpu().getScanlineChanged());
+                    Scale.doScanlineScaling(pix, pix_scaled, nes.getPpu().scanlineChanged);
 
                 } else if (scaleMode == SCALE_RASTER) {
 
-                    Scale.doRasterScaling(pix, pix_scaled, nes.getPpu().getScanlineChanged());
+                    Scale.doRasterScaling(pix, pix_scaled, nes.getPpu().scanlineChanged);
 
                 }
             }

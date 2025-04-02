@@ -28,7 +28,7 @@ interface NESUIFactory {
      *
      * @param enableAudio Whether audio should be enabled
      * @param fpsLimit The maximum FPS to target, or 0 for unlimited
-     * @param enablePpuLogging Whether PPU logging should be enabled
+     * @param enablePpuLogging Whether vnes.emulator.PPU logging should be enabled
      */
     fun configureUISettings(enableAudio: Boolean, fpsLimit: Int, enablePpuLogging: Boolean) {}
 }

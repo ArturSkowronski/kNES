@@ -8,12 +8,12 @@ To overcome this limitation, NES cartridges implemented a technique called "memo
 
 ## What is a Mapper?
 
-In the context of NES emulation, a "mapper" is a hardware component inside the game cartridge that controls how memory is mapped between the cartridge and the console. Each mapper implements a specific bank-switching scheme, determining how ROM and RAM are accessed by the CPU and PPU (Picture Processing Unit).
+In the context of NES emulation, a "mapper" is a hardware component inside the game cartridge that controls how memory is mapped between the cartridge and the console. Each mapper implements a specific bank-switching scheme, determining how ROM and RAM are accessed by the CPU and vnes.emulator.PPU (Picture Processing Unit).
 
-The mapper sits between the game's ROM/RAM and the console's CPU/PPU, translating memory accesses and potentially modifying them based on its internal state. This allows games to:
+The mapper sits between the game's ROM/RAM and the console's CPU/vnes.emulator.PPU, translating memory accesses and potentially modifying them based on its internal state. This allows games to:
 
 1. Use more program code (PRG-ROM) than the CPU can directly address
-2. Use more graphical data (CHR-ROM) than the PPU can directly address
+2. Use more graphical data (CHR-ROM) than the vnes.emulator.PPU can directly address
 3. Implement special hardware features not natively supported by the NES
 
 ## Why Different Games Used Different Mappers
