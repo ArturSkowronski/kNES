@@ -20,13 +20,12 @@ import vnes.emulator.cpu.CPU;
 import vnes.emulator.input.InputHandler;
 import vnes.emulator.mappers.MemoryMapper;
 import vnes.emulator.memory.MemoryAccess;
+import vnes.emulator.ppu.PPU;
 import vnes.emulator.producers.ChannelRegistryProducer;
 import vnes.emulator.producers.MapperProducer;
 import vnes.emulator.ui.*;
 import vnes.emulator.utils.Globals;
 import vnes.emulator.utils.PaletteTable;
-
-import javax.sound.sampled.SourceDataLine;
 
 public class NES {
 
