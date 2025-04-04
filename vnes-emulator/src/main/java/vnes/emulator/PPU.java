@@ -20,22 +20,32 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import vnes.emulator.cpu.CPU;
+import vnes.emulator.mappers.MemoryMapper;
 import vnes.emulator.ppu.PPUCycles;
+import vnes.emulator.ui.GUI;
 import vnes.emulator.utils.Globals;
 import vnes.emulator.utils.HiResTimer;
 import vnes.emulator.utils.NameTable;
+import vnes.emulator.utils.PaletteTable;
 
+import javax.sound.sampled.SourceDataLine;
 import java.util.HashMap;
 import java.util.Map;
 
 public class PPU implements PPUCycles {
 
-    private NES nes;
+    //    private NES nes;
     private HiResTimer timer;
+    private GUI gui;
     private Memory ppuMem;
     private Memory sprMem;
+    private CPU cpu;
     // Rendering Options:
     private boolean showSpr0Hit = false;
+    private MemoryMapper memoryMapper;
+    private PaletteTable palTable;
+    private Memory cpuMem;
+    private SourceDataLine sourceDataLine;
 
     public void setShowSoundBuffer(boolean showSoundBuffer) {
         this.showSoundBuffer = showSoundBuffer;
@@ -201,7 +211,7 @@ public class PPU implements PPUCycles {
 
     /**
      * Returns the top 5 most common colors in the current frame.
-     * 
+     *
      * @return A list of Map.Entry objects containing the color (key) and count (value)
      */
     public List<Map.Entry<Integer, Integer>> getTopColors() {
@@ -212,22 +222,29 @@ public class PPU implements PPUCycles {
                 .collect(Collectors.toList());
     }
 
-    public PPU(NES nes) {
-        this.nes = nes;
-    }
-
-    public void init() {
-
-        // Get the memory:
-        ppuMem = nes.getPpuMemory();
-        sprMem = nes.getSprMemory();
+    public void init(GUI gui,
+                     Memory ppuMem,
+                     Memory sprMem,
+                     Memory cpuMem,
+                     CPU cpu,
+                     MemoryMapper memoryMapper,
+                     SourceDataLine sourceDataLine,
+                     PaletteTable palTable) {
+        this.gui = gui;
+        this.ppuMem = ppuMem;
+        this.sprMem = sprMem;
+        this.cpuMem = cpuMem;
+        this.cpu = cpu;
+        this.sourceDataLine = sourceDataLine;
+        this.memoryMapper = memoryMapper;
+        this.palTable = palTable;
 
         updateControlReg1(0);
         updateControlReg2(0);
 
         // Initialize misc vars:
         scanline = 0;
-        timer = nes.getGui().getTimer();
+        timer = gui.getTimer();
 
         // Create sprite arrays:
         sprX = new int[64];
@@ -411,11 +428,11 @@ public class PPU implements PPUCycles {
 
         // Start VBlank period:
         // Do NMI:
-        nes.getCpu().requestIrq(CPU.IRQ_NMI);
+        cpu.requestIrq(CPU.IRQ_NMI);
 
         // Make sure everything is rendered:
         if (lastRenderedScanline < 239) {
-            renderFramePartially(nes.getGui().getScreenView().getBuffer(), lastRenderedScanline + 1, 240 - lastRenderedScanline);
+            renderFramePartially(gui.getScreenView().getBuffer(), lastRenderedScanline + 1, 240 - lastRenderedScanline);
         }
 
         ///Generate here debbuging info for the framebuffer. I want you to aggregate pixels per color and show it in the console. I want to show it only if changed between frames
@@ -423,7 +440,7 @@ public class PPU implements PPUCycles {
         currentFrameColorCounts.clear();
 
         // Get the buffer and count pixels by color
-        int[] frameBuffer = nes.getGui().getScreenView().getBuffer();
+        int[] frameBuffer = gui.getScreenView().getBuffer();
         for (int i = 0; i < frameBuffer.length; i++) {
             int color = frameBuffer[i];
             currentFrameColorCounts.put(color, currentFrameColorCounts.getOrDefault(color, 0) + 1);
@@ -431,17 +448,17 @@ public class PPU implements PPUCycles {
 
         // Get the top 5 colors sorted by color value
         List<Map.Entry<Integer, Integer>> top5Colors = currentFrameColorCounts.entrySet()
-            .stream()
-            .sorted(Map.Entry.comparingByKey())
-            .limit(5)
-            .collect(Collectors.toList());
+                .stream()
+                .sorted(Map.Entry.comparingByKey())
+                .limit(5)
+                .collect(Collectors.toList());
 
         // Get the previous top 5 colors
         List<Map.Entry<Integer, Integer>> prevTop5Colors = previousFrameColorCounts.entrySet()
-            .stream()
-            .sorted(Map.Entry.comparingByKey())
-            .limit(5)
-            .collect(Collectors.toList());
+                .stream()
+                .sorted(Map.Entry.comparingByKey())
+                .limit(5)
+                .collect(Collectors.toList());
 
         // Check if the top 5 colors have changed
         boolean top5ColorsChanged = false;
@@ -455,8 +472,8 @@ public class PPU implements PPUCycles {
                 }
                 Map.Entry<Integer, Integer> current = top5Colors.get(i);
                 Map.Entry<Integer, Integer> previous = prevTop5Colors.get(i);
-                if (!current.getKey().equals(previous.getKey()) || 
-                    !current.getValue().equals(previous.getValue())) {
+                if (!current.getKey().equals(previous.getKey()) ||
+                        !current.getValue().equals(previous.getValue())) {
                     top5ColorsChanged = true;
                     break;
                 }
@@ -482,7 +499,7 @@ public class PPU implements PPUCycles {
 
 
         // Notify image buffer:
-        nes.getGui().getScreenView().imageReady(false);
+        gui.getScreenView().imageReady(false);
 
         // Reset scanline counter:
         lastRenderedScanline = -1;
@@ -547,7 +564,7 @@ public class PPU implements PPUCycles {
 
             if (f_bgVisibility == 1 || f_spVisibility == 1) {
                 // Clock mapper IRQ Counter:
-                nes.getMemoryMapper().clockIrqCounter();
+                memoryMapper.clockIrqCounter();
             }
 
         } else if (scanline >= 21 + vblankAdd && scanline <= 260) {
@@ -577,7 +594,7 @@ public class PPU implements PPUCycles {
 
             if (f_bgVisibility == 1 || f_spVisibility == 1) {
                 // Clock mapper IRQ Counter:
-                nes.getMemoryMapper().clockIrqCounter();
+                memoryMapper.clockIrqCounter();
             }
 
         } else if (scanline == 261 + vblankAdd) {
@@ -601,7 +618,7 @@ public class PPU implements PPUCycles {
 
     public void startFrame() {
 
-        int[] buffer = nes.getGui().getScreenView().getBuffer();
+        int[] buffer = gui.getScreenView().getBuffer();
 
         // Set background color:
         int bgColor = 0;
@@ -659,7 +676,7 @@ public class PPU implements PPUCycles {
 
     public void endFrame() {
 
-        int[] buffer = nes.getGui().getScreenView().getBuffer();
+        int[] buffer = gui.getScreenView().getBuffer();
 
         // Count colors in the buffer
         currentFrameColorCounts.clear();
@@ -721,10 +738,10 @@ public class PPU implements PPUCycles {
         }
 
         // Show sound buffer:
-        if (showSoundBuffer && nes.getPapu().getLine() != null) {
+        if (showSoundBuffer && sourceDataLine != null) {
 
-            bufferSize = nes.getPapu().getLine().getBufferSize();
-            available = nes.getPapu().getLine().available();
+            bufferSize = sourceDataLine.getBufferSize();
+            available = sourceDataLine.available();
             scale = bufferSize / 256;
 
             for (int y = 0; y < 4; y++) {
@@ -770,7 +787,7 @@ public class PPU implements PPUCycles {
         f_dispType = value & 1;
 
         if (f_dispType == 0) {
-            nes.getPalTable().setEmphasis(f_color);
+            palTable.setEmphasis(f_color);
         }
         updatePalettes();
 
@@ -779,9 +796,9 @@ public class PPU implements PPUCycles {
     public void setStatusFlag(int flag, boolean value) {
 
         int n = 1 << flag;
-        int memValue = nes.getCpuMemory().load(0x2002);
+        int memValue = cpuMem.load(0x2002);
         memValue = ((memValue & (255 - n)) | (value ? n : 0));
-        nes.getCpuMemory().write(0x2002, (short) memValue);
+        cpuMem.write(0x2002, (short) memValue);
 
     }
 
@@ -790,7 +807,7 @@ public class PPU implements PPUCycles {
     // Read the Status Register.
     public short readStatusRegister() {
 
-        tmp = nes.getCpuMemory().load(0x2002);
+        tmp = cpuMem.load(0x2002);
 
         // Reset scroll & VRAM Address toggle:
         firstWrite = true;
@@ -891,7 +908,7 @@ public class PPU implements PPUCycles {
         // Invoke mapper latch:
         cntsToAddress();
         if (vramAddress < 0x2000) {
-            nes.getMemoryMapper().latchAccess(vramAddress);
+            memoryMapper.latchAccess(vramAddress);
         }
 
     }
@@ -917,7 +934,7 @@ public class PPU implements PPUCycles {
 
             // Mapper latch access:
             if (vramAddress < 0x2000) {
-                nes.getMemoryMapper().latchAccess(vramAddress);
+                memoryMapper.latchAccess(vramAddress);
             }
 
             // Increment by either 1 or 32, depending on d2 of Control Register 1:
@@ -959,7 +976,7 @@ public class PPU implements PPUCycles {
             writeMem(vramAddress, value);
 
             // Invoke mapper latch:
-            nes.getMemoryMapper().latchAccess(vramAddress);
+            memoryMapper.latchAccess(vramAddress);
 
         }
 
@@ -974,8 +991,6 @@ public class PPU implements PPUCycles {
     // Write 256 bytes of main memory
     // into Sprite RAM.
     public void sramDMA(short value) {
-
-        Memory cpuMem = nes.getCpuMemory();
         int baseAddress = value * 0x100;
         short data;
         for (int i = sramAddress; i < 256; i++) {
@@ -984,7 +999,7 @@ public class PPU implements PPUCycles {
             spriteRamWriteUpdate(i, data);
         }
 
-        nes.getCpu().haltCycles(513);
+        cpu.haltCycles(513);
 
     }
 
@@ -1122,7 +1137,7 @@ public class PPU implements PPUCycles {
             } else {
                 if (Globals.debug) {
                     //System.out.println("Invalid VRAM address: "+Misc.hex16(address));
-                    nes.getCpu().setCrashed(true);
+                    cpu.setCrashed(true);
                 }
             }
 
@@ -1146,7 +1161,7 @@ public class PPU implements PPUCycles {
 
     /**
      * Renders a portion of the frame.
-     * 
+     *
      * @param buffer The buffer to render to
      * @param startScan The starting scanline
      * @param scanCount The number of scanlines to render
@@ -1179,7 +1194,7 @@ public class PPU implements PPUCycles {
             renderSpritesPartially(startScan, scanCount, false);
         }
 
-        if (nes.isNonHWScalingEnabled() && !requestRenderAll) {
+        if (isNonHWScalingEnabled() && !requestRenderAll) {
 
             // Check which scanlines have changed, to try to
             // speed up scaling:
@@ -1205,6 +1220,10 @@ public class PPU implements PPUCycles {
 
         validTileData = false;
 
+    }
+
+    public boolean isNonHWScalingEnabled() {
+        return gui.getScreenView().scalingEnabled() && !gui.getScreenView().useHWScaling();
     }
 
     private void renderBgScanline(int[] buffer, int scan) {
@@ -1309,7 +1328,7 @@ public class PPU implements PPUCycles {
 
     private void renderSpritesPartially(int startscan, int scancount, boolean bgPri) {
 
-        buffer = nes.getGui().getScreenView().getBuffer();
+        buffer = gui.getScreenView().getBuffer();
         if (f_spVisibility == 1) {
 
             int sprT1, sprT2;
@@ -1584,20 +1603,20 @@ public class PPU implements PPUCycles {
 
         for (int i = 0; i < 16; i++) {
             if (f_dispType == 0) {
-                imgPalette[i] = nes.getPalTable().getEntry(ppuMem.load(0x3f00 + i) & 63);
+                imgPalette[i] = palTable.getEntry(ppuMem.load(0x3f00 + i) & 63);
             } else {
-                imgPalette[i] = nes.getPalTable().getEntry(ppuMem.load(0x3f00 + i) & 32);
+                imgPalette[i] = palTable.getEntry(ppuMem.load(0x3f00 + i) & 32);
             }
         }
         for (int i = 0; i < 16; i++) {
             if (f_dispType == 0) {
-                sprPalette[i] = nes.getPalTable().getEntry(ppuMem.load(0x3f10 + i) & 63);
+                sprPalette[i] = palTable.getEntry(ppuMem.load(0x3f10 + i) & 63);
             } else {
-                sprPalette[i] = nes.getPalTable().getEntry(ppuMem.load(0x3f10 + i) & 32);
+                sprPalette[i] = palTable.getEntry(ppuMem.load(0x3f10 + i) & 32);
             }
         }
 
-    //renderPalettes();
+        //renderPalettes();
 
     }
 
@@ -1706,7 +1725,7 @@ public class PPU implements PPUCycles {
         // Set VBlank flag:
         setStatusFlag(STATUS_VBLANK, true);
         //nes.getCpu().doNonMaskableInterrupt();
-        nes.getCpu().requestIrq(CPU.IRQ_NMI);
+        cpu.requestIrq(CPU.IRQ_NMI);
 
     }
 
@@ -1839,7 +1858,7 @@ public class PPU implements PPUCycles {
             }
              */
             // Sprite data:
-            short[] sprmem = nes.getSprMemory().mem;
+            short[] sprmem = sprMem.mem;
             for (int i = 0; i < sprmem.length; i++) {
                 spriteRamWriteUpdate(i, sprmem[i]);
             }
@@ -1998,16 +2017,27 @@ public class PPU implements PPUCycles {
         java.util.Arrays.fill(oldFrame, -1);
 
         // Initialize stuff:
-        init();
+        init(
+                gui,
+                ppuMem,
+                sprMem,
+                cpuMem,
+                cpu,
+                memoryMapper,
+                sourceDataLine,
+                palTable
+        );
 
     }
 
     public void destroy() {
-
-        nes = null;
         ppuMem = null;
         sprMem = null;
         scantile = null;
 
+    }
+
+    public void setMapper(MemoryMapper memMapper) {
+        this.memoryMapper = memMapper;
     }
 }

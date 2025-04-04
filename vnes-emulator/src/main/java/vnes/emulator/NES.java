@@ -18,12 +18,15 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import vnes.emulator.cpu.CPU;
 import vnes.emulator.input.InputHandler;
+import vnes.emulator.mappers.MemoryMapper;
 import vnes.emulator.memory.MemoryAccess;
 import vnes.emulator.producers.ChannelRegistryProducer;
 import vnes.emulator.producers.MapperProducer;
 import vnes.emulator.ui.*;
 import vnes.emulator.utils.Globals;
 import vnes.emulator.utils.PaletteTable;
+
+import javax.sound.sampled.SourceDataLine;
 
 public class NES {
 
@@ -75,13 +78,23 @@ public class NES {
         ppuMem = new Memory(0x8000);  // VRAM memory (internal to PPU)
         sprMem = new Memory(0x100);   // Sprite RAM  (internal to PPU)
 
-        ppu = new PPU(this);
+        ppu = new PPU();
         papu = new PAPU(this);
         palTable = new PaletteTable();
         cpu = new CPU(papu, ppu);
 
         cpu.init(getMemoryAccess(), getCpuMemory());
-        ppu.init();
+        ppu.init(
+                getGui(),
+                getPpuMemory(),
+                getSprMemory(),
+                getCpuMemory(),
+                getCpu(),
+                getMemoryMapper(),
+                getPapu().getLine(),
+                getPalTable()
+        );
+
         papu.init(new ChannelRegistryProducer());
         palTable.init();
 
@@ -92,10 +105,6 @@ public class NES {
 
     public ScreenView getScreenView() {
         return gui.getScreenView();
-    }
-
-    public boolean isNonHWScalingEnabled() {
-        return gui.getScreenView().scalingEnabled() && !gui.getScreenView().useHWScaling();
     }
 
     public boolean stateLoad(ByteBuffer buf) {
@@ -274,10 +283,10 @@ public class NES {
             reset();
 
             MapperProducer mapperProducer = new MapperProducer(gui::showErrorMsg);
-            memMapper = mapperProducer.produce(rom);
-            memMapper.init(this);
+            memMapper = mapperProducer.produce(this, rom);
 
             cpu.setMapper(memMapper);
+            ppu.setMapper(memMapper);
             memMapper.loadROM(rom);
             ppu.setMirroring(rom.getMirroringType());
 
