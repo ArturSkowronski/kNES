@@ -18,6 +18,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import vnes.emulator.cpu.CPU;
 import vnes.emulator.cpu.CPUIIrqRequester;
+import vnes.emulator.mappers.MemoryMapper;
 import vnes.emulator.papu.*;
 import vnes.emulator.papu.channels.ChannelDM;
 import vnes.emulator.papu.channels.ChannelNoise;

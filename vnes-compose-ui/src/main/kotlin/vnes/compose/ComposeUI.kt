@@ -44,7 +44,7 @@ class ComposeUI {
         // Set the buffer on the PPU to prevent NullPointerException
         // The PPU needs a buffer to render to, and it expects this buffer to be set from outside
         // If the buffer is not set, a NullPointerException will occur in PPU.renderFramePartially
-        nes.getPpu().setBuffer(screenView.getBuffer())
+        nes.getPpu().buffer = screenView.getBuffer()
     }
 
     /**

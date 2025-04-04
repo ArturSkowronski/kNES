@@ -16,10 +16,10 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.emulator.NES;
 import vnes.emulator.*;
 import vnes.emulator.cpu.CPU;
 import vnes.emulator.input.InputHandler;
+import vnes.emulator.ppu.PPU;
 import vnes.emulator.rom.ROMData;
 
 public class MapperDefault implements MemoryMapper {
@@ -43,7 +43,7 @@ public class MapperDefault implements MemoryMapper {
     private InputHandler inputHandler;
     private InputHandler inputHandler2;
 
-    public void init(NES nes) {
+    public MapperDefault(NES nes) {
         this.cpuMem = nes.getCpuMemory();
         this.cpuMemArray = cpuMem.mem;
         this.ppuMem = nes.getPpuMemory();
@@ -289,7 +289,7 @@ public class MapperDefault implements MemoryMapper {
 
                         // 0x4017:
                         // Joystick 2 + Strobe
-                        if (mousePressed && ppu != null && ppu.getBuffer() != null) {
+                        if (mousePressed && ppu != null && ppu.buffer != null) {
 
                             // Check for white pixel nearby:
 
@@ -302,7 +302,7 @@ public class MapperDefault implements MemoryMapper {
 
                             for (int y = sy; y < ey; y++) {
                                 for (int x = sx; x < ex; x++) {
-                                    if ((ppu.getBuffer()[(y << 8) + x] & 0xFFFFFF) == 0xFFFFFF) {
+                                    if ((ppu.buffer[(y << 8) + x] & 0xFFFFFF) == 0xFFFFFF) {
                                         w = 0x1 << 3;
                                         break;
                                     }

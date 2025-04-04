@@ -1,6 +1,7 @@
 package vnes.emulator.producers;
 
-import vnes.emulator.MemoryMapper;
+import vnes.emulator.mappers.MemoryMapper;
+import vnes.emulator.NES;
 import vnes.emulator.rom.ROMData;
 import vnes.emulator.mappers.MapperDefault;
 
@@ -29,18 +30,18 @@ public class MapperProducer {
      * @param romData The ROM data
      * @return The appropriate mapper for the ROM
      */
-    public MemoryMapper produce(ROMData romData) {
+    public MemoryMapper produce(NES nes, ROMData romData) {
         if (isMapperSupported(romData.getMapperType())) {
             switch (romData.getMapperType()) {
                 case 0: {
-                    return new MapperDefault();
+                    return new MapperDefault(nes);
                 }
             }
         }
         
         // If the mapper wasn't supported, create the standard one:
         showErrorMsg.accept("Warning: Mapper not supported yet.");
-        return new MapperDefault();
+        return new MapperDefault(nes);
     }
     
     /**
