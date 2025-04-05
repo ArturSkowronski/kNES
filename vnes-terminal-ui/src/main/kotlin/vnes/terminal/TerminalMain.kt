@@ -50,7 +50,7 @@ class TerminalMain(enablePpuLogging: Boolean = true) {
 
     init {
         // Set PPU logging flag
-        nes.getPpu().setEnablePpuLogging(enablePpuLogging)
+        nes.ppu.isEnablePpuLogging = enablePpuLogging
     }
 
     /**
