@@ -55,6 +55,10 @@ public class PPU : PPUCycles {
 
     private var showSoundBuffer = false
     var isEnablePpuLogging: Boolean = false
+        get() = field
+        set(value) {
+            field = value
+        }
     private val clipTVcolumn = true
     private val clipTVrow = false
 
