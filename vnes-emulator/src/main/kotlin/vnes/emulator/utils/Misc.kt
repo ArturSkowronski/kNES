@@ -1,5 +1,5 @@
 /*
- * kNES - A Kotlin NES fork of vNES emulator
+ * kNES - A Kotlin vnes.emulator.NES fork of vNES emulator
  * Copyright (C) 2025 Artur Skowronski
  *
  * This program is free software: you can redistribute it and/or modify

@@ -21,7 +21,7 @@ import vnes.emulator.input.InputHandler
 import vnes.emulator.utils.HiResTimer
 
 /**
- * UI interface for the NES emulator.
+ * UI interface for the vnes.emulator.NES emulator.
  * This interface defines the core functionality required by any UI implementation,
  * without dependencies on specific UI frameworks like AWT or Compose.
  * It combines both platform-agnostic UI functionality and legacy UI requirements.

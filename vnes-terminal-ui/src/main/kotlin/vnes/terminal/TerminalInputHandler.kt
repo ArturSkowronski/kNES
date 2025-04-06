@@ -19,7 +19,6 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import java.awt.event.KeyEvent
 import vnes.emulator.input.InputHandler
-import vnes.emulator.NES
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.concurrent.Executors

@@ -35,7 +35,7 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 public class PPU : PPUCycles {
-    //    private NES nes;
+    //    private vnes.emulator.NES nes;
     private var timer: HiResTimer? = null
     private var gui: GUI? = null
     private var ppuMem: Memory? = null

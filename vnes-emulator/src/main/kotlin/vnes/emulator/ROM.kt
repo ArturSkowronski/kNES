@@ -45,7 +45,7 @@ class ROM(private val showLoadProgress: Consumer<Int>, private val showErrorMsg:
         // Check first four bytes:
         val fcode = String(byteArrayOf(b!![0].toByte(), b[1].toByte(), b[2].toByte(), b[3].toByte()))
         if (fcode != "NES" + String(byteArrayOf(0x1A))) {
-            //System.out.println("Header is incorrect.");
+            System.out.println("Header is incorrect.");
             valid = false
             return
         }

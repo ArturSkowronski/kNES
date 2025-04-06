@@ -39,7 +39,6 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.delay
-import vnes.compose.ComposeInputHandler
 import vnes.emulator.NES
 import java.awt.event.KeyEvent
 import javax.swing.JFileChooser
