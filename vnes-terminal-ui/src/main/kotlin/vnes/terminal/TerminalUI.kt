@@ -39,7 +39,7 @@ class TerminalUI {
         // Set the buffer on the PPU to prevent NullPointerException
         // The PPU needs a buffer to render to, and it expects this buffer to be set from outside
         // If the buffer is not set, a NullPointerException will occur in PPU.renderFramePartially
-        nes.getPpu().buffer = screenView.getBuffer()
+        nes.ppu!!.buffer = screenView.getBuffer()
     }
 
     /**
