@@ -20,7 +20,6 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
 import javax.swing.JComponent
-import vnes.emulator.NES
 import vnes.emulator.input.InputHandler
 import vnes.emulator.input.InputHandler.Companion.KEY_A
 import vnes.emulator.input.InputHandler.Companion.KEY_B

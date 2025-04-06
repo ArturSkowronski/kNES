@@ -17,7 +17,6 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.compose.ComposeInputHandler
 import vnes.emulator.NES
 
 /**
@@ -44,7 +43,7 @@ class ComposeUI {
         // Set the buffer on the PPU to prevent NullPointerException
         // The PPU needs a buffer to render to, and it expects this buffer to be set from outside
         // If the buffer is not set, a NullPointerException will occur in PPU.renderFramePartially
-        nes.getPpu().buffer = screenView.getBuffer()
+        nes.ppu!!.buffer = screenView.getBuffer()
     }
 
     /**

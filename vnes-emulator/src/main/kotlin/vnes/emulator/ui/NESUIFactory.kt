@@ -3,14 +3,14 @@ package vnes.emulator.ui
 import vnes.emulator.input.InputHandler
 
 /**
- * Factory interface for creating UI components for the NES emulator.
+ * Factory interface for creating UI components for the vnes.emulator.NES emulator.
  * This interface allows different UI implementations to be plugged into the emulator core.
  */
 interface NESUIFactory {
     /**
      * Creates a UI controller that handles input and lifecycle management
      *
-     * @param nes The NES instance to associate with the input handler
+     * @param nes The vnes.emulator.NES instance to associate with the input handler
      * @return An InputHandler implementation
      */
     fun createInputHandler(): InputHandler?

@@ -179,7 +179,7 @@ class CPU // Constructor:
 
     // Emulates cpu instructions until stopped.
     fun emulate() {
-        // NES Memory
+        // vnes.emulator.NES Memory
         // (when memory mappers switch ROM banks
         // this will be written to, no need to
         // update reference):

@@ -164,21 +164,21 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
     override fun imageReady(skipFrame: Boolean) {
         // Sound stuff:
         nes?.let { nes ->
-            val tmp = nes.getPapu().bufferIndex
+            val tmp = nes.papu!!.bufferPos
             if (Globals.enableSound && Globals.timeEmulation && tmp > 0) {
-                val min_avail = nes.getPapu().line.getBufferSize() - 4 * tmp
+                val min_avail = nes.papu!!.line!!.getBufferSize() - 4 * tmp
 
-                var timeToSleep = nes.getPapu().getMillisToAvailableAbove(min_avail)
+                var timeToSleep = nes.papu!!.getMillisToAvailableAbove(min_avail)
                 do {
                     try {
                         Thread.sleep(timeToSleep.toLong())
                     } catch (e: InterruptedException) {
                         // Ignore
                     }
-                    timeToSleep = nes.getPapu().getMillisToAvailableAbove(min_avail)
+                    timeToSleep = nes.papu!!.getMillisToAvailableAbove(min_avail)
                 } while (timeToSleep > 0)
 
-                nes.getPapu().writeBuffer()
+                nes.papu!!.writeBuffer()
             }
         }
 
