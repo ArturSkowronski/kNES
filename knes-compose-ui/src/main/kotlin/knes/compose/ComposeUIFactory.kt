@@ -1,4 +1,4 @@
-package vnes.compose
+package knes.compose
 
 /*
 vNES

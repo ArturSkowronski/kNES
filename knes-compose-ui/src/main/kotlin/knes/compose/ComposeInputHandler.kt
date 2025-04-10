@@ -1,4 +1,4 @@
-package vnes.compose
+package knes.compose
 
 import vnes.emulator.input.InputHandler
 import java.awt.event.KeyAdapter

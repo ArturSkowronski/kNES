@@ -1,4 +1,4 @@
-package vnes.compose.utils
+package knes.compose.utils
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*

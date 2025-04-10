@@ -8,7 +8,7 @@ The project is organized into the following modules:
 
 - **vnes-emulator**: Core emulator functionality, including CPU, PPU, memory, and mappers.
 - **knes-applet-ui**: Java Applet-based UI for the emulator.
-- **vnes-compose-ui**: Jetpack Compose-based UI for the emulator.
+- **knes-compose-ui**: Jetpack Compose-based UI for the emulator.
 - **Main Module**: Launcher application that allows choosing between different UIs.
 
 ## Building and Running
@@ -35,13 +35,13 @@ This will launch the main application, which allows choosing between the Applet 
 ### Running the Applet UI directly
 
 ```bash
-./gradlew :vnes-applet-ui:run
+./gradlew :knes-applet-ui:run
 ```
 
 ### Running the Compose UI directly
 
 ```bash
-./gradlew :vnes-compose-ui:run
+./gradlew :knes-compose-ui:run
 ```
 
 ## Architecture

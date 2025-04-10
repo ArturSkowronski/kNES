@@ -32,8 +32,8 @@ dependencies {
         isJava11OrHigher = false
     }
 
-    if (isJava11OrHigher && project.findProject(':vnes-compose-ui') != null) {
-        implementation project(':vnes-compose-ui')
+    if (isJava11OrHigher && project.findProject(':knes-compose-ui') != null) {
+        implementation project(':knes-compose-ui')
     }
 
     testImplementation 'junit:junit:4.13.2'

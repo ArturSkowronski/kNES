@@ -1,4 +1,4 @@
-package vnes.compose
+package knes.compose
 
 /*
 vNES
@@ -34,6 +34,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
@@ -85,7 +86,7 @@ fun NESScreenRenderer(screenView: ComposeScreenView) {
         // Draw the image scaled to fit the canvas
         drawImage(
             image = currentBitmap,
-            dstSize = androidx.compose.ui.unit.IntSize(scaledWidth, scaledHeight)
+            dstSize = IntSize(scaledWidth, scaledHeight)
         )
 
         // This is a workaround to ensure the Canvas is recomposed for each frame

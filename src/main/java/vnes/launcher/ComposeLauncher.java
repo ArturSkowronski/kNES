@@ -1,6 +1,6 @@
 package vnes.launcher;
 
-import vnes.compose.ComposeMainKt;
+import knes.compose.ComposeMainKt;
 
 import java.io.File;
 

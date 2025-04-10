@@ -46,8 +46,8 @@ includeComposeUI = true
 println "Forcing includeComposeUI to true to enable the module"
 
 if (includeComposeUI) {
-    include 'vnes-compose-ui'
-    println "Including vnes-compose-ui module."
+    include 'knes-compose-ui'
+    println "Including knes-compose-ui module."
 } else {
-    println "Excluding vnes-compose-ui module."
+    println "Excluding knes-compose-ui module."
 }

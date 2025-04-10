@@ -64,13 +64,13 @@ sourceSets {
 }
 
 application {
-    mainClass = 'vnes.compose.ComposeMainKt'
+    mainClass = 'knes.compose.ComposeMainKt'
 }
 
 jar {
     manifest {
         attributes(
-            'Main-Class': 'vnes.compose.ComposeMainKt',
+            'Main-Class': 'knes.compose.ComposeMainKt',
             'Application-Name': 'vNES Compose'
         )
     }
