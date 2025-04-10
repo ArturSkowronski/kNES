@@ -22,7 +22,7 @@ public class Properties {
      * Default constructor with default values.
      */
     public Properties() {
-        this.rom = "vnes.nes";
+        this.rom = "knes.nes";
         this.scale = false;
         this.sound = true;
         this.stereo = true;

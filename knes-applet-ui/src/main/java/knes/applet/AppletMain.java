@@ -21,8 +21,8 @@ import java.awt.*;
 import java.util.Map;
 
 import knes.applet.utils.Properties;
-import vnes.emulator.NES;
-import vnes.emulator.utils.Globals;
+import knes.emulator.NES;
+import knes.emulator.utils.Globals;
 
 public class AppletMain extends Applet implements Runnable {
 

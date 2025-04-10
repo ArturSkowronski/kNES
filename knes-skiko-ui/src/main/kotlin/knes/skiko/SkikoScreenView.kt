@@ -21,7 +21,7 @@ import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorType
 import org.jetbrains.skia.ImageInfo
-import vnes.emulator.ui.ScreenView
+import knes.emulator.ui.ScreenView
 import java.awt.Color
 import java.awt.image.BufferedImage
 import java.nio.ByteBuffer

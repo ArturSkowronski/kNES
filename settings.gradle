@@ -6,7 +6,7 @@ pluginManagement {
 }
 
 rootProject.name = 'vNES'
-include 'vnes-emulator'
+include 'knes-emulator'
 include 'knes-applet-ui'
 include 'knes-skiko-ui'
 include 'knes-terminal-ui'

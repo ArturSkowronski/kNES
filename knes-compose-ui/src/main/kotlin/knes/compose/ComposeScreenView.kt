@@ -20,10 +20,10 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import knes.compose.utils.ScreenLogger
-import vnes.emulator.NES
-import vnes.emulator.ui.ScreenView
-import vnes.emulator.utils.Globals
-import vnes.emulator.utils.HiResTimer
+import knes.emulator.NES
+import knes.emulator.ui.ScreenView
+import knes.emulator.utils.Globals
+import knes.emulator.utils.HiResTimer
 import java.awt.image.BufferedImage
 
 /**

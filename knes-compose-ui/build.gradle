@@ -12,7 +12,7 @@ repositories {
 }
 
 dependencies {
-    implementation project(':vnes-emulator')
+    implementation project(':knes-emulator')
     implementation "org.jetbrains.kotlin:kotlin-stdlib"
 
     // Compose Desktop dependencies

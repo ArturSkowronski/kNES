@@ -8,7 +8,7 @@ repositories {
 }
 
 dependencies {
-    implementation project(':vnes-emulator')
+    implementation project(':knes-emulator')
     testImplementation 'junit:junit:4.13.2'
 }
 
@@ -32,13 +32,13 @@ sourceSets {
 }
 
 application {
-    mainClass = 'vnes.applet.AppletLauncher'
+    mainClass = 'knes.applet.AppletLauncher'
 }
 
 jar {
     manifest {
         attributes(
-            'Main-Class': 'vnes.applet.AppletLauncher',
+            'Main-Class': 'knes.applet.AppletLauncher',
             'Permissions': 'all-permissions',
             'Application-Name': 'vNES Applet'
         )

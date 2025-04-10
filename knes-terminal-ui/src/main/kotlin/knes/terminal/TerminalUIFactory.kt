@@ -17,9 +17,9 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.emulator.input.InputHandler
-import vnes.emulator.ui.NESUIFactory
-import vnes.emulator.ui.ScreenView
+import knes.emulator.input.InputHandler
+import knes.emulator.ui.NESUIFactory
+import knes.emulator.ui.ScreenView
 
 /**
  * Factory for creating Terminal UI components for the NES emulator.

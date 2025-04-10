@@ -116,7 +116,7 @@ public class AppletLauncher {
             File targetRom = new File("vnes.nes");
             
             if (sourceRom.exists()) {
-                // Copy the ROM file to vnes.nes
+                // Copy the ROM file to knes.nes
                 try (FileInputStream fis = new FileInputStream(sourceRom);
                      FileOutputStream fos = new FileOutputStream(targetRom)) {
                     
@@ -126,7 +126,7 @@ public class AppletLauncher {
                         fos.write(buffer, 0, bytesRead);
                     }
                     
-                    System.out.println("ROM file copied to vnes.nes");
+                    System.out.println("ROM file copied to knes.nes");
                 } catch (IOException e) {
                     System.err.println("Error copying ROM file: " + e.getMessage());
                     e.printStackTrace();

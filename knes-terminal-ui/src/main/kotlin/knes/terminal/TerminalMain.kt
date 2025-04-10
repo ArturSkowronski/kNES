@@ -17,7 +17,7 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.emulator.NES
+import knes.emulator.NES
 import java.io.File
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
@@ -73,7 +73,7 @@ class TerminalMain(enablePpuLogging: Boolean = true) {
 
         // If no ROM file was specified, look for vnes.nes in the current directory
         if (romPath == null) {
-            val defaultRom = File("vnes.nes")
+            val defaultRom = File("knes.nes")
             if (defaultRom.exists()) {
                 romPath = defaultRom.absolutePath
             }

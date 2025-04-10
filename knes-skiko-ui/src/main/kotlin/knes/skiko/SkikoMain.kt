@@ -23,7 +23,7 @@ import org.jetbrains.skia.Rect
 import org.jetbrains.skia.Image
 import org.jetbrains.skiko.SkiaLayer
 import org.jetbrains.skiko.SkikoView
-import vnes.emulator.NES
+import knes.emulator.NES
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.FlowLayout

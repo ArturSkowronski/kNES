@@ -40,7 +40,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.delay
-import vnes.emulator.NES
+import knes.emulator.NES
 import java.awt.event.KeyEvent
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter

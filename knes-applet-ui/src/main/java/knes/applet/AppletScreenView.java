@@ -16,9 +16,9 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.emulator.ui.GUI;
-import vnes.emulator.ui.ScreenView;
-import vnes.emulator.utils.Globals;
+import knes.emulator.ui.GUI;
+import knes.emulator.ui.ScreenView;
+import knes.emulator.utils.Globals;
 
 import javax.swing.*;
 import java.awt.*;
@@ -28,7 +28,7 @@ import java.awt.image.VolatileImage;
 
 public class AppletScreenView extends JPanel implements ScreenView {
 
-    // vnes.emulator.Scale modes:
+    // knes.emulator.Scale modes:
     public static final int SCALE_NONE = 0;
     public static final int SCALE_HW2X = 1;
     public static final int SCALE_HW3X = 2;

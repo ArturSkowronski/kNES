@@ -16,12 +16,12 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.emulator.input.InputCallback;
-import vnes.emulator.input.InputHandler;
-import vnes.emulator.ui.GUI;
-import vnes.emulator.ui.PAPU_Applet_Functionality;
-import vnes.emulator.utils.Globals;
-import vnes.emulator.utils.HiResTimer;
+import knes.emulator.input.InputCallback;
+import knes.emulator.input.InputHandler;
+import knes.emulator.ui.GUI;
+import knes.emulator.ui.PAPU_Applet_Functionality;
+import knes.emulator.utils.Globals;
+import knes.emulator.utils.HiResTimer;
 
 /**
  * AWT-specific implementation of the UI interface.

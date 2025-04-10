@@ -16,7 +16,7 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-import vnes.emulator.input.InputHandler;
+import knes.emulator.input.InputHandler;
 
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;

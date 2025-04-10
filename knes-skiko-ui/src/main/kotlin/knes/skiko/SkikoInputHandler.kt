@@ -20,16 +20,16 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
 import javax.swing.JComponent
-import vnes.emulator.input.InputHandler
-import vnes.emulator.input.InputHandler.Companion.KEY_A
-import vnes.emulator.input.InputHandler.Companion.KEY_B
-import vnes.emulator.input.InputHandler.Companion.KEY_DOWN
-import vnes.emulator.input.InputHandler.Companion.KEY_LEFT
-import vnes.emulator.input.InputHandler.Companion.KEY_RIGHT
-import vnes.emulator.input.InputHandler.Companion.KEY_SELECT
-import vnes.emulator.input.InputHandler.Companion.KEY_START
-import vnes.emulator.input.InputHandler.Companion.KEY_UP
-import vnes.emulator.input.InputHandler.Companion.NUM_KEYS
+import knes.emulator.input.InputHandler
+import knes.emulator.input.InputHandler.Companion.KEY_A
+import knes.emulator.input.InputHandler.Companion.KEY_B
+import knes.emulator.input.InputHandler.Companion.KEY_DOWN
+import knes.emulator.input.InputHandler.Companion.KEY_LEFT
+import knes.emulator.input.InputHandler.Companion.KEY_RIGHT
+import knes.emulator.input.InputHandler.Companion.KEY_SELECT
+import knes.emulator.input.InputHandler.Companion.KEY_START
+import knes.emulator.input.InputHandler.Companion.KEY_UP
+import knes.emulator.input.InputHandler.Companion.NUM_KEYS
 
 /**
  * Input handler for the Skiko UI.

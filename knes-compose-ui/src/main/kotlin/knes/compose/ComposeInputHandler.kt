@@ -1,6 +1,6 @@
 package knes.compose
 
-import vnes.emulator.input.InputHandler
+import knes.emulator.input.InputHandler
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
 import javax.swing.JComponent

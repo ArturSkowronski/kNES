@@ -9,7 +9,7 @@ repositories {
 }
 
 dependencies {
-    implementation project(':vnes-emulator')
+    implementation project(':knes-emulator')
     implementation project(':knes-applet-ui')
     implementation project(':knes-skiko-ui')
 
@@ -76,13 +76,13 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 application {
-    mainClass = 'vnes.VNESApplication'
+    mainClass = 'knes.VNESApplication'
 }
 
 jar {
     manifest {
         attributes(
-            'Main-Class': 'vnes.VNESApplication',
+            'Main-Class': 'knes.VNESApplication',
             'Permissions': 'all-permissions',
             'Application-Name': 'vNES'
         )

@@ -1,7 +1,5 @@
 package vnes.launcher;
 
-import java.io.File;
-
 /**
  * TerminalUILauncher - A standalone application that launches the vNES emulator with the Terminal UI.
  * 

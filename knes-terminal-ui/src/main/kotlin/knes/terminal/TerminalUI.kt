@@ -17,7 +17,7 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import vnes.emulator.NES
+import knes.emulator.NES
 
 /**
  * Main UI class for the Terminal implementation.

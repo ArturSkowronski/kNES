@@ -1,4 +1,4 @@
-# vNES - NES Emulator
+# kNES - Kotlin NES Emulator
 
 vNES is a Nintendo Entertainment System (NES) emulator written in Java and Kotlin.
 
@@ -6,7 +6,7 @@ vNES is a Nintendo Entertainment System (NES) emulator written in Java and Kotli
 
 The project is organized into the following modules:
 
-- **vnes-emulator**: Core emulator functionality, including CPU, PPU, memory, and mappers.
+- **knes-emulator**: Core emulator functionality, including CPU, PPU, memory, and mappers.
 - **knes-applet-ui**: Java Applet-based UI for the emulator.
 - **knes-compose-ui**: Jetpack Compose-based UI for the emulator.
 - **Main Module**: Launcher application that allows choosing between different UIs.
@@ -50,7 +50,7 @@ The emulator uses a modular architecture with a clear separation between the cor
 
 ### Core Emulator
 
-The core emulator is contained in the `vnes-emulator` module and provides the following components:
+The core emulator is contained in the `knes-emulator` module and provides the following components:
 
 - **CPU**: 6502 CPU emulation
 - **PPU**: Picture Processing Unit emulation
