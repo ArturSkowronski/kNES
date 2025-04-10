@@ -1,4 +1,4 @@
-package vnes.skiko
+package knes.skiko
 
 /*
 vNES

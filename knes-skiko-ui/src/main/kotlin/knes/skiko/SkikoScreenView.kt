@@ -1,4 +1,4 @@
-package vnes.skiko
+package knes.skiko
 
 /*
 vNES
@@ -22,7 +22,10 @@ import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorType
 import org.jetbrains.skia.ImageInfo
 import vnes.emulator.ui.ScreenView
+import java.awt.Color
 import java.awt.image.BufferedImage
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * Screen view for the Skiko UI.
@@ -79,7 +82,7 @@ class SkikoScreenView(private var scale: Int) : ScreenView {
         }
 
         // Convert IntArray to ByteArray for installPixels
-        val byteBuffer = java.nio.ByteBuffer.allocate(pixelsWithAlpha.size * 4).order(java.nio.ByteOrder.nativeOrder())
+        val byteBuffer = ByteBuffer.allocate(pixelsWithAlpha.size * 4).order(ByteOrder.nativeOrder())
         val intBuffer = byteBuffer.asIntBuffer()
         intBuffer.put(pixelsWithAlpha)
 
@@ -102,10 +105,10 @@ class SkikoScreenView(private var scale: Int) : ScreenView {
         val b = rgbColor and 0xFF
 
         // Convert RGB to HSB
-        val hsb = java.awt.Color.RGBtoHSB(r, g, b, null)
+        val hsb = Color.RGBtoHSB(r, g, b, null)
 
         // Convert back to RGB with HSBtoRGB
-        return java.awt.Color.HSBtoRGB(hsb[0], hsb[1], hsb[2]) or 0xFF000000.toInt()
+        return Color.HSBtoRGB(hsb[0], hsb[1], hsb[2]) or 0xFF000000.toInt()
     }
 
     /**

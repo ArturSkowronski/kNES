@@ -1,6 +1,6 @@
 package vnes.launcher;
 
-import vnes.skiko.SkikoMainKt;
+import knes.skiko.SkikoMainKt;
 
 import java.io.File;
 

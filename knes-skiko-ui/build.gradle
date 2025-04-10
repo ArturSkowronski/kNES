@@ -55,14 +55,14 @@ sourceSets {
 }
 
 application {
-    mainClass = 'vnes.skiko.SkikoMainKt'
+    mainClass = 'knes.skiko.SkikoMainKt'
 }
 
 jar {
     manifest {
         attributes(
-            'Main-Class': 'vnes.skiko.SkikoMainKt',
-            'Application-Name': 'vNES Skiko'
+            'Main-Class': 'knes.skiko.SkikoMainKt',
+            'Application-Name': 'kNES Skiko'
         )
     }
 
