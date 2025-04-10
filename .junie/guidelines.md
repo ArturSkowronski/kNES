@@ -1,8 +1,8 @@
-# vNES Project Guidelines
+# kNES Project Guidelines
 
 ## Project Overview
 
-vNES is a Nintendo Entertainment System (NES) emulator implemented in Java. It allows users to play NES games on modern computers by emulating the hardware of the original Nintendo Entertainment System. The emulator is implemented as a Java applet, which can be run either in a compatible browser or as a standalone application using the provided AppletLauncher.
+kNES is a Nintendo Entertainment System (NES) emulator implemented in Java. It allows users to play NES games on modern computers by emulating the hardware of the original Nintendo Entertainment System. The emulator is implemented as a Java applet, which can be run either in a compatible browser or as a standalone application using the provided AppletLauncher.
 
 ### Key Features
 
@@ -38,7 +38,7 @@ To build the project:
 ./gradlew build
 ```
 
-This will compile the Java sources and create a JAR file in `build/libs/vNES.jar`.
+This will compile the Java sources and create a JAR file in `build/libs/kNES.jar`.
 
 ### Running the Application
 
@@ -51,7 +51,7 @@ There are multiple ways to run the application:
 
 2. **Running the JAR file directly**:
    ```
-   java -jar build/libs/vNES.jar
+   java -jar build/libs/kNES.jar
    ```
 
 3. **Using Gradle runApplet task** (requires Java 8 with appletviewer):
@@ -69,7 +69,7 @@ To use the emulator, you need to provide NES ROM files:
 1. Create a `roms` directory in the project root (if not already created)
 2. Place your NES ROM files (`.nes` files) in the `roms` directory
 3. When running the application, you can load a ROM by:
-   - Placing a ROM file named `vnes.nes` in the project root directory, or
+   - Placing a ROM file named `knes.nes` in the project root directory, or
    - Using the file chooser in the application to select a ROM file
 
 ### Continuous Integration

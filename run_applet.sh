@@ -22,6 +22,6 @@ echo "Current Java version:"
 java -version
 echo ""
 echo "You can still build the project with: ./gradlew build"
-echo "The JAR file will be created at: build/libs/vNES.jar"
+echo "The JAR file will be created at: build/libs/kNES.jar"
 
 exit 1

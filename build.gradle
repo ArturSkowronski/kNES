@@ -9,9 +9,9 @@ repositories {
 }
 
 dependencies {
-    implementation project(':vnes-emulator')
-    implementation project(':vnes-applet-ui')
-    implementation project(':vnes-skiko-ui')
+    implementation project(':knes-emulator')
+    implementation project(':knes-applet-ui')
+    implementation project(':knes-skiko-ui')
 
     // Only include the Compose UI module if Java 11 or higher is available
     String javaVersion = System.getProperty("java.version")
@@ -32,8 +32,8 @@ dependencies {
         isJava11OrHigher = false
     }
 
-    if (isJava11OrHigher && project.findProject(':vnes-compose-ui') != null) {
-        implementation project(':vnes-compose-ui')
+    if (isJava11OrHigher && project.findProject(':knes-compose-ui') != null) {
+        implementation project(':knes-compose-ui')
     }
 
     testImplementation 'junit:junit:4.13.2'
@@ -76,15 +76,15 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 application {
-    mainClass = 'vnes.VNESApplication'
+    mainClass = 'knes.ComposeLauncher'
 }
 
 jar {
     manifest {
         attributes(
-            'Main-Class': 'vnes.VNESApplication',
+            'Main-Class': 'knes.ComposeLauncher',
             'Permissions': 'all-permissions',
-            'Application-Name': 'vNES'
+            'Application-Name': 'kNES'
         )
     }
 
@@ -122,10 +122,10 @@ task createAppletHtml {
         def htmlContent = """
 <html>
 <head>
-<title>vNES - NES Emulator</title>
+<title>kNES - NES Emulator</title>
 </head>
 <body>
-<applet code="vNES.class" archive="${jarPath}" width="512" height="480">
+<applet code="kNES.class" archive="${jarPath}" width="512" height="480">
 Your browser does not support Java applets.
 </applet>
 </body>
