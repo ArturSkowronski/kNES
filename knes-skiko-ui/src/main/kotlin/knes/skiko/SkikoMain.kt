@@ -70,7 +70,7 @@ class SkikoMain {
         skikoUI.init(nes, screenView)
 
         // Create the main window
-        val frame = JFrame("vNES Emulator - Skiko UI")
+        val frame = JFrame("kNES Emulator - Skiko UI")
         frame.defaultCloseOperation = JFrame.EXIT_ON_CLOSE
         frame.layout = BorderLayout()
 
@@ -84,7 +84,7 @@ class SkikoMain {
         })
 
         // Create the title label
-        val titleLabel = JLabel("vNES Emulator - Skiko UI")
+        val titleLabel = JLabel("kNES Emulator - Skiko UI")
         titleLabel.font = Font("Arial", Font.BOLD, 24)
         titleLabel.horizontalAlignment = JLabel.CENTER
         frame.add(titleLabel, BorderLayout.NORTH)

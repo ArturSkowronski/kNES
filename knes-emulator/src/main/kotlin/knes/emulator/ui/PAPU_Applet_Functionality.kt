@@ -3,7 +3,7 @@ package knes.emulator.ui
 import javax.sound.sampled.SourceDataLine
 
 /**
- * Interface for providing access to the PAPU (Programmable Audio Processing Unit) of the vnes.emulator.NES.
+ * Interface for providing access to the PAPU (Programmable Audio Processing Unit) of the NES.
  * This interface abstracts the PAPU-related functionality from the knes.emulator.NES class.
  */
 interface PAPU_Applet_Functionality {

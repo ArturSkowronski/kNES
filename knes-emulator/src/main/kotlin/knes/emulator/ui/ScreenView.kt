@@ -19,7 +19,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
  * Platform-agnostic interface for screen display operations.
- * This interface defines methods for manipulating and displaying the vnes.emulator.NES screen
+ * This interface defines methods for manipulating and displaying the NES screen
  * without dependencies on specific UI frameworks.
  */
 interface ScreenView {

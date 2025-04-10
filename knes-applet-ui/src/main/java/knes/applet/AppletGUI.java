@@ -45,7 +45,7 @@ public class AppletGUI implements GUI {
     /**
      * Create a new AppletUI for the specified applet.
      *
-     * @param applet The vNES applet
+     * @param applet The kNES applet
      */
     public AppletGUI(AppletMain applet) {
         this.inputCallbacks = new InputCallback[2];

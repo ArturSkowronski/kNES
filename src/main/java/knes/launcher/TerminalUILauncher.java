@@ -1,9 +1,9 @@
-package vnes.launcher;
+package knes.launcher;
 
 /**
- * TerminalUILauncher - A standalone application that launches the vNES emulator with the Terminal UI.
+ * TerminalUILauncher - A standalone application that launches the kNES emulator with the Terminal UI.
  * 
- * This class provides a simple way to launch the Terminal UI implementation of the vNES emulator.
+ * This class provides a simple way to launch the Terminal UI implementation of the kNES emulator.
  * 
  * Note: The Terminal UI module is not included in the main project dependencies,
  * so this launcher attempts to use reflection to invoke the main method of the TerminalMain class.
@@ -14,7 +14,7 @@ public class TerminalUILauncher {
         // Set security manager with permissions
         System.setProperty("java.security.policy", "all.policy");
         
-        System.out.println("Launching vNES with Terminal UI...");
+        System.out.println("Launching kNES with Terminal UI...");
         
         try {
             // Use reflection to invoke the main method of the TerminalMain class

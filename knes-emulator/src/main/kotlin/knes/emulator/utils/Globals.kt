@@ -34,5 +34,5 @@ object Globals {
     @JvmField
     var keycodes: HashMap<String, Int> = HashMap<String, Int>() //Java key codes
     @JvmField
-    var controls: HashMap<String, String> = HashMap<String, String>() //vNES controls codes
+    var controls: HashMap<String, String> = HashMap<String, String>() //kNES controls codes
 }

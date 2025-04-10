@@ -1,13 +1,13 @@
-package vnes.launcher;
+package knes.launcher;
 
 import knes.skiko.SkikoMainKt;
 
 import java.io.File;
 
 /**
- * SkikoUILauncher - A standalone application that launches the vNES emulator with the Skiko UI.
+ * SkikoUILauncher - A standalone application that launches the kNES emulator with the Skiko UI.
  * 
- * This class provides a simple way to launch the Skiko UI implementation of the vNES emulator.
+ * This class provides a simple way to launch the Skiko UI implementation of the kNES emulator.
  */
 public class SkikoLauncher {
     
@@ -22,7 +22,7 @@ public class SkikoLauncher {
         }
         
         // Launch the Skiko UI
-        System.out.println("Launching vNES with Skiko UI...");
+        System.out.println("Launching kNES with Skiko UI...");
         SkikoMainKt.main();
     }
 }

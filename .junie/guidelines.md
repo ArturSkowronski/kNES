@@ -38,7 +38,7 @@ To build the project:
 ./gradlew build
 ```
 
-This will compile the Java sources and create a JAR file in `build/libs/vNES.jar`.
+This will compile the Java sources and create a JAR file in `build/libs/kNES.jar`.
 
 ### Running the Application
 
@@ -51,7 +51,7 @@ There are multiple ways to run the application:
 
 2. **Running the JAR file directly**:
    ```
-   java -jar build/libs/vNES.jar
+   java -jar build/libs/kNES.jar
    ```
 
 3. **Using Gradle runApplet task** (requires Java 8 with appletviewer):

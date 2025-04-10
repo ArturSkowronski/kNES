@@ -59,7 +59,7 @@ class TerminalMain(enablePpuLogging: Boolean = true) {
      * @param args Command line arguments
      */
     fun start(args: Array<String>) {
-        println("vNES Terminal UI")
+        println("kNES Terminal UI")
         println("================")
 
         // Initialize the UI
@@ -71,7 +71,7 @@ class TerminalMain(enablePpuLogging: Boolean = true) {
             romPath = args[0]
         }
 
-        // If no ROM file was specified, look for vnes.nes in the current directory
+        // If no ROM file was specified, look for knes.nes in the current directory
         if (romPath == null) {
             val defaultRom = File("knes.nes")
             if (defaultRom.exists()) {

@@ -1,13 +1,13 @@
-package vnes.launcher;
+package knes.launcher;
 
 import knes.compose.ComposeMainKt;
 
 import java.io.File;
 
 /**
- * ComposeUILauncher - A standalone application that launches the vNES emulator with the Compose UI.
+ * ComposeUILauncher - A standalone application that launches the kNES emulator with the Compose UI.
  * 
- * This class provides a simple way to launch the Compose UI implementation of the vNES emulator.
+ * This class provides a simple way to launch the Compose UI implementation of the kNES emulator.
  */
 public class ComposeLauncher {
     
@@ -22,7 +22,7 @@ public class ComposeLauncher {
         }
         
         // Launch the Compose UI
-        System.out.println("Launching vNES with Compose UI...");
+        System.out.println("Launching kNES with Compose UI...");
         ComposeMainKt.main();
     }
 }

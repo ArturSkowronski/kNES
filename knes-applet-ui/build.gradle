@@ -40,7 +40,7 @@ jar {
         attributes(
             'Main-Class': 'knes.applet.AppletLauncher',
             'Permissions': 'all-permissions',
-            'Application-Name': 'vNES Applet'
+            'Application-Name': 'kNES Applet'
         )
     }
 

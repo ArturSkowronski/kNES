@@ -76,15 +76,15 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 application {
-    mainClass = 'knes.VNESApplication'
+    mainClass = 'knes.ComposeLauncher'
 }
 
 jar {
     manifest {
         attributes(
-            'Main-Class': 'knes.VNESApplication',
+            'Main-Class': 'knes.ComposeLauncher',
             'Permissions': 'all-permissions',
-            'Application-Name': 'vNES'
+            'Application-Name': 'kNES'
         )
     }
 
@@ -122,10 +122,10 @@ task createAppletHtml {
         def htmlContent = """
 <html>
 <head>
-<title>vNES - NES Emulator</title>
+<title>kNES - NES Emulator</title>
 </head>
 <body>
-<applet code="vNES.class" archive="${jarPath}" width="512" height="480">
+<applet code="kNES.class" archive="${jarPath}" width="512" height="480">
 Your browser does not support Java applets.
 </applet>
 </body>

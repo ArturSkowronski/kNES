@@ -33,11 +33,11 @@ Game developers created different mapper designs to meet various requirements:
 4. **Mapper 4 (MMC3)**: A sophisticated mapper with IRQ capabilities, used in games like Super Mario Bros. 3.
 5. **Mapper 7 (AxROM)**: A simple mapper with a single switchable PRG-ROM bank and single-screen mirroring.
 
-Each mapper implementation in the vNES codebase extends the `MapperDefault` class and overrides specific methods to implement its unique memory mapping scheme.
+Each mapper implementation in the kNES codebase extends the `MapperDefault` class and overrides specific methods to implement its unique memory mapping scheme.
 
-## How Mappers are Selected in vNES
+## How Mappers are Selected in kNES
 
-In the vNES emulator, the appropriate mapper is selected based on information in the ROM header:
+In the kNES emulator, the appropriate mapper is selected based on information in the ROM header:
 
 1. When a ROM is loaded, the emulator reads the mapper type from the ROM header (bytes 6 and 7).
 2. The `ROM.createMapper()` method creates an instance of the appropriate mapper class based on this type.
@@ -63,6 +63,6 @@ Without the correct mapper implementation, a game might:
 
 The need for multiple mappers in NES emulation stems from the hardware diversity of original NES cartridges. Game developers created various mapper designs to overcome the memory limitations of the NES and implement special features. To accurately emulate these games, an emulator must implement all these different mapper types.
 
-The vNES emulator demonstrates this by implementing over 30 different mapper types, each with its own memory mapping scheme and special features. This allows the emulator to support a wide range of NES games, from simple games using the basic NROM mapper to complex games using sophisticated mappers like MMC3 or MMC5.
+The kNES emulator demonstrates this by implementing over 30 different mapper types, each with its own memory mapping scheme and special features. This allows the emulator to support a wide range of NES games, from simple games using the basic NROM mapper to complex games using sophisticated mappers like MMC3 or MMC5.
 
 Understanding the role of mappers is crucial for NES emulation, as they represent a significant part of what made each NES game unique from a hardware perspective.

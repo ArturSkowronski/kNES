@@ -1,4 +1,4 @@
-package vnes.launcher;
+package knes.launcher;
 import knes.applet.AppletMain;
 
 import java.applet.*;
@@ -10,10 +10,10 @@ import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
 /**
- * AppletLauncher - A standalone application that can run the vNES applet
+ * AppletLauncher - A standalone application that can run the kNES applet
  * without requiring a browser or appletviewer.
  * 
- * This class creates a JFrame and embeds the vNES applet in it, providing
+ * This class creates a JFrame and embeds the kNES applet in it, providing
  * an AppletStub implementation to handle applet parameters.
  */
 public class AppletLauncher {
@@ -29,7 +29,7 @@ public class AppletLauncher {
         SwingUtilities.invokeLater(() -> {
             try {
                 // Create a JFrame to host the applet
-                frame = new JFrame("vNES - NES Emulator");
+                frame = new JFrame("kNES - NES Emulator");
                 frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
                 frame.setSize(512, 480);
                 
@@ -52,9 +52,9 @@ public class AppletLauncher {
                 // Show the frame
                 frame.setVisible(true);
                 
-                System.out.println("vNES Applet Launcher started successfully");
+                System.out.println("kNES Applet Launcher started successfully");
             } catch (Exception e) {
-                System.err.println("Error launching vNES applet: " + e.getMessage());
+                System.err.println("Error launching kNES applet: " + e.getMessage());
                 e.printStackTrace();
             }
         });
@@ -111,9 +111,9 @@ public class AppletLauncher {
     
     private static void launchEmulator(String romPath) {
         try {
-            // Copy the selected ROM file to vnes.nes in the project root
+            // Copy the selected ROM file to knes.nes in the project root
             File sourceRom = new File(romPath);
-            File targetRom = new File("vnes.nes");
+            File targetRom = new File("knes.nes");
             
             if (sourceRom.exists()) {
                 // Copy the ROM file to knes.nes
@@ -137,7 +137,7 @@ public class AppletLauncher {
             applet = new AppletMain();
             
             // Create and set the AppletStub with the ROM path
-            stub = new AppletStubImpl(applet, "vnes.nes");
+            stub = new AppletStubImpl(applet, "knes.nes");
             applet.setStub(stub);
             
             // Initialize the applet
@@ -170,7 +170,7 @@ public class AppletLauncher {
             this.applet = applet;
             this.parameters = new HashMap<>();
             
-            // Add default parameters that the vNES applet might need
+            // Add default parameters that the kNES applet might need
             parameters.put("ROMPATH", "roms/");
             parameters.put("ROM", romPath != null ? new File(romPath).getName() : "");
             parameters.put("SCALE", "1");

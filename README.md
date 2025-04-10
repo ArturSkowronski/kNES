@@ -1,6 +1,6 @@
 # kNES - Kotlin NES Emulator
 
-vNES is a Nintendo Entertainment System (NES) emulator written in Java and Kotlin.
+kNES is a Nintendo Entertainment System (NES) emulator written in Java and Kotlin.
 
 ## Project Structure
 

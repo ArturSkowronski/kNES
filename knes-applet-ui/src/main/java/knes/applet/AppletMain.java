@@ -110,7 +110,7 @@ public class AppletMain extends Applet implements Runnable {
             nes.getPpu().setShowSoundBuffer(properties.isShowsoundbuffer());
 
             // Start emulation:
-            //System.out.println("vNES is now starting the processor.");
+            //System.out.println("kNES is now starting the processor.");
             nes.beginExecution();
 
         } else {
@@ -173,7 +173,7 @@ public class AppletMain extends Applet implements Runnable {
         } else {
             pad = "";
         }
-        disp = "vNES is Loading Game... " + pad + progress + "%";
+        disp = "kNES is Loading Game... " + pad + progress + "%";
 
         // Measure text:
         g.setFont(progressFont);

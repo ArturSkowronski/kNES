@@ -4,7 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * POJO class to store all parameters from vNES.readParams.
+ * POJO class to store all parameters from kNES.readParams.
  */
 public class Properties {
     private String rom;
