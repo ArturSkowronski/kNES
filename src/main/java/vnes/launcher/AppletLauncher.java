@@ -1,5 +1,5 @@
 package vnes.launcher;
-import vnes.applet.AppletMain;
+import knes.applet.AppletMain;
 
 import java.applet.*;
 import java.awt.*;

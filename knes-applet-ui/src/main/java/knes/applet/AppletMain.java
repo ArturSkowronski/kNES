@@ -1,4 +1,4 @@
-package vnes.applet;
+package knes.applet;
 /*
 vNES
 Copyright © 2006-2013 Open Emulation Project
@@ -20,7 +20,7 @@ import java.applet.*;
 import java.awt.*;
 import java.util.Map;
 
-import vnes.applet.utils.Properties;
+import knes.applet.utils.Properties;
 import vnes.emulator.NES;
 import vnes.emulator.utils.Globals;
 
