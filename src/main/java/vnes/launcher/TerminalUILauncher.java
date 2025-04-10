@@ -20,12 +20,12 @@ public class TerminalUILauncher {
         
         try {
             // Use reflection to invoke the main method of the TerminalMain class
-            Class<?> terminalMainClass = Class.forName("vnes.terminal.TerminalMainKt");
+            Class<?> terminalMainClass = Class.forName("knes.terminal.TerminalMainKt");
             java.lang.reflect.Method mainMethod = terminalMainClass.getMethod("main", String[].class);
             mainMethod.invoke(null, (Object) args);
         } catch (ClassNotFoundException e) {
             System.err.println("Error: Terminal UI module not found in the classpath.");
-            System.err.println("Please make sure the vnes-terminal-ui module is included in the project dependencies.");
+            System.err.println("Please make sure the knes-terminal-ui module is included in the project dependencies.");
             System.exit(1);
         } catch (Exception e) {
             System.err.println("Error launching Terminal UI: " + e.getMessage());

@@ -50,14 +50,14 @@ sourceSets {
 }
 
 application {
-    mainClass = 'vnes.terminal.TerminalMainKt'
+    mainClass = 'knes.terminal.TerminalMainKt'
 }
 
 jar {
     manifest {
         attributes(
-            'Main-Class': 'vnes.terminal.TerminalMainKt',
-            'Application-Name': 'vNES Terminal'
+            'Main-Class': 'knes.terminal.TerminalMainKt',
+            'Application-Name': 'kNES Terminal'
         )
     }
 

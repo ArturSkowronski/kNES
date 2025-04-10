@@ -9,7 +9,7 @@ rootProject.name = 'vNES'
 include 'vnes-emulator'
 include 'knes-applet-ui'
 include 'knes-skiko-ui'
-include 'vnes-terminal-ui'
+include 'knes-terminal-ui'
 
 // Define a property to control whether to include the Compose UI module
 // This can be set via command line: ./gradlew -PincludeComposeUI=true

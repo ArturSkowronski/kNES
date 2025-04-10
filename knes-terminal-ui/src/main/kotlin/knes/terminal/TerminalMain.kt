@@ -1,4 +1,4 @@
-package vnes.terminal
+package knes.terminal
 
 /*
 vNES
