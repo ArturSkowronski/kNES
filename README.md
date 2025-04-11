@@ -89,6 +89,10 @@ The core emulator is contained in the `knes-emulator` module and provides the fo
 ### UI Abstraction
 
 The UI abstraction is provided by the `NESUIFactory` interface, which allows different UI implementations to be plugged into the core emulator. The interface provides methods for creating UI components such as input handlers and screen views.
+
+### Control Abstraction
+
+Next Step
  
 ## License
 
