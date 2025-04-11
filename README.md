@@ -17,6 +17,11 @@ kNES is a reimplementation and extension of the vNES emulator (originally develo
 
 This project is distributed under the GNU General Public License v3.0 (GPL-3.0), ensuring it remains free and open source.
 
+## Current Limitations
+
+- Supports only basic mapper (will elaborate more in the future, why)
+- Do not clean memory upon start, which messes up some games (check releases)... but this is a feature I want to build upon in future ;) 
+
 ## Project Structure
 
 The project is organized into the following modules:
