@@ -1,20 +1,17 @@
-package knes.applet;
 /*
-vNES
-Copyright © 2006-2013 Open Emulation Project
-
-This program is free software: you can redistribute it and/or modify it under
-the terms of the GNU General Public License as published by the Free Software
-Foundation, either version 3 of the License, or (at your option) any later
-version.
-
-This program is distributed in the hope that it will be useful, but WITHOUT ANY
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License along with
-this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *  * Copyright (C) 2025 Artur Skowroński
+ *  * This file is part of kNES, a fork of vNES (GPLv3) rewritten in Kotlin.
+ *  *
+ *  * vNES was originally developed by Brian F. R. (bfirsh) and released under the GPL-3.0 license.
+ *  * This project is a reimplementation and extension of that work.
+ *  *
+ *  * kNES is licensed under the GNU General Public License v3.0.
+ *  * See the LICENSE file for more details.
+ *
  */
+
+package knes.applet;
 
 import java.applet.*;
 import java.awt.*;
@@ -94,8 +91,7 @@ public class AppletMain extends Applet implements Runnable {
         started = true;
 
         // Load ROM file:
-        System.out.println("vNES 2.16 \u00A9 2006-2013 Open Emulation Project");
-        System.out.println("For updates, visit www.openemulation.com");
+        System.out.println("kNES 1.0 \u00A9 2025 Artur Skowronski");
         System.out.println("Use of this program subject to GNU GPL, Version 3.");
 
         nes.loadRom(rom);
@@ -116,7 +112,7 @@ public class AppletMain extends Applet implements Runnable {
         } else {
 
             // ROM file was invalid.
-            System.out.println("vNES was unable to find (" + rom + ").");
+            System.out.println("kNES was unable to find (" + rom + ").");
 
         }
 
@@ -185,7 +181,7 @@ public class AppletMain extends Applet implements Runnable {
         g.setColor(Color.white);
         g.drawString(disp, scrw / 2 - txtw / 2, scrh / 2 - txth / 2);
         g.drawString(disp, scrw / 2 - txtw / 2, scrh / 2 - txth / 2);
-        g.drawString("vNES \u00A9 2006-2013 Open Emulation Project", 12, 464);
+        g.drawString("kNES \u00A9 2006-2013 Open Emulation Project", 12, 464);
     }
 
     public Properties readParams() {
