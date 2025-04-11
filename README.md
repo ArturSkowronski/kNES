@@ -1,15 +1,31 @@
 # kNES - Kotlin NES Emulator
 
-kNES is a Nintendo Entertainment System (NES) emulator written in Java and Kotlin.
+![image](https://github.com/user-attachments/assets/a2cc58bf-5a42-4f47-9b54-cfa6630cdb25)
+
+kNES is a Nintendo Entertainment System (NES) emulator written in Kotlin, forked from the vNES Java emulator. This project was created primarily for fun and educational purposes, allowing developers to learn about emulation techniques and NES hardware while enjoying classic games.
+
+![Gradle Build](https://github.com/ArturSkowronski/kNES/actions/workflows/build.yml/badge.svg)
+
+## About This Project
+
+kNES is a reimplementation and extension of the vNES emulator (originally developed by Brian F. R.) in Kotlin. The project aims to:
+
+- Provide a modern, Kotlin-based NES emulator
+- Serve as an educational resource for those interested in emulation
+- Demonstrate different UI implementation approaches in the JVM ecosystem
+- Have fun with retro gaming and programming!
+
+This project is distributed under the GNU General Public License v3.0 (GPL-3.0), ensuring it remains free and open source.
 
 ## Project Structure
 
 The project is organized into the following modules:
 
 - **knes-emulator**: Core emulator functionality, including CPU, PPU, memory, and mappers.
-- **knes-applet-ui**: Java Applet-based UI for the emulator.
-- **knes-compose-ui**: Jetpack Compose-based UI for the emulator.
-- **Main Module**: Launcher application that allows choosing between different UIs.
+- **knes-applet-ui**: Java Applet-based UI for the emulator (legacy support).
+- **knes-compose-ui**: Jetpack Compose-based UI for the emulator (modern desktop UI).
+- **knes-terminal-ui**: Terminal-based UI for the emulator (text-based interface) - slow AF, but freaking fun.
+- **knes-skiko-ui**: Skiko-based UI for the emulator (Kotlin multiplatform graphics).
 
 ## Building and Running
 
@@ -30,18 +46,24 @@ The project is organized into the following modules:
 ./gradlew run
 ```
 
-This will launch the main application, which allows choosing between the Applet UI and the Compose UI.
+This will launch the main application, which allows choosing between the different UI implementations.
 
-### Running the Applet UI directly
+### Running Specific UIs
+
+You can run specific UI implementations directly:
 
 ```bash
+# Applet UI
 ./gradlew :knes-applet-ui:run
-```
 
-### Running the Compose UI directly
-
-```bash
+# Compose UI
 ./gradlew :knes-compose-ui:run
+
+# Terminal UI
+./gradlew :knes-terminal-ui:run
+
+# Skiko UI
+./gradlew :knes-skiko-ui:run
 ```
 
 ## Architecture
@@ -60,14 +82,9 @@ The core emulator is contained in the `knes-emulator` module and provides the fo
 ### UI Abstraction
 
 The UI abstraction is provided by the `NESUIFactory` interface, which allows different UI implementations to be plugged into the core emulator. The interface provides methods for creating UI components such as input handlers and screen views.
-
-### UI Implementations
-
-The project provides two UI implementations:
-
-- **Applet UI**: A Java Applet-based UI for the emulator.
-- **Compose UI**: A Jetpack Compose-based UI for the emulator.
-
+ 
 ## License
 
-This project is licensed under the GNU General Public License v3.0 - see the LICENSE file for details.
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+
+vNES was originally developed by Brian F. R. (bfirsh) and released under the GPL-3.0 license. This project is a reimplementation and extension of that work.
