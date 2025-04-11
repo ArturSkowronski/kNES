@@ -11,6 +11,8 @@ The project is organized into the following modules:
 - **knes-compose-ui**: Jetpack Compose-based UI for the emulator.
 - **Main Module**: Launcher application that allows choosing between different UIs.
 
+https://github.com/user-attachments/assets/9036ae9a-3be8-43ec-8050-3a47b29d1648
+
 ## Building and Running
 
 ### Prerequisites
