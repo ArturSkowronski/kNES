@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import knes.controllers.KeyboardController
 import kotlinx.coroutines.delay
 import knes.emulator.NES
 import java.awt.event.KeyEvent
@@ -121,11 +122,12 @@ fun main() = application {
     // Create the UI factory and components
     val uiFactory = remember { ComposeUIFactory() }
     val screenView = remember { uiFactory.createScreenView(2) as ComposeScreenView }
-    val nes = remember { NES(uiFactory, screenView) }
+    val controller = remember { KeyboardController() }
+    val nes = remember { NES(uiFactory, screenView, controller) }
     val composeUI = remember { uiFactory.getComposeUI() }
 
-    // Get the input handler from the UI factory
-    val inputHandler = remember { uiFactory.createInputHandler() as ComposeInputHandler }
+    // Get the input handler from the UI factory using the new controller system
+    val inputHandler = remember { uiFactory.createInputHandler(controller) as ComposeInputHandler }
 
     // Initialize the UI with the NES instance and screen view
     LaunchedEffect(Unit) {

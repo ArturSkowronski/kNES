@@ -33,6 +33,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 import knes.emulator.input.InputHandler
 import knes.emulator.ui.NESUIFactory
 import knes.emulator.ui.ScreenView
+import knes.controllers.ControllerProvider
 
 /**
  * Factory for creating Compose UI components for the NES emulator.
@@ -43,10 +44,10 @@ class ComposeUIFactory : NESUIFactory {
 
     /**
      * Creates an input handler for the NES emulator.
-     * 
+     *
      * @return An InputHandler implementation
      */
-    override fun createInputHandler(): InputHandler {
+    override fun createInputHandler(controller: ControllerProvider): InputHandler {
         if (inputHandler == null) {
             inputHandler = ComposeInputHandler()
         }

@@ -30,6 +30,7 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import knes.controllers.KeyboardController
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skia.Paint
 import org.jetbrains.skia.Rect
@@ -69,7 +70,7 @@ fun main() {
 class SkikoMain {
     private val uiFactory = SkikoUIFactory()
     private val screenView = uiFactory.createScreenView(2) as SkikoScreenView
-    private val nes = NES(uiFactory, screenView)
+    private val nes = NES(uiFactory, screenView, KeyboardController())
     private val skikoUI = uiFactory.getSkikoUI()
 
     private var isEmulatorRunning = false

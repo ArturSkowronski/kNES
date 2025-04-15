@@ -24,6 +24,7 @@ repositories {
 
 dependencies {
     implementation project(':knes-emulator')
+    implementation project(':knes-controllers')
     implementation "org.jetbrains.kotlin:kotlin-stdlib"
 
     // Skiko dependency for hardware-accelerated rendering

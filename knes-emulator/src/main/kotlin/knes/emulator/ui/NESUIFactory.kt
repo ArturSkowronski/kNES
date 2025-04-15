@@ -14,6 +14,7 @@
 package knes.emulator.ui
 
 import knes.emulator.input.InputHandler
+import knes.controllers.ControllerProvider
 
 /**
  * Factory interface for creating UI components for the knes.emulator.NES emulator.
@@ -23,10 +24,10 @@ interface NESUIFactory {
     /**
      * Creates a UI controller that handles input and lifecycle management
      *
-     * @param nes The NES instance to associate with the input handler
+     * @param controller The controller provider to use for input
      * @return An InputHandler implementation
      */
-    fun createInputHandler(): InputHandler?
+    fun createInputHandler(controller: ControllerProvider): InputHandler
 
     /**
      * Creates a rendering surface that implements ScreenView interface

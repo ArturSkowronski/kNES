@@ -13,6 +13,7 @@
 
 package knes.emulator
 
+import knes.controllers.ControllerProvider
 import knes.emulator.cpu.CPU
 import knes.emulator.mappers.MemoryMapper
 import knes.emulator.memory.MemoryAccess
@@ -75,10 +76,11 @@ class NES {
      *
      * @param uiFactory The factory to create UI components
      * @param screenView The screen view to use
+     * @param controller The controller provider to use for input
      */
-    constructor(uiFactory: NESUIFactory, screenView: ScreenView) {
-        val inputHandler = uiFactory.createInputHandler()
-        this.gui = GUIAdapter(inputHandler!!, screenView)
+    constructor(uiFactory: NESUIFactory, screenView: ScreenView, controller: ControllerProvider) {
+        val inputHandler = uiFactory.createInputHandler(controller)
+        this.gui = GUIAdapter(inputHandler, screenView)
         initializeConstructor()
     }
 
