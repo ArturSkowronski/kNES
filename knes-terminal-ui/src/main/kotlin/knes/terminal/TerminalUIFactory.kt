@@ -13,6 +13,8 @@
 
 package knes.terminal
 
+import knes.controllers.ControllerProvider
+import knes.controllers.KeyboardController
 import knes.emulator.input.InputHandler
 import knes.emulator.ui.NESUIFactory
 import knes.emulator.ui.ScreenView
@@ -28,7 +30,7 @@ class TerminalUIFactory : NESUIFactory {
      * 
      * @return An InputHandler implementation
      */
-    override fun createInputHandler(): InputHandler {
+    override fun createInputHandler(controller: ControllerProvider): InputHandler {
         return TerminalInputHandler()
     }
 

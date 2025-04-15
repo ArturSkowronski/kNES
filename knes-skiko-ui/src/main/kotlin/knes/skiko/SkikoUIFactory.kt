@@ -30,6 +30,8 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import knes.controllers.ControllerProvider
+import knes.controllers.KeyboardController
 import knes.emulator.input.InputHandler
 import knes.emulator.ui.NESUIFactory
 import knes.emulator.ui.ScreenView
@@ -45,7 +47,7 @@ class SkikoUIFactory : NESUIFactory {
      * 
      * @return An InputHandler implementation
      */
-    override fun createInputHandler(): InputHandler {
+    override fun createInputHandler(controller: ControllerProvider): InputHandler {
         return SkikoInputHandler()
     }
 

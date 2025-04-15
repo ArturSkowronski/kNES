@@ -13,6 +13,7 @@
 
 package knes.terminal
 
+import knes.controllers.KeyboardController
 import knes.emulator.NES
 import java.io.File
 import javax.swing.JFileChooser
@@ -41,7 +42,7 @@ fun main(args: Array<String>) {
 class TerminalMain(enablePpuLogging: Boolean = true) {
     private val uiFactory = TerminalUIFactory()
     private val screenView = uiFactory.createScreenView(1) as TerminalScreenView
-    private val nes = NES(uiFactory, screenView)
+    private val nes = NES(uiFactory, screenView, KeyboardController())
     private val terminalUI = uiFactory.getTerminalUI()
 
     init {
