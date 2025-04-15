@@ -209,7 +209,7 @@ class SkikoMain {
         skiaLayer.requestFocus()
 
         // Register the input handler with the Skia layer
-        val inputHandler = uiFactory.createInputHandler() as SkikoInputHandler
+        val inputHandler = uiFactory.createInputHandler(/**/KeyboardController()) as SkikoInputHandler
         inputHandler.registerKeyAdapter(skiaLayer)
 
         // Set the callback for when a new frame is ready

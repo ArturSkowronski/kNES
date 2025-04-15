@@ -49,7 +49,7 @@ class ComposeUIFactory : NESUIFactory {
      */
     override fun createInputHandler(controller: ControllerProvider): InputHandler {
         if (inputHandler == null) {
-            inputHandler = ComposeInputHandler()
+            inputHandler = ComposeInputHandler(controller)
         }
         return inputHandler!!
     }
