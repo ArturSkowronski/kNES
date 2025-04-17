@@ -40,7 +40,7 @@ public class AppletMain extends Applet implements Runnable {
 
         AppletGUI gui = new AppletGUI(this);
 
-        nes = new NES(gui);
+        nes = new NES(gui, null, null, null);
         nes.enableSound(properties.isSound());
         nes.reset();
 
@@ -96,7 +96,7 @@ public class AppletMain extends Applet implements Runnable {
 
         nes.loadRom(rom);
 
-        if (nes.getRom().isValid()) {
+        if (nes.isRomLoaded()) {
 
             // Add the screen buffer:
             addScreenView();
