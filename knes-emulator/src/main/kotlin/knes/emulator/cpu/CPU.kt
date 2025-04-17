@@ -59,7 +59,6 @@ class CPU // Constructor:
 
     // Initialize:
     fun init(
-        memoryAccess: MemoryAccess?,
         cpuMemoryAccess: Memory
     ) {
         // Get Op data:
@@ -67,7 +66,6 @@ class CPU // Constructor:
         opdata = CpuInfo.opData
 
         // Get Memory Access:
-        this.mmap = memoryAccess
         this.mem = cpuMemoryAccess.mem
         // Reset crash flag:
         crash = false

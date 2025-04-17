@@ -220,7 +220,6 @@ class PPU : PPUCycles {
         sprMem: knes.emulator.Memory?,
         cpuMem: knes.emulator.Memory,
         cpu: knes.emulator.cpu.CPU,
-        memoryMapper: knes.emulator.mappers.MemoryMapper?,
         sourceDataLine: SourceDataLine?,
         palTable: knes.emulator.utils.PaletteTable
     ) {
@@ -230,7 +229,6 @@ class PPU : PPUCycles {
         this.cpuMem = cpuMem
         this.cpu = cpu
         this.sourceDataLine = sourceDataLine
-        this.memoryMapper = memoryMapper
         this.palTable = palTable
 
         updateControlReg1(0)
@@ -1960,7 +1958,6 @@ class PPU : PPUCycles {
             sprMem,
             cpuMem!!,
             cpu!!,
-            memoryMapper,
             sourceDataLine,
             palTable!!
         )

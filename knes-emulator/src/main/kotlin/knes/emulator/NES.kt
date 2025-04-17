@@ -16,7 +16,6 @@ package knes.emulator
 import knes.controllers.ControllerProvider
 import knes.emulator.cpu.CPU
 import knes.emulator.mappers.MemoryMapper
-import knes.emulator.memory.MemoryAccess
 import knes.emulator.papu.PAPU
 import knes.emulator.ppu.PPU
 import knes.emulator.producers.ChannelRegistryProducer
@@ -44,12 +43,13 @@ class NES(
     val cpuMemory: Memory = Memory(0x10000) // Main memory (internal to CPU)
     val ppuMemory: Memory = Memory(0x8000) // VRAM memory (internal to PPU)
     val sprMemory: Memory = Memory(0x100) // Sprite RAM  (internal to PPU)
-    var memoryMapper: MemoryMapper? = null
+
     val palTable: PaletteTable
 
     var isRunning: Boolean = false
-    var loadedRom: ROM? = null
-    private var romFile: String? = null
+    var isRomLoaded: Boolean = false
+
+    var memoryMapper: MemoryMapper? = null
 
     init {
         this.gui = gui ?: run {
@@ -64,16 +64,15 @@ class NES(
         palTable = PaletteTable()
         cpu = CPU(papu, ppu)
 
-        cpu.init(this.memoryAccess, this.cpuMemory)
+        cpu.init(cpuMemory)
         ppu.init(
-            this.gui!!,
-            this.ppuMemory,
-            this.sprMemory,
-            this.cpuMemory,
-            this.cpu,
-            this.memoryMapper,
-            this.papu.line,
-            this.palTable
+            gui!!,
+            ppuMemory,
+            sprMemory,
+            cpuMemory,
+            cpu,
+            papu.line,
+            palTable
         )
 
         papu.init(ChannelRegistryProducer())
@@ -144,7 +143,7 @@ class NES(
             papu.start()
         }
 
-        if (loadedRom != null && loadedRom!!.isValid() && !cpu.isRunning) {
+        if (isRomLoaded && !cpu.isRunning) {
             cpu.beginExecution()
             isRunning = true
         }
@@ -158,12 +157,6 @@ class NES(
 
         if (Globals.enableSound && papu.isRunning) {
             papu.stop()
-        }
-    }
-
-    fun reloadRom() {
-        if (romFile != null) {
-            loadRom(romFile!!)
         }
     }
 
@@ -187,9 +180,6 @@ class NES(
         }
     }
 
-    val memoryAccess: MemoryAccess?
-        get() = this.memoryMapper
-
     fun loadRom(file: String): Boolean {
         if (isRunning) {
             stopEmulation()
@@ -207,17 +197,18 @@ class NES(
             val mapperProducer = MapperProducer(Consumer { message: String? -> gui?.showErrorMsg(message!!) })
             val memoryMapper = mapperProducer.produce(this, rom as ROMData)
 
+            memoryMapper.loadROM(rom)
+
             cpu.setMapper(memoryMapper)
             ppu.setMapper(memoryMapper)
-            memoryMapper.loadROM(rom)
 
             ppu.setMirroring(rom.mirroringType)
 
             this.memoryMapper = memoryMapper
-            this.romFile = file
         }
-        loadedRom = rom
-        return rom.isValid()
+
+        isRomLoaded = rom.isValid()
+        return isRomLoaded
     }
 
     fun reset() {
@@ -225,18 +216,15 @@ class NES(
         cpuMemory.reset()
         ppuMemory.reset()
         sprMemory.reset()
-
         clearCPUMemory()
 
         cpu.reset()
-        cpu.init(
-            this.memoryAccess,
-            this.cpuMemory
-        )
+        cpu.init(cpuMemory)
         ppu.reset()
         palTable.reset()
         papu.reset(this)
         gui!!.getJoy1().reset()
+
     }
 
     fun beginExecution() {
