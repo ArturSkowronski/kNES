@@ -123,7 +123,7 @@ fun main() = application {
     val uiFactory = remember { ComposeUIFactory() }
     val screenView = remember { uiFactory.createScreenView(2) as ComposeScreenView }
     val controller = remember { KeyboardController() }
-    val nes = remember { NES(uiFactory, screenView, controller) }
+    val nes = remember { NES(null, uiFactory, screenView, controller) }
     val composeUI = remember { uiFactory.getComposeUI() }
 
     // Get the input handler from the UI factory using the new controller system

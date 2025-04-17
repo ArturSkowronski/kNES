@@ -92,18 +92,4 @@ class ComposeUI {
     fun loadRom(path: String): Boolean {
         return nes?.loadRom(path) ?: false
     }
-
-    /**
-     * Cleans up resources.
-     */
-    fun destroy() {
-        screenView?.destroy()
-        screenView = null
-
-        inputHandler?.destroy()
-        inputHandler = null
-
-        nes?.destroy()
-        nes = null
-    }
 }

@@ -28,115 +28,83 @@ import knes.emulator.ui.NESUIFactory
 import knes.emulator.ui.ScreenView
 import knes.emulator.utils.Globals
 import knes.emulator.utils.PaletteTable
-import java.util.Random
+import java.util.*
 import java.util.function.Consumer
 
-class NES {
-    var gui: GUI?
-        private set
-    var cpu: CPU? = null
-        private set
-    var ppu: PPU? = null
-        private set
-    var papu: PAPU? = null
-        private set
-
-    var cpuMemory: Memory? = null
-        private set
-    var ppuMemory: Memory? = null
-        private set
-    var sprMemory: Memory? = null
-        private set
-
+class NES(
+    var gui: GUI? = null,
+    private val uiFactory: NESUIFactory? = null,
+    private val screenView: ScreenView? = null,
+    private val controller: ControllerProvider? = null
+) {
+    val cpu: CPU
+    val ppu: PPU
+    val papu: PAPU
+    val cpuMemory: Memory = Memory(0x10000) // Main memory (internal to CPU)
+    val ppuMemory: Memory = Memory(0x8000) // VRAM memory (internal to PPU)
+    val sprMemory: Memory = Memory(0x100) // Sprite RAM  (internal to PPU)
     var memoryMapper: MemoryMapper? = null
-        private set
-
-    var palTable: PaletteTable? = null
-        private set
-
-    var rom: ROM? = null
-        private set
-    private var romFile: String? = null
+    val palTable: PaletteTable
 
     var isRunning: Boolean = false
-        private set
+    var loadedRom: ROM? = null
+    private var romFile: String? = null
 
-    /**
-     * Constructor that takes a GUI directly.
-     *
-     * @param gui The GUI implementation to use
-     */
-    constructor(gui: GUI?) {
-        this.gui = gui
-        initializeConstructor()
-    }
-
-    /**
-     * Constructor that creates a GUI using a factory and screen view.
-     *
-     * @param uiFactory The factory to create UI components
-     * @param screenView The screen view to use
-     * @param controller The controller provider to use for input
-     */
-    constructor(uiFactory: NESUIFactory, screenView: ScreenView, controller: ControllerProvider) {
-        val inputHandler = uiFactory.createInputHandler(controller)
-        this.gui = GUIAdapter(inputHandler, screenView)
-        initializeConstructor()
-    }
-
-    /**
-     * Initialize common components used by all constructors.
-     */
-    private fun initializeConstructor() {
-        this.cpuMemory = Memory(0x10000) // Main memory (internal to CPU)
-        this.ppuMemory = Memory(0x8000) // VRAM memory (internal to PPU)
-        this.sprMemory = Memory(0x100) // Sprite RAM  (internal to PPU)
+    init {
+        this.gui = gui ?: run {
+            requireNotNull(uiFactory) { "Either gui or uiFactory must be provided" }
+            requireNotNull(screenView) { "ScreenView must be provided when using uiFactory" }
+            requireNotNull(controller) { "Controller must be provided when using uiFactory" }
+            GUIAdapter(uiFactory.createInputHandler(controller), screenView)
+        }
 
         ppu = PPU()
         papu = PAPU(this)
         palTable = PaletteTable()
-        cpu = CPU(papu!!, ppu!!)
+        cpu = CPU(papu, ppu)
 
-        cpu!!.init(this.memoryAccess, this.cpuMemory!!)
-        ppu!!.init(
+        cpu.init(this.memoryAccess, this.cpuMemory)
+        ppu.init(
             this.gui!!,
             this.ppuMemory,
             this.sprMemory,
-            this.cpuMemory!!,
-            this.cpu!!,
+            this.cpuMemory,
+            this.cpu,
             this.memoryMapper,
-            this.papu!!.line,
-            this.palTable!!
+            this.papu.line,
+            this.palTable
         )
 
-        papu!!.init(ChannelRegistryProducer())
-        papu!!.irqRequester = cpu!!
-        palTable!!.init()
+        papu.init(ChannelRegistryProducer())
+        papu.irqRequester = cpu
+        palTable.init()
 
         enableSound(true)
 
         clearCPUMemory()
     }
 
-    val screenView: ScreenView
-        get() = gui!!.getScreenView()
+
+    fun getScreenView(): ScreenView {
+        return gui!!.getScreenView()
+    }
 
     fun stateLoad(buf: ByteBuffer): Boolean {
         var continueEmulation = false
         val success: Boolean
 
-        if (cpu!!.isRunning) {
+        if (cpu.isRunning) {
             continueEmulation = true
             stopEmulation()
         }
 
         if (buf.readByte().toInt() == 1) {
-            cpuMemory!!.stateLoad(buf)
-            ppuMemory!!.stateLoad(buf)
-            sprMemory!!.stateLoad(buf)
-            cpu!!.stateLoad(buf)
-            memoryMapper!!.stateLoad(buf)
-            ppu!!.stateLoad(buf)
+            cpuMemory.stateLoad(buf)
+            ppuMemory.stateLoad(buf)
+            sprMemory.stateLoad(buf)
+            cpu.stateLoad(buf)
+            memoryMapper?.stateLoad(buf)
+            ppu.stateLoad(buf)
             success = true
         } else {
             success = false
@@ -157,12 +125,12 @@ class NES {
         buf.putByte(1.toShort())
 
         // Let units save their state:
-        cpuMemory!!.stateSave(buf)
-        ppuMemory!!.stateSave(buf)
-        sprMemory!!.stateSave(buf)
-        cpu!!.stateSave(buf)
-        memoryMapper!!.stateSave(buf)
-        ppu!!.stateSave(buf)
+        cpuMemory.stateSave(buf)
+        ppuMemory.stateSave(buf)
+        sprMemory.stateSave(buf)
+        cpu.stateSave(buf)
+        memoryMapper?.stateSave(buf)
+        ppu.stateSave(buf)
 
         // Continue emulation:
         if (continueEmulation) {
@@ -171,24 +139,24 @@ class NES {
     }
 
     fun startEmulation() {
-        if (Globals.enableSound && !papu!!.isRunning) {
-            papu!!.start()
+        if (Globals.enableSound && !papu.isRunning) {
+            papu.start()
         }
 
-        if (rom != null && rom!!.isValid() && !cpu!!.isRunning) {
-            cpu!!.beginExecution()
+        if (loadedRom != null && loadedRom!!.isValid() && !cpu.isRunning) {
+            cpu.beginExecution()
             isRunning = true
         }
     }
 
     fun stopEmulation() {
-        if (cpu!!.isRunning) {
-            cpu!!.endExecution()
+        if (cpu.isRunning) {
+            cpu.endExecution()
             isRunning = false
         }
 
-        if (Globals.enableSound && papu!!.isRunning) {
-            papu!!.stop()
+        if (Globals.enableSound && papu.isRunning) {
+            papu.stop()
         }
     }
 
@@ -199,29 +167,25 @@ class NES {
     }
 
     fun clearCPUMemory() {
-        // Initialize RAM with a mix of values (0x00, 0xFF, and random bytes)
-        // This is more accurate to real NES behavior and fixes issues with games like SMB
-        val random = Random()
+       val random = Random()
 
         for (i in 0..0x1fff) {
-            // Use a mix of values: 0x00, 0xFF, and random bytes
             val r = random.nextInt(100)
             if (r < 33) {
-                cpuMemory!!.mem!![i] = 0x00
+                cpuMemory.mem!![i] = 0x00
             } else if (r < 66) {
-                cpuMemory!!.mem!![i] = 0xFF.toShort()
+                cpuMemory.mem!![i] = 0xFF.toShort()
             } else {
-                cpuMemory!!.mem!![i] = (random.nextInt(256)).toShort()
+                cpuMemory.mem!![i] = (random.nextInt(256)).toShort()
             }
         }
 
-        // Set specific values that are important for proper operation
         for (p in 0..3) {
             val i = p * 0x800
-            cpuMemory!!.mem!![i + 0x008] = 0xF7
-            cpuMemory!!.mem!![i + 0x009] = 0xEF
-            cpuMemory!!.mem!![i + 0x00A] = 0xDF
-            cpuMemory!!.mem!![i + 0x00F] = 0xBF
+            cpuMemory.mem!![i + 0x008] = 0xF7
+            cpuMemory.mem!![i + 0x009] = 0xEF
+            cpuMemory.mem!![i + 0x00A] = 0xDF
+            cpuMemory.mem!![i + 0x00F] = 0xBF
         }
     }
 
@@ -233,32 +197,27 @@ class NES {
             stopEmulation()
         }
 
-        rom = ROM(
+        val rom = ROM(
             Consumer { percentComplete: Int? -> gui!!.showLoadProgress(percentComplete!!) },
-            Consumer { message: String? ->
-                gui!!.showErrorMsg(
-                    message!!
-                )
-            })
-        rom!!.load(file)
-        if (rom!!.isValid()) {
-            // The CPU will load
-            // the ROM into the CPU
-            // and PPU memory.
+            Consumer { message: String? -> gui!!.showErrorMsg(message!!) }
+        )
 
+        rom.load(file)
+
+        if (rom.isValid()) {
             reset()
-
             val mapperProducer = MapperProducer(Consumer { message: String? -> gui!!.showErrorMsg(message!!) })
             this.memoryMapper = mapperProducer.produce(this, rom as ROMData)
 
-            cpu!!.setMapper(this.memoryMapper)
-            ppu!!.setMapper(this.memoryMapper!!)
+            cpu.setMapper(this.memoryMapper!!)
+            ppu.setMapper(this.memoryMapper!!)
             memoryMapper!!.loadROM(rom)
-            ppu!!.setMirroring(rom!!.mirroringType)
+
+            ppu.setMirroring(rom.mirroringType)
 
             this.romFile = file
         }
-        return rom!!.isValid()
+        return rom.isValid()
     }
 
     fun reset() {
@@ -266,29 +225,25 @@ class NES {
             memoryMapper!!.reset()
         }
 
-        cpuMemory!!.reset()
-        ppuMemory!!.reset()
-        sprMemory!!.reset()
+        cpuMemory.reset()
+        ppuMemory.reset()
+        sprMemory.reset()
 
         clearCPUMemory()
 
-        cpu!!.reset()
-        cpu!!.init(
+        cpu.reset()
+        cpu.init(
             this.memoryAccess,
-            this.cpuMemory!!
+            this.cpuMemory
         )
-        ppu!!.reset()
-        palTable!!.reset()
-        papu!!.reset(this)
-
-        val joy1 = gui!!.getJoy1()
-        if (joy1 != null) {
-            joy1.reset()
-        }
+        ppu.reset()
+        palTable.reset()
+        papu.reset(this)
+        gui!!.getJoy1().reset()
     }
 
     fun beginExecution() {
-        cpu!!.beginExecution()
+        cpu.beginExecution()
     }
 
     fun enableSound(enable: Boolean) {
@@ -298,9 +253,9 @@ class NES {
         }
 
         if (enable) {
-            papu!!.start()
+            papu.start()
         } else {
-            papu!!.stop()
+            papu.stop()
         }
 
         Globals.enableSound = enable
@@ -308,59 +263,5 @@ class NES {
         if (wasRunning) {
             startEmulation()
         }
-    }
-
-    fun menuListener() {
-        if (this.isRunning) {
-            stopEmulation()
-            reset()
-            reloadRom()
-            startEmulation()
-        }
-    }
-
-    fun destroy() {
-        if (cpu != null) {
-            cpu!!.destroy()
-        }
-        if (ppu != null) {
-            ppu!!.destroy()
-        }
-        if (papu != null) {
-            papu!!.destroy()
-        }
-        if (this.cpuMemory != null) {
-            cpuMemory!!.destroy()
-        }
-        if (this.ppuMemory != null) {
-            ppuMemory!!.destroy()
-        }
-        if (this.sprMemory != null) {
-            sprMemory!!.destroy()
-        }
-        if (this.memoryMapper != null) {
-            memoryMapper!!.destroy()
-        }
-        if (rom != null) {
-            rom!!.destroy()
-        }
-        if (gui != null) {
-            gui!!.destroy()
-        }
-
-        if (this.cpu!!.isRunning) {
-            stopEmulation()
-        }
-
-        gui = null
-        cpu = null
-        ppu = null
-        papu = null
-        this.cpuMemory = null
-        this.ppuMemory = null
-        this.sprMemory = null
-        this.memoryMapper = null
-        rom = null
-        palTable = null
     }
 }

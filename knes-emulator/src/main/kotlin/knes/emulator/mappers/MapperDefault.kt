@@ -50,7 +50,7 @@ class MapperDefault(nes: NES) : MemoryMapper {
         this.rom = nes.rom
         this.cpu = nes.cpu
         this.ppu = nes.ppu
-        this.papu = nes.papu!!
+        this.papu = nes.papu
         this.inputHandler = nes.gui!!.getJoy1()
         this.inputHandler2 = nes.gui!!.getJoy2()
 

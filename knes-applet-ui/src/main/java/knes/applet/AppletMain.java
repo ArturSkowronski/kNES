@@ -123,13 +123,7 @@ public class AppletMain extends Applet implements Runnable {
     }
 
     public void destroy() {
-        if (nes != null) {
-            nes.destroy();
-        }
 
-        nes = null;
-        panelScreen = null;
-        rom = null;
     }
 
     public void showLoadProgress(int percentComplete) {
