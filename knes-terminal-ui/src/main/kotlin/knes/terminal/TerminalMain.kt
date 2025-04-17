@@ -42,12 +42,12 @@ fun main(args: Array<String>) {
 class TerminalMain(enablePpuLogging: Boolean = true) {
     private val uiFactory = TerminalUIFactory()
     private val screenView = uiFactory.createScreenView(1) as TerminalScreenView
-    private val nes = NES(uiFactory, screenView, KeyboardController())
+    private val nes = NES(null, uiFactory, screenView, KeyboardController())
     private val terminalUI = uiFactory.getTerminalUI()
 
     init {
         // Set PPU logging flag
-        nes.ppu!!.isEnablePpuLogging = enablePpuLogging
+        nes.ppu.isEnablePpuLogging = enablePpuLogging
     }
 
     /**
