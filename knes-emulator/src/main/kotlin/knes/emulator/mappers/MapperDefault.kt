@@ -24,10 +24,10 @@ import kotlin.math.max
 import kotlin.math.min
 
 class MapperDefault(nes: NES) : MemoryMapper {
-    var cpuMem: Memory?
-    var ppuMem: Memory?
+    var cpuMem: Memory
+    var ppuMem: Memory
     var cpuMemArray: ShortArray?
-    var rom: ROMData?
+    var rom: ROMData? = null
     var cpu: CPU?
     var ppu: PPU?
     var papu: PAPU
@@ -36,7 +36,7 @@ class MapperDefault(nes: NES) : MemoryMapper {
     var joy2StrobeState: Int = 0
     var joypadLastWrite: Int
     var mousePressed: Boolean = false
-    var gameGenieState: Boolean = false
+
     var mouseX: Int = 0
     var mouseY: Int = 0
     var tmp: Int = 0
@@ -45,16 +45,15 @@ class MapperDefault(nes: NES) : MemoryMapper {
 
     init {
         this.cpuMem = nes.cpuMemory
-        this.cpuMemArray = cpuMem!!.mem
+        this.cpuMemArray = cpuMem.mem
         this.ppuMem = nes.ppuMemory
-        this.rom = nes.rom
         this.cpu = nes.cpu
         this.ppu = nes.ppu
         this.papu = nes.papu
         this.inputHandler = nes.gui!!.getJoy1()
         this.inputHandler2 = nes.gui!!.getJoy2()
 
-        cpuMemSize = cpuMem!!.memSize
+        cpuMemSize = cpuMem.memSize
         joypadLastWrite = -1
     }
 
@@ -103,9 +102,9 @@ class MapperDefault(nes: NES) : MemoryMapper {
         if (address < 0x2000) {
             // Mirroring of RAM:
 
-            cpuMem!!.mem!![address and 0x7FF] = value
+            cpuMem!!.mem[address and 0x7FF] = value
         } else if (address > 0x4017) {
-            cpuMem!!.mem!![address] = value
+            cpuMem!!.mem[address] = value
             if (address >= 0x6000 && address < 0x8000) {
                 // Write to SaveRAM. Store in file:
 //                if (rom != null) {
@@ -278,7 +277,7 @@ class MapperDefault(nes: NES) : MemoryMapper {
                     2 -> {
                         // 0x4017:
                         // Joystick 2 + Strobe
-                        if (mousePressed && ppu != null && ppu!!.buffer != null) {
+                        if (mousePressed && ppu != null) {
                             // Check for white pixel nearby:
 
                             val sx: Int
@@ -637,8 +636,6 @@ class MapperDefault(nes: NES) : MemoryMapper {
     }
 
     override fun destroy() {
-        cpuMem = null
-        ppuMem = null
         rom = null
         cpu = null
         ppu = null

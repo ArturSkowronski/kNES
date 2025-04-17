@@ -28,8 +28,8 @@ import knes.emulator.ui.NESUIFactory
 import knes.emulator.ui.ScreenView
 import knes.emulator.utils.Globals
 import knes.emulator.utils.PaletteTable
-import java.util.*
 import java.util.function.Consumer
+import kotlin.random.Random
 
 class NES(
     var gui: GUI? = null,
@@ -40,6 +40,7 @@ class NES(
     val cpu: CPU
     val ppu: PPU
     val papu: PAPU
+
     val cpuMemory: Memory = Memory(0x10000) // Main memory (internal to CPU)
     val ppuMemory: Memory = Memory(0x8000) // VRAM memory (internal to PPU)
     val sprMemory: Memory = Memory(0x100) // Sprite RAM  (internal to PPU)
@@ -167,25 +168,22 @@ class NES(
     }
 
     fun clearCPUMemory() {
-       val random = Random()
+       val random = Random(System.nanoTime())
 
         for (i in 0..0x1fff) {
-            val r = random.nextInt(100)
-            if (r < 33) {
-                cpuMemory.mem!![i] = 0x00
-            } else if (r < 66) {
-                cpuMemory.mem!![i] = 0xFF.toShort()
-            } else {
-                cpuMemory.mem!![i] = (random.nextInt(256)).toShort()
+            when (val r = random.nextInt(100)) {
+                in 0 until 33 -> cpuMemory.mem[i] = 0x00
+                in 33 until 66 -> cpuMemory.mem[i] = 0xFF.toShort()
+                else -> cpuMemory.mem[i] = random.nextInt(256).toShort()
             }
         }
 
         for (p in 0..3) {
             val i = p * 0x800
-            cpuMemory.mem!![i + 0x008] = 0xF7
-            cpuMemory.mem!![i + 0x009] = 0xEF
-            cpuMemory.mem!![i + 0x00A] = 0xDF
-            cpuMemory.mem!![i + 0x00F] = 0xBF
+            cpuMemory.mem[i + 0x008] = 0xF7
+            cpuMemory.mem[i + 0x009] = 0xEF
+            cpuMemory.mem[i + 0x00A] = 0xDF
+            cpuMemory.mem[i + 0x00F] = 0xBF
         }
     }
 
@@ -198,33 +196,32 @@ class NES(
         }
 
         val rom = ROM(
-            Consumer { percentComplete: Int? -> gui!!.showLoadProgress(percentComplete!!) },
-            Consumer { message: String? -> gui!!.showErrorMsg(message!!) }
+            Consumer { percentComplete: Int? -> gui?.showLoadProgress(percentComplete ?: 0) },
+            Consumer { message: String? -> gui?.showErrorMsg(message!!) }
         )
 
         rom.load(file)
 
         if (rom.isValid()) {
             reset()
-            val mapperProducer = MapperProducer(Consumer { message: String? -> gui!!.showErrorMsg(message!!) })
-            this.memoryMapper = mapperProducer.produce(this, rom as ROMData)
+            val mapperProducer = MapperProducer(Consumer { message: String? -> gui?.showErrorMsg(message!!) })
+            val memoryMapper = mapperProducer.produce(this, rom as ROMData)
 
-            cpu.setMapper(this.memoryMapper!!)
-            ppu.setMapper(this.memoryMapper!!)
-            memoryMapper!!.loadROM(rom)
+            cpu.setMapper(memoryMapper)
+            ppu.setMapper(memoryMapper)
+            memoryMapper.loadROM(rom)
 
             ppu.setMirroring(rom.mirroringType)
 
+            this.memoryMapper = memoryMapper
             this.romFile = file
         }
+        loadedRom = rom
         return rom.isValid()
     }
 
     fun reset() {
-        if (this.memoryMapper != null) {
-            memoryMapper!!.reset()
-        }
-
+        memoryMapper?.reset()
         cpuMemory.reset()
         ppuMemory.reset()
         sprMemory.reset()
@@ -247,8 +244,7 @@ class NES(
     }
 
     fun enableSound(enable: Boolean) {
-        val wasRunning = this.isRunning
-        if (wasRunning) {
+        if (isRunning) {
             stopEmulation()
         }
 
@@ -260,7 +256,7 @@ class NES(
 
         Globals.enableSound = enable
 
-        if (wasRunning) {
+        if (isRunning) {
             startEmulation()
         }
     }
