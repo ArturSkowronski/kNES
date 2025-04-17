@@ -86,7 +86,6 @@ class SkikoUI {
         screenView?.destroy()
         screenView = null
 
-        nes?.destroy()
         nes = null
     }
 }

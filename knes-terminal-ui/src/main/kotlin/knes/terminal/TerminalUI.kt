@@ -90,7 +90,6 @@ class TerminalUI {
         screenView?.destroy()
         screenView = null
 
-        nes?.destroy()
         nes = null
     }
 }
