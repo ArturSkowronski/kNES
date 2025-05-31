@@ -31,6 +31,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.Button
@@ -47,6 +48,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -62,26 +64,22 @@ import javax.swing.filechooser.FileNameExtensionFilter
 
 /**
  * Composable function that renders the NES screen.
- * 
+ *
  * @param screenView The ComposeScreenView to render
  */
 @Composable
 fun NESScreenRenderer(screenView: ComposeScreenView) {
-    // State to trigger recomposition when the frame is updated
     var frameCount by remember { mutableStateOf(0) }
-    // State to store the current bitmap
     var currentBitmap by remember { mutableStateOf(screenView.getFrameBitmap()) }
-    // Get the scale from the screenView
-    val scale = screenView.getScale()
+    val baseScale = screenView.getScale()
+    val isMacOS = System.getProperty("os.name").toLowerCase().contains("mac")
+    val scale = if (isMacOS) baseScale * 2 else baseScale
 
-    // Calculate the scaled dimensions
-    val scaledWidth = 256 * scale
-    val scaledHeight = 240 * scale
+    val scaledWidth = 512 * baseScale
+    val scaledHeight = 480 * baseScale
 
-    // Set up the callback to trigger recomposition when a new frame is ready
     DisposableEffect(Unit) {
         screenView.onFrameReady = {
-            // Update the bitmap when a new frame is ready
             currentBitmap = screenView.getFrameBitmap()
             frameCount++
         }
@@ -91,23 +89,15 @@ fun NESScreenRenderer(screenView: ComposeScreenView) {
         }
     }
 
-    // Render the frame
     Canvas(
         modifier = Modifier
             .width(scaledWidth.dp)
             .height(scaledHeight.dp)
     ) {
-        // Draw the image scaled to fit the canvas
         drawImage(
             image = currentBitmap,
             dstSize = IntSize(scaledWidth, scaledHeight)
         )
-
-        // This is a workaround to ensure the Canvas is recomposed for each frame
-        // by making it depend on the frameCount state variable
-        if (frameCount > 0) {
-            // Do nothing, this is just to create a dependency on frameCount
-        }
     }
 }
 
@@ -116,27 +106,22 @@ fun NESScreenRenderer(screenView: ComposeScreenView) {
  */
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() = application {
-    val windowState = rememberWindowState(width = 800.dp, height = 600.dp)
+    val windowState = rememberWindowState(width = 800.dp, height = 700.dp)
     var isEmulatorRunning by remember { mutableStateOf(false) }
 
-    // Create the UI factory and components
     val uiFactory = remember { ComposeUIFactory() }
     val screenView = remember { uiFactory.createScreenView(2) as ComposeScreenView }
     val controller = remember { KeyboardController() }
     val nes = remember { NES(null, uiFactory, screenView, controller) }
     val composeUI = remember { uiFactory.getComposeUI() }
 
-    // Get the input handler from the UI factory using the new controller system
     val inputHandler = remember { uiFactory.createInputHandler(controller) as ComposeInputHandler }
 
-    // Initialize the UI with the NES instance and screen view
     LaunchedEffect(Unit) {
         composeUI.init(nes, screenView)
         composeUI.setInputHandler(inputHandler)
     }
 
-    // Define a function to map Compose key codes to AWT key codes
-    @OptIn(ExperimentalComposeUiApi::class)
     fun mapKeyCode(key: Key): Int {
         return when (key) {
             Key.Z -> KeyEvent.VK_Z
@@ -174,7 +159,6 @@ fun main() = application {
         title = "kNES Emulator",
         state = windowState,
         onKeyEvent = { event ->
-            // Always consume key events to ensure they're processed by the emulator
             val keyCode = if (event.key == Key.Enter) {
                 KeyEvent.VK_ENTER
             } else {
@@ -201,12 +185,10 @@ fun main() = application {
         },
         focusable = true  // Make the window focusable
     ) {
-        // Request focus when the window is first composed
         LaunchedEffect(Unit) {
             focusRequester.requestFocus()
         }
 
-        // Periodically request focus to ensure window always has focus
         LaunchedEffect(Unit) {
             while (true) {
                 delay(1000) // Request focus every second
@@ -227,20 +209,10 @@ fun main() = application {
                 ) {
                     // Title
                     Text(
-                        text = "kNES Emulator - Compose UI",
+                        text = "kNES Emulator 🎮",
                         style = MaterialTheme.typography.h4,
                         modifier = Modifier.padding(bottom = 16.dp)
                     )
-
-                    // Screen view
-                    Box(
-                        modifier = Modifier.weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        NESScreenRenderer(screenView)
-                    }
-
-                    // Controls
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly
@@ -283,6 +255,41 @@ fun main() = application {
                             Text("Load ROM")
                         }
                     }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            NESScreenRenderer(screenView)
+                        }
+                        Column {
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                painter = painterResource("frame.png"),
+                                contentDescription = "NES Frame",
+                                modifier = Modifier.size(256.dp, 240.dp)
+                            )
+                        }
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                painter = painterResource("logo.png"),
+                                contentDescription = "NES Frame",
+                                modifier = Modifier.size(256.dp, 240.dp)
+                            )
+                        }}
+
+                    }
+
+
                 }
             }
         }
