@@ -18,7 +18,6 @@ import java.io.FileWriter
 import java.io.IOException
 
 class Memory(var memSize: Int) {
-    @JvmField
 	var mem: ShortArray
 
     init {
