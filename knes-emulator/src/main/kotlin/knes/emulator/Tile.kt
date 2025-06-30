@@ -105,10 +105,10 @@ class Tile {
     }
 
     fun render(
-        srcx1: Int,
-        srcy1: Int,
-        srcx2: Int,
-        srcy2: Int,
+        srcx1_in: Int,
+        srcy1_in: Int,
+        srcx2_in: Int,
+        srcy2_in: Int,
         dx: Int,
         dy: Int,
         fBuffer: IntArray,
@@ -119,10 +119,10 @@ class Tile {
         pri: Int,
         priTable: IntArray
     ) {
-        var srcx1 = srcx1
-        var srcy1 = srcy1
-        var srcx2 = srcx2
-        var srcy2 = srcy2
+        var srcx1 = srcx1_in
+        var srcy1 = srcy1_in
+        var srcx2 = srcx2_in
+        var srcy2 = srcy2_in
         if (dx < -7 || dx >= 256 || dy < -7 || dy >= 240) {
             return
         }

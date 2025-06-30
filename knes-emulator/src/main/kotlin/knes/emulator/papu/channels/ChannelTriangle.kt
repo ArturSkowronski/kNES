@@ -77,7 +77,7 @@ class ChannelTriangle(var audioContext: knes.emulator.papu.PAPUAudioContext?) : 
     override val lengthStatus: Int
         get() = (if (lengthCounter == 0 || !isEnabled) 0 else 1)
 
-    fun readReg(address: Int): Int {
+    fun readReg(address_in: Int): Int {
         return 0
     }
 

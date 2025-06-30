@@ -121,9 +121,9 @@ class MapperDefault(nes: NES) : MemoryMapper {
     fun writelow(address: Int, value: Short) {
         if (address < 0x2000) {
             // Mirroring of RAM:
-            cpuMem!!.mem!![address and 0x7FF] = value
+            cpuMem.mem[address and 0x7FF] = value
         } else if (address > 0x4017) {
-            cpuMem!!.mem!![address] = value
+            cpuMem.mem[address] = value
         } else if (address > 0x2007 && address < 0x4000) {
             regWrite(0x2000 + (address and 0x7), value)
         } else {
@@ -131,10 +131,10 @@ class MapperDefault(nes: NES) : MemoryMapper {
         }
     }
 
-    override fun load(address: Int): Short {
+    override fun load(address_in: Int): Short {
         // Wrap around:
 
-        var address = address
+        var address = address_in
         address = address and 0xFFFF
 
         // Check address range:
@@ -169,7 +169,7 @@ class MapperDefault(nes: NES) : MemoryMapper {
                             // in main memory and in the
                             // PPU as flags):
                             // (not in the real NES)
-                            return cpuMem!!.mem!![0x2000]
+                            return cpuMem.mem[0x2000]
                         }
 
                         0x1 -> {
@@ -179,7 +179,7 @@ class MapperDefault(nes: NES) : MemoryMapper {
                             // in main memory and in the
                             // PPU as flags):
                             // (not in the real NES)
-                            return cpuMem!!.mem!![0x2001]
+                            return cpuMem.mem[0x2001]
                         }
 
                         0x2 -> {
@@ -224,11 +224,11 @@ class MapperDefault(nes: NES) : MemoryMapper {
             3 -> {
                 when (address and 0x7) {
                     0x0 -> {
-                        return cpuMem!!.mem!![0x2000]
+                        return cpuMem.mem[0x2000]
                     }
 
                     0x1 -> {
-                        return cpuMem!!.mem!![0x2001]
+                        return cpuMem.mem[0x2001]
                     }
 
                     0x2 -> {
@@ -529,10 +529,10 @@ class MapperDefault(nes: NES) : MemoryMapper {
         }
     }
 
-    protected fun loadRomBank(bank: Int, address: Int) {
+    protected fun loadRomBank(bank_in: Int, address: Int) {
         // Loads a ROM bank into the specified address.
 
-        var bank = bank
+        var bank = bank_in
         bank %= rom!!.getRomBankCount()
         val data = rom!!.getRomBank(bank)
         //cpuMem.write(address,data,data.length);
@@ -603,7 +603,7 @@ class MapperDefault(nes: NES) : MemoryMapper {
         val offset = (bank8k % 2) * 8192
 
         val bank = rom!!.getRomBank(bank16k)
-        cpuMem!!.write(address, bank!!, offset, 8192)
+        cpuMem.write(address, bank!!, offset, 8192)
     }
 
     override fun clockIrqCounter() {

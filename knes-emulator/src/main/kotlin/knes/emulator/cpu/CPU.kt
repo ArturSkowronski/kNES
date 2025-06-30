@@ -214,9 +214,9 @@ class CPU // Constructor:
 
 
         // Misc. variables
-        var opinf = 0
-        var opaddr = 0
-        var addrMode = 0
+        var opinf: Int
+        var opaddr: Int
+        var addrMode: Int
         var addr = 0
         var palCnt = 0
         var cycleCount: Int
@@ -875,7 +875,6 @@ class CPU // Constructor:
                     F_INTERRUPT = (temp shr 2) and 1
                     F_DECIMAL = (temp shr 3) and 1
                     F_BRK = (temp shr 4) and 1
-                    F_NOTUSED = (temp shr 5) and 1
                     F_OVERFLOW = (temp shr 6) and 1
                     F_SIGN = (temp shr 7) and 1
 
@@ -941,7 +940,6 @@ class CPU // Constructor:
                     F_INTERRUPT = (temp shr 2) and 1
                     F_DECIMAL = (temp shr 3) and 1
                     F_BRK = (temp shr 4) and 1
-                    F_NOTUSED = (temp shr 5) and 1
                     F_OVERFLOW = (temp shr 6) and 1
                     F_SIGN = (temp shr 7) and 1
 
