@@ -164,7 +164,7 @@ class NES(
        val random = Random(System.nanoTime())
 
         for (i in 0..0x1fff) {
-            when (val r = random.nextInt(100)) {
+            when (random.nextInt(100)) {
                 in 0 until 33 -> cpuMemory.mem[i] = 0x00
                 in 33 until 66 -> cpuMemory.mem[i] = 0xFF.toShort()
                 else -> cpuMemory.mem[i] = random.nextInt(256).toShort()

@@ -119,8 +119,8 @@ object CpuInfo {
     fun getInstName(inst: Int): String? {
 
         initInstNames()
-        if (inst < instname!!.size) {
-            return instname!![inst]
+        if (inst < instname.size) {
+            return instname[inst]
         } else {
             return "???"
         }
@@ -134,7 +134,7 @@ object CpuInfo {
 
     fun getAddressModeName(addrMode: Int): String? {
         initAddrDesc()
-        if (addrMode >= 0 && addrMode < addrDesc!!.size) {
+        if (addrMode >= 0 && addrMode < addrDesc.size) {
             return addrDesc[addrMode]
         }
         return "???"
@@ -439,7 +439,7 @@ object CpuInfo {
     }
 
     private fun setOp(inst: Int, op: Int, addr: Int, size: Int, cycles: Int) {
-        opdata!![op] =
+        opdata[op] =
             ((inst and 0xFF)) or
                     ((addr and 0xFF) shl 8) or
                     ((size and 0xFF) shl 16) or

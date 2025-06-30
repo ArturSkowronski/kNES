@@ -1,11 +1,12 @@
 plugins {
     id 'java'
     id 'application'
-    id 'org.jetbrains.kotlin.jvm' version '1.8.22'
+    id 'org.jetbrains.kotlin.jvm' version '2.0.0'
 }
 
 repositories {
     mavenCentral()
+    google()
 }
 
 dependencies {
@@ -40,14 +41,14 @@ dependencies {
 }
 
 kotlin {
-    jvmToolchain(8)
+    jvmToolchain(11)
 }
 
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     kotlinOptions {
-        jvmTarget = '1.8'
-        apiVersion = '1.8'
-        languageVersion = '1.8'
+        jvmTarget = '11'
+        apiVersion = '2.0'
+        languageVersion = '2.0'
     }
 }
 
@@ -62,13 +63,27 @@ sourceSets {
     }
 }
 
+
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(8)
+        languageVersion = JavaLanguageVersion.of(11)
     }
-    sourceCompatibility = JavaVersion.VERSION_1_8
-    targetCompatibility = JavaVersion.VERSION_1_8
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
 }
+
+/*
+ *
+ *  * Copyright (C) 2025 Artur Skowroński
+ *  * This file is part of kNES, a fork of vNES (GPLv3) rewritten in Kotlin.
+ *  *
+ *  * vNES was originally developed by Brian F. R. (bfirsh) and released under the GPL-3.0 license.
+ *  * This project is a reimplementation and extension of that work.
+ *  *
+ *  * kNES is licensed under the GNU General Public License v3.0.
+ *  * See the LICENSE file for more details.
+ *
+ */
 
 // Configure auto-provisioning of toolchains
 tasks.withType(JavaCompile).configureEach {

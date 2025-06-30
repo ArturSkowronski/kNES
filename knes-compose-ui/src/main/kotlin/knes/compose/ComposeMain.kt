@@ -72,7 +72,7 @@ fun NESScreenRenderer(screenView: ComposeScreenView) {
     var frameCount by remember { mutableStateOf(0) }
     var currentBitmap by remember { mutableStateOf(screenView.getFrameBitmap()) }
     val baseScale = screenView.getScale()
-    val isMacOS = System.getProperty("os.name").toLowerCase().contains("mac")
+    val isMacOS = System.getProperty("os.name").lowercase().contains("mac")
     val scale = if (isMacOS) baseScale * 2 else baseScale
 
     val scaledWidth = 512 * baseScale

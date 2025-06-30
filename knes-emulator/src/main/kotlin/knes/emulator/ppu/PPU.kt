@@ -208,20 +208,17 @@ class PPU : PPUCycles {
          *
          * @return A list of Map.Entry objects containing the color (key) and count (value)
          */
-        get() = currentFrameColorCounts.entries
-            .stream()
-            .sorted(Map.Entry.comparingByValue<Int?, Int?>().reversed())
-            .limit(5)
-            .collect(Collectors.toList())
+        get() = currentFrameColorCounts.entries.stream().sorted(Map.Entry.comparingByValue<Int?, Int?>().reversed())
+            .limit(5).collect(Collectors.toList())
 
     fun init(
-        gui: knes.emulator.ui.GUI,
-        ppuMem: knes.emulator.Memory?,
-        sprMem: knes.emulator.Memory?,
-        cpuMem: knes.emulator.Memory,
-        cpu: knes.emulator.cpu.CPU,
+        gui: GUI,
+        ppuMem: Memory?,
+        sprMem: Memory?,
+        cpuMem: Memory,
+        cpu: CPU,
         sourceDataLine: SourceDataLine?,
-        palTable: knes.emulator.utils.PaletteTable
+        palTable: PaletteTable
     ) {
         this.gui = gui
         this.ppuMem = ppuMem
@@ -402,9 +399,7 @@ class PPU : PPUCycles {
         // Make sure everything is rendered:
         if (lastRenderedScanline < 239) {
             renderFramePartially(
-                gui!!.getScreenView().getBuffer(),
-                lastRenderedScanline + 1,
-                240 - lastRenderedScanline
+                gui!!.getScreenView().getBuffer(), lastRenderedScanline + 1, 240 - lastRenderedScanline
             )
         }
 
@@ -420,18 +415,14 @@ class PPU : PPUCycles {
         }
 
         // Get the top 5 colors sorted by color value
-        val top5Colors = currentFrameColorCounts.entries
-            .stream()
-            .sorted(Map.Entry.comparingByKey<Int?, Int?>())
-            .limit(5)
-            .collect(Collectors.toList())
+        val top5Colors =
+            currentFrameColorCounts.entries.stream().sorted(Map.Entry.comparingByKey<Int?, Int?>()).limit(5)
+                .collect(Collectors.toList())
 
         // Get the previous top 5 colors
-        val prevTop5Colors = previousFrameColorCounts.entries
-            .stream()
-            .sorted(Map.Entry.comparingByKey<Int?, Int?>())
-            .limit(5)
-            .collect(Collectors.toList())
+        val prevTop5Colors =
+            previousFrameColorCounts.entries.stream().sorted(Map.Entry.comparingByKey<Int?, Int?>()).limit(5)
+                .collect(Collectors.toList())
 
         // Check if the top 5 colors have changed
         var top5ColorsChanged = false
@@ -819,8 +810,7 @@ class PPU : PPUCycles {
     // Read from SPR-RAM (Sprite RAM).
     // The address should be set first.
     fun sramLoad(): Short {
-        val tmp = sprMem!!.load(sramAddress.toInt())
-        /*sramAddress++; // Increment address
+        val tmp = sprMem!!.load(sramAddress.toInt())/*sramAddress++; // Increment address
         sramAddress%=0x100;*/
         return tmp
     }
@@ -1672,18 +1662,8 @@ class PPU : PPUCycles {
 
     fun statusRegsToInt(): Int {
         var ret = 0
-        ret = (f_nmiOnVblank) or
-                (f_spriteSize shl 1) or
-                (f_bgPatternTable shl 2) or
-                (f_spPatternTable shl 3) or
-                (f_addrInc shl 4) or
-                (f_nTblAddress shl 5) or
-                (f_color shl 6) or
-                (f_spVisibility shl 7) or
-                (f_bgVisibility shl 8) or
-                (f_spClipping shl 9) or
-                (f_bgClipping shl 10) or
-                (f_dispType shl 11)
+        ret =
+            (f_nmiOnVblank) or (f_spriteSize shl 1) or (f_bgPatternTable shl 2) or (f_spPatternTable shl 3) or (f_addrInc shl 4) or (f_nTblAddress shl 5) or (f_color shl 6) or (f_spVisibility shl 7) or (f_bgVisibility shl 8) or (f_spClipping shl 9) or (f_bgClipping shl 10) or (f_dispType shl 11)
 
         return ret
     }
@@ -1953,13 +1933,7 @@ class PPU : PPUCycles {
 
         // Initialize stuff:
         init(
-            gui!!,
-            ppuMem,
-            sprMem,
-            cpuMem!!,
-            cpu!!,
-            sourceDataLine,
-            palTable!!
+            gui!!, ppuMem, sprMem, cpuMem!!, cpu!!, sourceDataLine, palTable!!
         )
     }
 
