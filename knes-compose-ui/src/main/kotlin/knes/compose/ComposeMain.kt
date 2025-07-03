@@ -11,6 +11,8 @@
  *
  */
 
+@file:Suppress("DEPRECATION")
+
 package knes.compose
 
 /*
