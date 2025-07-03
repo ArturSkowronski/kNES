@@ -48,7 +48,9 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -58,9 +60,21 @@ import knes.controllers.KeyboardController
 import kotlinx.coroutines.delay
 import knes.emulator.NES
 import java.awt.event.KeyEvent
+import javax.imageio.ImageIO
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
 
+
+@Composable
+fun classpathPainter(resourcePath: String): Painter {
+    val imageBitmap = remember(resourcePath) {
+        val stream = requireNotNull(ClassLoader.getSystemResourceAsStream(resourcePath)) {
+            "Resource $resourcePath not found"
+        }
+        ImageIO.read(stream).toComposeImageBitmap()
+    }
+    return remember(imageBitmap) { BitmapPainter(imageBitmap) }
+}
 
 /**
  * Composable function that renders the NES screen.
@@ -271,7 +285,7 @@ fun main() = application {
                             contentAlignment = Alignment.Center
                         ) {
                             Image(
-                                painter = painterResource("frame.png"),
+                                painter = classpathPainter("drawable/frame.png"),
                                 contentDescription = "NES Frame",
                                 modifier = Modifier.size(256.dp, 240.dp)
                             )
@@ -281,7 +295,7 @@ fun main() = application {
                             contentAlignment = Alignment.Center
                         ) {
                             Image(
-                                painter = painterResource("logo.png"),
+                                painter = classpathPainter("drawable/logo.png"),
                                 contentDescription = "NES Frame",
                                 modifier = Modifier.size(256.dp, 240.dp)
                             )
