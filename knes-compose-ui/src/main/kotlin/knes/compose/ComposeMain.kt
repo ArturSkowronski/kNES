@@ -50,7 +50,10 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.res.loadImageBitmap
+import java.io.ByteArrayInputStream
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -272,21 +275,49 @@ fun main() = application {
                             modifier = Modifier.weight(1f),
                             contentAlignment = Alignment.Center
                         ) {
-                            Image(
-                                painter = painterResource("frame.png"),
-                                contentDescription = "NES Frame",
-                                modifier = Modifier.size(256.dp, 240.dp)
-                            )
+                            val frameBitmap = remember {
+                                try {
+                                    javaClass.getResourceAsStream("/drawable/frame.png")?.let { stream ->
+                                        loadImageBitmap(stream)
+                                    }
+                                } catch (e: Exception) {
+                                    null
+                                }
+                            }
+                            
+                            if (frameBitmap != null) {
+                                Image(
+                                    bitmap = frameBitmap,
+                                    contentDescription = "NES Frame",
+                                    modifier = Modifier.size(256.dp, 240.dp)
+                                )
+                            } else {
+                                Box(modifier = Modifier.size(256.dp, 240.dp))
+                            }
                         }
                         Box(
                             modifier = Modifier.weight(1f),
                             contentAlignment = Alignment.Center
                         ) {
-                            Image(
-                                painter = painterResource("logo.png"),
-                                contentDescription = "NES Frame",
-                                modifier = Modifier.size(256.dp, 240.dp)
-                            )
+                            val logoBitmap = remember {
+                                try {
+                                    javaClass.getResourceAsStream("/drawable/logo.png")?.let { stream ->
+                                        loadImageBitmap(stream)
+                                    }
+                                } catch (e: Exception) {
+                                    null
+                                }
+                            }
+                            
+                            if (logoBitmap != null) {
+                                Image(
+                                    bitmap = logoBitmap,
+                                    contentDescription = "NES Logo",
+                                    modifier = Modifier.size(256.dp, 240.dp)
+                                )
+                            } else {
+                                Box(modifier = Modifier.size(256.dp, 240.dp))
+                            }
                         }}
 
                     }
