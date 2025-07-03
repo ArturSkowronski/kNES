@@ -73,7 +73,7 @@ sourceSets {
             srcDirs = ['src/main/kotlin']
         }
         resources {
-            srcDirs = ['src/main/resources']
+            srcDirs = ['src/main/resources', 'src/main/composeResources']
         }
     }
 }
