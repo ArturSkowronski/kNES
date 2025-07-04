@@ -71,12 +71,16 @@ java {
 sourceSets {
     main {
         kotlin {
-            srcDirs = ['src/main/kotlin']
+            srcDirs = ['src/main/kotlin', 'build/generated/compose/resourceGenerator/kotlin/mainResourceAccessors']
         }
         resources {
             srcDirs = ['src/main/resources']
         }
     }
+}
+
+compose.resources {
+    generateResClass = always
 }
 
 application {

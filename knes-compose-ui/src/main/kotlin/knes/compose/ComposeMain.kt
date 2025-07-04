@@ -11,8 +11,6 @@
  *
  */
 
-@file:Suppress("DEPRECATION")
-
 package knes.compose
 
 /*
@@ -50,10 +48,11 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.toComposeImageBitmap
-import androidx.compose.ui.res.loadImageBitmap
-import java.io.ByteArrayInputStream
+import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.InternalResourceApi
+import knes.knes_compose_ui.generated.resources.Res
+import knes.knes_compose_ui.generated.resources.frame
+import knes.knes_compose_ui.generated.resources.logo
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -109,7 +108,7 @@ fun NESScreenRenderer(screenView: ComposeScreenView) {
 /**
  * Main entry point for the Compose UI.
  */
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, InternalResourceApi::class)
 fun main() = application {
     val windowState = rememberWindowState(width = 800.dp, height = 700.dp)
     var isEmulatorRunning by remember { mutableStateOf(false) }
@@ -275,49 +274,21 @@ fun main() = application {
                             modifier = Modifier.weight(1f),
                             contentAlignment = Alignment.Center
                         ) {
-                            val frameBitmap = remember {
-                                try {
-                                    javaClass.getResourceAsStream("/drawable/frame.png")?.let { stream ->
-                                        loadImageBitmap(stream)
-                                    }
-                                } catch (e: Exception) {
-                                    null
-                                }
-                            }
-                            
-                            if (frameBitmap != null) {
-                                Image(
-                                    bitmap = frameBitmap,
-                                    contentDescription = "NES Frame",
-                                    modifier = Modifier.size(256.dp, 240.dp)
-                                )
-                            } else {
-                                Box(modifier = Modifier.size(256.dp, 240.dp))
-                            }
+                            Image(
+                                painter = painterResource(Res.drawable.frame),
+                                contentDescription = "NES Frame",
+                                modifier = Modifier.size(256.dp, 240.dp)
+                            )
                         }
                         Box(
                             modifier = Modifier.weight(1f),
                             contentAlignment = Alignment.Center
                         ) {
-                            val logoBitmap = remember {
-                                try {
-                                    javaClass.getResourceAsStream("/drawable/logo.png")?.let { stream ->
-                                        loadImageBitmap(stream)
-                                    }
-                                } catch (e: Exception) {
-                                    null
-                                }
-                            }
-                            
-                            if (logoBitmap != null) {
-                                Image(
-                                    bitmap = logoBitmap,
-                                    contentDescription = "NES Logo",
-                                    modifier = Modifier.size(256.dp, 240.dp)
-                                )
-                            } else {
-                                Box(modifier = Modifier.size(256.dp, 240.dp))
-                            }
+                            Image(
+                                painter = painterResource(Res.drawable.logo),
+                                contentDescription = "NES Logo",
+                                modifier = Modifier.size(256.dp, 240.dp)
+                            )
                         }}
 
                     }
