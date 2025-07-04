@@ -48,7 +48,11 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.res.painterResource
+import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.InternalResourceApi
+import knes.knes_compose_ui.generated.resources.Res
+import knes.knes_compose_ui.generated.resources.frame
+import knes.knes_compose_ui.generated.resources.logo
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -104,7 +108,7 @@ fun NESScreenRenderer(screenView: ComposeScreenView) {
 /**
  * Main entry point for the Compose UI.
  */
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, InternalResourceApi::class)
 fun main() = application {
     val windowState = rememberWindowState(width = 800.dp, height = 700.dp)
     var isEmulatorRunning by remember { mutableStateOf(false) }
@@ -271,7 +275,7 @@ fun main() = application {
                             contentAlignment = Alignment.Center
                         ) {
                             Image(
-                                painter = painterResource("frame.png"),
+                                painter = painterResource(Res.drawable.frame),
                                 contentDescription = "NES Frame",
                                 modifier = Modifier.size(256.dp, 240.dp)
                             )
@@ -281,8 +285,8 @@ fun main() = application {
                             contentAlignment = Alignment.Center
                         ) {
                             Image(
-                                painter = painterResource("logo.png"),
-                                contentDescription = "NES Frame",
+                                painter = painterResource(Res.drawable.logo),
+                                contentDescription = "NES Logo",
                                 modifier = Modifier.size(256.dp, 240.dp)
                             )
                         }}

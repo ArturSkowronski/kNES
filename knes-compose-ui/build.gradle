@@ -36,6 +36,7 @@ dependencies {
     implementation compose.ui
     implementation compose.foundation
     implementation compose.runtime
+    implementation compose.components.resources
 
     // Skiko dependency for hardware-accelerated rendering
     implementation "org.jetbrains.skiko:skiko:0.7.90"
@@ -70,12 +71,49 @@ java {
 sourceSets {
     main {
         kotlin {
-            srcDirs = ['src/main/kotlin']
+            srcDirs = ['src/main/kotlin', 'build/generated/compose/resourceGenerator/kotlin/mainResourceAccessors']
         }
         resources {
-            srcDirs = ['src/main/resources']
+            srcDirs = ['src/main/resources', 'build/generated/compose/resourceGenerator/preparedResources/main']
         }
     }
+}
+
+compose.resources {
+    generateResClass = always
+}
+
+tasks.named('processResources').configure {
+    dependsOn 'prepareComposeResourcesTaskForMain'
+    dependsOn 'copyNonXmlValueResourcesForMain'
+    dependsOn 'convertXmlValueResourcesForMain'
+}
+
+tasks.named('compileKotlin').configure {
+    dependsOn 'generateResourceAccessorsForMain'
+}
+
+task copyComposeResources(type: Copy) {
+    dependsOn 'prepareComposeResourcesTaskForMain'
+    
+    from 'src/main/composeResources/drawable'
+    into 'build/resources/main/composeResources/knes.knes_compose_ui.generated.resources/drawable'
+    
+    doLast {
+        println "Copied resources to expected runtime location"
+    }
+}
+
+tasks.named('processResources').configure {
+    finalizedBy 'copyComposeResources'
+}
+
+tasks.named('run').configure {
+    dependsOn 'copyComposeResources'
+}
+
+tasks.named('jar').configure {
+    dependsOn 'copyComposeResources'
 }
 
 application {
