@@ -74,13 +74,19 @@ sourceSets {
             srcDirs = ['src/main/kotlin', 'build/generated/compose/resourceGenerator/kotlin/mainResourceAccessors']
         }
         resources {
-            srcDirs = ['src/main/resources']
+            srcDirs = ['src/main/resources', 'build/generated/compose/resourceGenerator/preparedResources/main']
         }
     }
 }
 
 compose.resources {
     generateResClass = always
+}
+
+tasks.named('processResources').configure {
+    dependsOn 'prepareComposeResourcesTaskForMain'
+    dependsOn 'copyNonXmlValueResourcesForMain'
+    dependsOn 'convertXmlValueResourcesForMain'
 }
 
 application {
