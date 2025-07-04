@@ -89,6 +89,33 @@ tasks.named('processResources').configure {
     dependsOn 'convertXmlValueResourcesForMain'
 }
 
+tasks.named('compileKotlin').configure {
+    dependsOn 'generateResourceAccessorsForMain'
+}
+
+task copyComposeResources(type: Copy) {
+    dependsOn 'prepareComposeResourcesTaskForMain'
+    
+    from 'src/main/composeResources/drawable'
+    into 'build/resources/main/composeResources/knes.knes_compose_ui.generated.resources/drawable'
+    
+    doLast {
+        println "Copied resources to expected runtime location"
+    }
+}
+
+tasks.named('processResources').configure {
+    finalizedBy 'copyComposeResources'
+}
+
+tasks.named('run').configure {
+    dependsOn 'copyComposeResources'
+}
+
+tasks.named('jar').configure {
+    dependsOn 'copyComposeResources'
+}
+
 application {
     mainClass = 'knes.compose.ComposeMainKt'
 }
