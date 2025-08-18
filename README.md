@@ -34,6 +34,11 @@ The project is organized into the following modules:
 
 https://github.com/user-attachments/assets/9036ae9a-3be8-43ec-8050-3a47b29d1648
 
+### KotlinConf 2025 Presentation: Build your own NES Emulator with Kotlin (click to play)
+
+[![Build your own NES Emulator with Kotlin | Artur Skowroński](https://img.youtube.com/vi/4A6aLK2KznU/hqdefault.jpg)](https://www.youtube.com/watch?v=4A6aLK2KznU)
+
+
 ## Building and Running
 
 ### Prerequisites
