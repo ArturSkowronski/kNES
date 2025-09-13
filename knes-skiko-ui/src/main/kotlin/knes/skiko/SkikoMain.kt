@@ -30,30 +30,24 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import knes.controllers.KeyboardController
+import knes.emulator.NES
 import org.jetbrains.skia.Canvas
+import org.jetbrains.skia.Image
 import org.jetbrains.skia.Paint
 import org.jetbrains.skia.Rect
-import org.jetbrains.skia.Image
 import org.jetbrains.skiko.SkiaLayer
 import org.jetbrains.skiko.SkikoView
-import knes.emulator.NES
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.FlowLayout
 import java.awt.Font
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
-import javax.swing.JButton
-import javax.swing.JFileChooser
-import javax.swing.JFrame
-import javax.swing.JLabel
-import javax.swing.JPanel
-import javax.swing.SwingUtilities
-import javax.swing.filechooser.FileNameExtensionFilter
-import kotlin.system.exitProcess
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import javax.swing.*
+import javax.swing.filechooser.FileNameExtensionFilter
+import kotlin.system.exitProcess
 
 /**
  * Main entry point for the Skiko UI.
@@ -69,9 +63,9 @@ fun main() {
  */
 class SkikoMain {
     private val uiFactory = SkikoUIFactory()
-    private val screenView = uiFactory.createScreenView(2) as SkikoScreenView
-    private val nes = NES(null, uiFactory, screenView)
-    private val skikoUI = uiFactory.getSkikoUI()
+    private val screenView = uiFactory.screenView as SkikoScreenView
+    private val nes = NES(uiFactory, screenView)
+    private val skikoUI = uiFactory.skikoUI
 
     private var isEmulatorRunning = false
     private val renderExecutor = Executors.newSingleThreadScheduledExecutor()
@@ -209,7 +203,7 @@ class SkikoMain {
         skiaLayer.requestFocus()
 
         // Register the input handler with the Skia layer
-        val inputHandler = uiFactory.createInputHandler(/**/KeyboardController()) as SkikoInputHandler
+        val inputHandler = uiFactory.inputHandler as SkikoInputHandler
         inputHandler.registerKeyAdapter(skiaLayer)
 
         // Set the callback for when a new frame is ready

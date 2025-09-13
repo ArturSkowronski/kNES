@@ -21,37 +21,7 @@ import knes.emulator.ui.ScreenView
  * Factory for creating Terminal UI components for the NES emulator.
  */
 class TerminalUIFactory : NESUIFactory {
-    private val terminalUI = TerminalUI()
+    val terminalUI = TerminalUI()
     override val inputHandler: InputHandler = TerminalInputHandler()
-
-    /**
-     * Creates a screen view for the NES emulator.
-     * 
-     * @param scale The initial scale factor for the screen view
-     * @return A ScreenView implementation
-     */
-    override fun createScreenView(scale: Int): ScreenView {
-        return TerminalScreenView(scale)
-    }
-
-    /**
-     * Configures UI-specific settings.
-     * 
-     * @param enableAudio Whether audio should be enabled
-     * @param fpsLimit The maximum FPS to target, or 0 for unlimited
-     * @param enablePpuLogging Whether PPU logging should be enabled
-     */
-    override fun configureUISettings(enableAudio: Boolean, fpsLimit: Int, enablePpuLogging: Boolean) {
-        // Configure Terminal-specific settings
-        // Terminal UI doesn't support audio, so we ignore the enableAudio parameter
-    }
-
-    /**
-     * Gets the TerminalUI instance.
-     * 
-     * @return The TerminalUI instance
-     */
-    fun getTerminalUI(): TerminalUI {
-        return terminalUI
-    }
+    override val screenView: ScreenView = TerminalScreenView(1)
 }

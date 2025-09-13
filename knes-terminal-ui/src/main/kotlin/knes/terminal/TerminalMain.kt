@@ -41,9 +41,9 @@ fun main(args: Array<String>) {
  */
 class TerminalMain(enablePpuLogging: Boolean = true) {
     private val uiFactory = TerminalUIFactory()
-    private val screenView = uiFactory.createScreenView(1) as TerminalScreenView
-    private val nes = NES(null, uiFactory, screenView, KeyboardController())
-    private val terminalUI = uiFactory.getTerminalUI()
+    private val screenView = uiFactory.screenView
+    private val nes = NES(uiFactory, screenView)
+    private val terminalUI = uiFactory.terminalUI
 
     init {
         // Set PPU logging flag
@@ -60,7 +60,7 @@ class TerminalMain(enablePpuLogging: Boolean = true) {
         println("================")
 
         // Initialize the UI
-        terminalUI.init(nes, screenView)
+        terminalUI.init(nes, uiFactory.screenView as TerminalScreenView)
 
         // Check if a ROM file was specified as a command line argument
         var romPath: String? = null

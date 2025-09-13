@@ -50,8 +50,8 @@ class MapperDefault(nes: NES) : MemoryMapper {
         this.cpu = nes.cpu
         this.ppu = nes.ppu
         this.papu = nes.papu
-        this.inputHandler = nes.gui!!.getJoy1()
-        this.inputHandler2 = nes.gui!!.getJoy2()
+        this.inputHandler = nes.inputHandler
+        this.inputHandler2 = nes.inputHandler2
 
         cpuMemSize = cpuMem.memSize
         joypadLastWrite = -1

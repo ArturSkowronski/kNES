@@ -38,36 +38,7 @@ import knes.emulator.ui.ScreenView
  * Factory for creating Skiko UI components for the NES emulator.
  */
 class SkikoUIFactory : NESUIFactory {
-    private val skikoUI = SkikoUI()
+    val skikoUI = SkikoUI()
     override val inputHandler: InputHandler = SkikoInputHandler()
-
-    /**
-     * Creates a screen view for the NES emulator.
-     * 
-     * @param scale The initial scale factor for the screen view
-     * @return A ScreenView implementation
-     */
-    override fun createScreenView(scale: Int): ScreenView {
-        return SkikoScreenView(scale)
-    }
-
-    /**
-     * Configures UI-specific settings.
-     * 
-     * @param enableAudio Whether audio should be enabled
-     * @param fpsLimit The maximum FPS to target, or 0 for unlimited
-     * @param enablePpuLogging Whether PPU logging should be enabled
-     */
-    override fun configureUISettings(enableAudio: Boolean, fpsLimit: Int, enablePpuLogging: Boolean) {
-        // Configure Skiko-specific settings
-    }
-
-    /**
-     * Gets the SkikoUI instance.
-     * 
-     * @return The SkikoUI instance
-     */
-    fun getSkikoUI(): SkikoUI {
-        return skikoUI
-    }
+    override val screenView: ScreenView = SkikoScreenView(1)
 }
