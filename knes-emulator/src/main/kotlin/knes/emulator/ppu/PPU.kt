@@ -13,21 +13,16 @@
 
 package knes.emulator.ppu
 
-import knes.emulator.ByteBuffer
 import knes.emulator.Memory
-import knes.emulator.ROM
 import knes.emulator.Tile
 import knes.emulator.cpu.CPU
 import knes.emulator.mappers.MemoryMapper
 import knes.emulator.ui.GUI
-import knes.emulator.utils.Globals
 import knes.emulator.utils.HiResTimer
 import knes.emulator.utils.NameTable
 import knes.emulator.utils.PaletteTable
-import java.util.Arrays
-import java.util.Locale
+import java.util.*
 import java.util.Map
-import java.util.function.Consumer
 import java.util.stream.Collectors
 import javax.sound.sampled.SourceDataLine
 
@@ -402,64 +397,6 @@ class PPU : PPUCycles {
                 gui!!.getScreenView().getBuffer(), lastRenderedScanline + 1, 240 - lastRenderedScanline
             )
         }
-
-        /**Generate here debbuging info for the framebuffer. I want you to aggregate pixels per color and show it in the console. I want to show it only if changed between frames */
-        // Clear current frame color counts
-        currentFrameColorCounts.clear()
-
-        // Get the buffer and count pixels by color
-        val frameBuffer = gui!!.getScreenView().getBuffer()
-        for (i in frameBuffer.indices) {
-            val color = frameBuffer[i]
-            currentFrameColorCounts.put(color, currentFrameColorCounts.getOrDefault(color, 0)!! + 1)
-        }
-
-        // Get the top 5 colors sorted by color value
-        val top5Colors =
-            currentFrameColorCounts.entries.stream().sorted(Map.Entry.comparingByKey<Int?, Int?>()).limit(5)
-                .collect(Collectors.toList())
-
-        // Get the previous top 5 colors
-        val prevTop5Colors =
-            previousFrameColorCounts.entries.stream().sorted(Map.Entry.comparingByKey<Int?, Int?>()).limit(5)
-                .collect(Collectors.toList())
-
-        // Check if the top 5 colors have changed
-        var top5ColorsChanged = false
-        if (top5Colors.size != prevTop5Colors.size) {
-            top5ColorsChanged = true
-        } else {
-            for (i in top5Colors.indices) {
-                if (i >= prevTop5Colors.size) {
-                    top5ColorsChanged = true
-                    break
-                }
-                val current = top5Colors.get(i)
-                val previous = prevTop5Colors.get(i)
-                if (current.key != previous.key || current.value != previous.value) {
-                    top5ColorsChanged = true
-                    break
-                }
-            }
-        }
-
-        // Display top 5 colors only if they changed and logging is enabled
-        if (top5ColorsChanged && this.isEnablePpuLogging) {
-            println("======================")
-            println("[PPU] Top 5 colors in buffer (sorted by color):")
-            top5Colors.forEach(Consumer { entry: MutableMap.MutableEntry<Int?, Int?>? ->
-                println(
-                    "[PPU] 0x" + Integer.toHexString(
-                        entry!!.key!!
-                    ).uppercase(Locale.getDefault()) + " : " + entry.value
-                )
-            })
-            println("Total unique colors: " + currentFrameColorCounts.size)
-        }
-
-        // Update previous frame color counts for next comparison
-        previousFrameColorCounts.clear()
-        previousFrameColorCounts.putAll(currentFrameColorCounts)
 
         endFrame()
 

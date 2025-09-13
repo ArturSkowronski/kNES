@@ -70,7 +70,7 @@ fun main() {
 class SkikoMain {
     private val uiFactory = SkikoUIFactory()
     private val screenView = uiFactory.createScreenView(2) as SkikoScreenView
-    private val nes = NES(null, uiFactory, screenView, KeyboardController())
+    private val nes = NES(null, uiFactory, screenView)
     private val skikoUI = uiFactory.getSkikoUI()
 
     private var isEmulatorRunning = false

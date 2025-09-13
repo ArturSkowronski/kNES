@@ -13,7 +13,6 @@
 
 package knes.emulator
 
-import knes.controllers.ControllerProvider
 import knes.emulator.cpu.CPU
 import knes.emulator.mappers.MemoryMapper
 import knes.emulator.papu.PAPU
@@ -34,7 +33,6 @@ class NES(
     var gui: GUI? = null,
     private val uiFactory: NESUIFactory? = null,
     private val screenView: ScreenView? = null,
-    private val controller: ControllerProvider? = null
 ) {
     val cpu: CPU
     val ppu: PPU
@@ -55,8 +53,7 @@ class NES(
         this.gui = gui ?: run {
             requireNotNull(uiFactory) { "Either gui or uiFactory must be provided" }
             requireNotNull(screenView) { "ScreenView must be provided when using uiFactory" }
-            requireNotNull(controller) { "Controller must be provided when using uiFactory" }
-            GUIAdapter(uiFactory.createInputHandler(controller), screenView)
+            GUIAdapter(uiFactory.inputHandler, screenView)
         }
 
         ppu = PPU()

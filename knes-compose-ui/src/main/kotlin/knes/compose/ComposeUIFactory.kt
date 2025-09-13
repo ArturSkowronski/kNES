@@ -38,49 +38,14 @@ import knes.controllers.ControllerProvider
 /**
  * Factory for creating Compose UI components for the NES emulator.
  */
-class ComposeUIFactory : NESUIFactory {
-    private val composeUI = ComposeUI()
-    private var inputHandler: ComposeInputHandler? = null
+class ComposeUIFactory(controller: ControllerProvider) : NESUIFactory {
+    val composeUI = ComposeUI()
+    override val inputHandler: InputHandler = ComposeInputHandler(controller)
 
-    /**
-     * Creates an input handler for the NES emulator.
-     *
-     * @return An InputHandler implementation
-     */
-    override fun createInputHandler(controller: ControllerProvider): InputHandler {
-        if (inputHandler == null) {
-            inputHandler = ComposeInputHandler(controller)
-        }
-        return inputHandler!!
-    }
-
-    /**
-     * Creates a screen view for the NES emulator.
-     * 
-     * @param scale The initial scale factor for the screen view
-     * @return A ScreenView implementation
-     */
     override fun createScreenView(scale: Int): ScreenView {
         return ComposeScreenView(scale)
     }
 
-    /**
-     * Configures UI-specific settings.
-     * 
-     * @param enableAudio Whether audio should be enabled
-     * @param fpsLimit The maximum FPS to target, or 0 for unlimited
-     * @param enablePpuLogging Whether PPU logging should be enabled
-     */
-    override fun configureUISettings(enableAudio: Boolean, fpsLimit: Int, enablePpuLogging: Boolean) {
-        // Configure Compose-specific settings
-    }
+    override fun configureUISettings(enableAudio: Boolean, fpsLimit: Int, enablePpuLogging: Boolean) {}
 
-    /**
-     * Gets the ComposeUI instance.
-     * 
-     * @return The ComposeUI instance
-     */
-    fun getComposeUI(): ComposeUI {
-        return composeUI
-    }
 }

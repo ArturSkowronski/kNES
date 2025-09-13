@@ -68,12 +68,9 @@ class TerminalMain(enablePpuLogging: Boolean = true) {
             romPath = args[0]
         }
 
-        // If no ROM file was specified, look for knes.nes in the current directory
+        // If no ROM file was specified, use the default path
         if (romPath == null) {
-            val defaultRom = File("knes.nes")
-            if (defaultRom.exists()) {
-                romPath = defaultRom.absolutePath
-            }
+            romPath = "/Users/askowronski/vnes.nes"
         }
 
         // If still no ROM file, prompt the user to select one

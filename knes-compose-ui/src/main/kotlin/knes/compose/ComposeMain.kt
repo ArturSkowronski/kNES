@@ -75,8 +75,8 @@ fun NESScreenRenderer(screenView: ComposeScreenView) {
     val isMacOS = System.getProperty("os.name").lowercase().contains("mac")
     val scale = if (isMacOS) baseScale * 2 else baseScale
 
-    val scaledWidth = 512 * baseScale
-    val scaledHeight = 480 * baseScale
+    val scaledWidth = 512 * scale 
+    val scaledHeight = 480 * scale
 
     DisposableEffect(Unit) {
         screenView.onFrameReady = {
@@ -108,18 +108,18 @@ fun NESScreenRenderer(screenView: ComposeScreenView) {
 fun main() = application {
     val windowState = rememberWindowState(width = 800.dp, height = 700.dp)
     var isEmulatorRunning by remember { mutableStateOf(false) }
-
-    val uiFactory = remember { ComposeUIFactory() }
-    val screenView = remember { uiFactory.createScreenView(2) as ComposeScreenView }
     val controller = remember { KeyboardController() }
-    val nes = remember { NES(null, uiFactory, screenView, controller) }
-    val composeUI = remember { uiFactory.getComposeUI() }
 
-    val inputHandler = remember { uiFactory.createInputHandler(controller) as ComposeInputHandler }
+    val uiFactory = remember { ComposeUIFactory(controller) }
+    val screenView = remember { uiFactory.createScreenView(1) as ComposeScreenView }
+
+    val nes = remember { NES(null, uiFactory, screenView) }
+    val composeUI = remember { uiFactory.composeUI }
+
 
     LaunchedEffect(Unit) {
         composeUI.init(nes, screenView)
-        composeUI.setInputHandler(inputHandler)
+        composeUI.setInputHandler(uiFactory.inputHandler)
     }
 
     fun mapKeyCode(key: Key): Int {
@@ -151,7 +151,6 @@ fun main() = application {
         }
     }
 
-    // Create a focus requester
     val focusRequester = remember { FocusRequester() }
 
     Window(
@@ -170,11 +169,11 @@ fun main() = application {
 
                 when (event.type) {
                     KeyEventType.KeyDown -> {
-                        inputHandler.setKeyState(keyCode, true)
+                        composeUI.inputHandler!!.setKeyState(keyCode, true)
                         true
                     }
                     KeyEventType.KeyUp -> {
-                        inputHandler.setKeyState(keyCode, false)
+                        composeUI.inputHandler!!.setKeyState(keyCode, false)
                         true
                     }
                     else -> true  // Always consume key events
@@ -207,7 +206,6 @@ fun main() = application {
                     modifier = Modifier.fillMaxSize().padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Title
                     Text(
                         text = "kNES Emulator 🎮",
                         style = MaterialTheme.typography.h4,
@@ -217,7 +215,6 @@ fun main() = application {
                         modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
-                        // Start/Stop button
                         Button(
                             onClick = {
                                 if (isEmulatorRunning) {
@@ -233,7 +230,6 @@ fun main() = application {
                             Text(if (isEmulatorRunning) "Stop Emulator" else "Start Emulator")
                         }
 
-                        // Load ROM button
                         Button(
                             onClick = {
                                 val fileChooser = JFileChooser()
@@ -241,14 +237,12 @@ fun main() = application {
                                 if (fileChooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
                                     val file = fileChooser.selectedFile
                                     if (composeUI.loadRom(file.absolutePath)) {
-                                        // ROM loaded successfully
                                         if (!isEmulatorRunning) {
                                             composeUI.startEmulator()
                                             isEmulatorRunning = true
                                         }
                                     }
                                 }
-                                // Request focus after file chooser is closed
                                 focusRequester.requestFocus()
                             }
                         ) {
@@ -288,8 +282,6 @@ fun main() = application {
                         }}
 
                     }
-
-
                 }
             }
         }
