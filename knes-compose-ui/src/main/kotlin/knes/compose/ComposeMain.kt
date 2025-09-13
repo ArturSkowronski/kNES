@@ -61,14 +61,8 @@ import java.awt.event.KeyEvent
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
 
-
-/**
- * Composable function that renders the NES screen.
- *
- * @param screenView The ComposeScreenView to render
- */
 @Composable
-fun NESScreenRenderer(screenView: ComposeScreenView) {
+fun nesScreenRenderer(screenView: ComposeScreenView) {
     var frameCount by remember { mutableStateOf(0) }
     var currentBitmap by remember { mutableStateOf(screenView.getFrameBitmap()) }
     val baseScale = screenView.getScale()
@@ -101,9 +95,6 @@ fun NESScreenRenderer(screenView: ComposeScreenView) {
     }
 }
 
-/**
- * Main entry point for the Compose UI.
- */
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() = application {
     val windowState = rememberWindowState(width = 800.dp, height = 700.dp)
@@ -111,11 +102,10 @@ fun main() = application {
     val controller = remember { KeyboardController() }
 
     val uiFactory = remember { ComposeUIFactory(controller) }
-    val screenView = remember { uiFactory.createScreenView(1) as ComposeScreenView }
+    val screenView = remember { uiFactory.screenView as ComposeScreenView }
 
-    val nes = remember { NES(null, uiFactory, screenView) }
+    val nes = remember { NES(uiFactory, screenView) }
     val composeUI = remember { uiFactory.composeUI }
-
 
     LaunchedEffect(Unit) {
         composeUI.init(nes, screenView)
@@ -257,7 +247,7 @@ fun main() = application {
                             modifier = Modifier.weight(1f),
                             contentAlignment = Alignment.Center
                         ) {
-                            NESScreenRenderer(screenView)
+                            nesScreenRenderer(screenView)
                         }
                         Column {
                         Box(

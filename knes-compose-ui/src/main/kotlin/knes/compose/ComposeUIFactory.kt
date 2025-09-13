@@ -41,11 +41,5 @@ import knes.controllers.ControllerProvider
 class ComposeUIFactory(controller: ControllerProvider) : NESUIFactory {
     val composeUI = ComposeUI()
     override val inputHandler: InputHandler = ComposeInputHandler(controller)
-
-    override fun createScreenView(scale: Int): ScreenView {
-        return ComposeScreenView(scale)
-    }
-
-    override fun configureUISettings(enableAudio: Boolean, fpsLimit: Int, enablePpuLogging: Boolean) {}
-
+    override val screenView: ScreenView = ComposeScreenView(1)
 }

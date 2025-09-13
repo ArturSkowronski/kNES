@@ -18,6 +18,7 @@ import knes.emulator.Tile
 import knes.emulator.cpu.CPU
 import knes.emulator.mappers.MemoryMapper
 import knes.emulator.ui.GUI
+import knes.emulator.ui.ScreenView
 import knes.emulator.utils.HiResTimer
 import knes.emulator.utils.NameTable
 import knes.emulator.utils.PaletteTable
@@ -27,8 +28,8 @@ import java.util.stream.Collectors
 import javax.sound.sampled.SourceDataLine
 
 class PPU : PPUCycles {
-    private var timer: HiResTimer? = null
-    private var gui: GUI? = null
+//    private var timer: HiResTimer? = null
+    private lateinit var screenView: ScreenView
     private var ppuMem: Memory? = null
     private var sprMem: Memory? = null
     private var cpu: CPU? = null
@@ -207,7 +208,7 @@ class PPU : PPUCycles {
             .limit(5).collect(Collectors.toList())
 
     fun init(
-        gui: GUI,
+        screenView: ScreenView,
         ppuMem: Memory?,
         sprMem: Memory?,
         cpuMem: Memory,
@@ -215,7 +216,7 @@ class PPU : PPUCycles {
         sourceDataLine: SourceDataLine?,
         palTable: PaletteTable
     ) {
-        this.gui = gui
+        this.screenView = screenView
         this.ppuMem = ppuMem
         this.sprMem = sprMem
         this.cpuMem = cpuMem
@@ -228,7 +229,7 @@ class PPU : PPUCycles {
 
         // Initialize misc vars:
         scanline = 0
-        timer = gui.getTimer()
+//        timer = gui.getTimer()
 
         // Create sprite arrays:
         sprX = IntArray(64)
@@ -394,7 +395,7 @@ class PPU : PPUCycles {
         // Make sure everything is rendered:
         if (lastRenderedScanline < 239) {
             renderFramePartially(
-                gui!!.getScreenView().getBuffer(), lastRenderedScanline + 1, 240 - lastRenderedScanline
+                screenView.getBuffer(), lastRenderedScanline + 1, 240 - lastRenderedScanline
             )
         }
 
@@ -402,7 +403,7 @@ class PPU : PPUCycles {
 
 
         // Notify image buffer:
-        gui!!.getScreenView().imageReady(false)
+        screenView.imageReady(false)
 
         // Reset scanline counter:
         lastRenderedScanline = -1
@@ -506,7 +507,7 @@ class PPU : PPUCycles {
     }
 
     fun startFrame() {
-        val buffer = gui!!.getScreenView().getBuffer()
+        val buffer = screenView.getBuffer()
 
         // Set background color:
         var bgColor = 0
@@ -601,7 +602,7 @@ class PPU : PPUCycles {
     }
 
     fun endFrame() {
-        val buffer = gui!!.getScreenView().getBuffer()
+        val buffer = screenView.getBuffer()
 
         // Count colors in the buffer
         currentFrameColorCounts.clear()
@@ -1093,7 +1094,7 @@ class PPU : PPUCycles {
     }
 
     val isNonHWScalingEnabled: Boolean
-        get() = gui!!.getScreenView().scalingEnabled() && !gui!!.getScreenView().useHWScaling()
+        get() = screenView.scalingEnabled() && screenView.useHWScaling()
 
     private fun renderBgScanline(buffer: IntArray, scan: Int) {
         baseTile = (if (regS == 0) 0 else 256)
@@ -1193,7 +1194,7 @@ class PPU : PPUCycles {
     }
 
     private fun renderSpritesPartially(startscan: Int, scancount: Int, bgPri: Boolean) {
-        buffer = gui!!.getScreenView().getBuffer()
+        buffer = screenView.getBuffer()
         if (f_spVisibility == 1) {
             var sprT1: Int
             var sprT2: Int
@@ -1870,7 +1871,7 @@ class PPU : PPUCycles {
 
         // Initialize stuff:
         init(
-            gui!!, ppuMem, sprMem, cpuMem!!, cpu!!, sourceDataLine, palTable!!
+            screenView, ppuMem, sprMem, cpuMem!!, cpu!!, sourceDataLine, palTable!!
         )
     }
 

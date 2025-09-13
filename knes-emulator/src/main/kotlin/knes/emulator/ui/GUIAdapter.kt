@@ -52,14 +52,14 @@ class GUIAdapter(
     }
 
     override fun println(s: String) {
-        System.out.println(s)
+        println(s)
     }
 
-    override fun showErrorMsg(message: String) {
+    override fun sendErrorMsg(message: String) {
         System.err.println("ERROR: $message")
     }
 
-    override fun showLoadProgress(percentComplete: Int) {
+    override fun sendDebugMessage(message: String) {
         // Default implementation does nothing
     }
 

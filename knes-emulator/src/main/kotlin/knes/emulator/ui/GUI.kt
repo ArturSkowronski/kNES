@@ -26,8 +26,8 @@ import knes.emulator.utils.HiResTimer
 interface GUI {
 
     // Methods from UiInfoMessageBus
-    fun showErrorMsg(message: String)
-    fun showLoadProgress(percentComplete: Int)
+    fun sendErrorMsg(message: String)
+    fun sendDebugMessage(message: String)
     fun destroy()
 
     // GUI-specific methods

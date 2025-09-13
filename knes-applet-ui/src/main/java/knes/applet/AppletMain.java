@@ -33,15 +33,14 @@ public class AppletMain extends Applet implements Runnable {
     Font progressFont;
     public Color bgColor = Color.black.darker().darker();
     boolean started = false;
-
+    AppletGUI gui;
     public void init() {
         initKeyCodes();
         properties = readParams();
 
-        AppletGUI gui = new AppletGUI(this);
+        gui = new AppletGUI(this);
 
-        nes = new NES(gui, null, null, null);
-        nes.enableSound(properties.isSound());
+        nes = new NES(gui);
         nes.reset();
 
         gui.init(nes.getPapu(), false);
@@ -52,7 +51,7 @@ public class AppletMain extends Applet implements Runnable {
 
     public void addScreenView() {
 
-        panelScreen = (AppletScreenView) nes.getScreenView();
+        panelScreen = gui.getScreenView();
         panelScreen.setFPSEnabled(properties.isFps());
 
         this.setLayout(null);

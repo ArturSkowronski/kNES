@@ -21,20 +21,5 @@ import knes.emulator.input.InputHandler
  */
 interface NESUIFactory {
     val inputHandler: InputHandler
-    /**
-     * Creates a rendering surface that implements ScreenView interface
-     *
-     * @param scale The initial scale factor for the screen view
-     * @return A ScreenView implementation
-     */
-    fun createScreenView(scale: Int): ScreenView?
-
-    /**
-     * Optional: Configuration for UI-specific settings
-     *
-     * @param enableAudio Whether audio should be enabled
-     * @param fpsLimit The maximum FPS to target, or 0 for unlimited
-     * @param enablePpuLogging Whether PPU logging should be enabled
-     */
-    fun configureUISettings(enableAudio: Boolean, fpsLimit: Int, enablePpuLogging: Boolean) {}
+    val screenView: ScreenView
 }

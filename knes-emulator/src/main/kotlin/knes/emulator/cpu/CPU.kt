@@ -20,13 +20,13 @@ import knes.emulator.memory.MemoryAccess
 import knes.emulator.papu.PAPUClockFrame
 import knes.emulator.ppu.PPUCycles
 import knes.emulator.utils.Globals
+import kotlin.random.Random
 
-class CPU // Constructor:
-    (private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPUCycles) : Runnable, CPUIIrqRequester {
+class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPUCycles) : Runnable, CPUIIrqRequester {
     var myThread: Thread? = null
 
-    private var mmap: MemoryAccess? = null
-    private var mem: ShortArray? = null
+    private lateinit var mmap: MemoryAccess
+    private lateinit var mem: ShortArray
 
     var REG_ACC_NEW: Int = 0
     var REG_X_NEW: Int = 0
@@ -1153,21 +1153,21 @@ class CPU // Constructor:
     }
 
     private fun load(addr: Int): Int {
-        return (if (addr < 0x2000) mem!![addr and 0x7FF] else mmap!!.load(addr)).toInt()
+        return (if (addr < 0x2000) mem[addr and 0x7FF] else mmap.load(addr)).toInt()
     }
 
     private fun load16bit(addr: Int): Int {
         return if (addr < 0x1FFF)
-            mem!![addr and 0x7FF].toInt() or (mem!![(addr + 1) and 0x7FF].toInt() shl 8)
+            mem[addr and 0x7FF].toInt() or (mem[(addr + 1) and 0x7FF].toInt() shl 8)
         else
-            mmap!!.load(addr).toInt() or (mmap!!.load(addr + 1).toInt() shl 8)
+            mmap.load(addr).toInt() or (mmap.load(addr + 1).toInt() shl 8)
     }
 
     private fun write(addr: Int, `val`: Short) {
         if (addr < 0x2000) {
-            mem!![addr and 0x7FF] = `val`
+            mem[addr and 0x7FF] = `val`
         } else {
-            mmap!!.write(addr, `val`)
+            mmap.write(addr, `val`)
         }
     }
 
@@ -1176,14 +1176,14 @@ class CPU // Constructor:
             if (type == IRQ_NORMAL) {
                 return
             }
-            System.out.println("too fast irqs. type=" + type);
+            println("too fast irqs. type=" + type);
         }
         irqRequested = true
         irqType = type
     }
 
     fun push(value: Int) {
-        mmap!!.write(REG_SP, value.toShort())
+        mmap.write(REG_SP, value.toShort())
         REG_SP--
         REG_SP = 0x0100 or (REG_SP and 0xFF)
     }
@@ -1195,7 +1195,7 @@ class CPU // Constructor:
     fun pull(): Short {
         REG_SP++
         REG_SP = 0x0100 or (REG_SP and 0xFF)
-        return mmap!!.load(REG_SP)
+        return mmap.load(REG_SP)
     }
 
     fun pageCrossed(addr1: Int, addr2: Int): Boolean {
@@ -1260,12 +1260,12 @@ class CPU // Constructor:
      *
      * @param memoryAccess the memory access component to use
      */
-    fun setMapper(memoryAccess: knes.emulator.memory.MemoryAccess?) {
+    fun setMapper(memoryAccess: MemoryAccess) {
         mmap = memoryAccess
     }
 
     fun destroy() {
-        mmap = null
+        clearCPUMemory()
     }
 
     companion object {
@@ -1273,5 +1273,25 @@ class CPU // Constructor:
         const val IRQ_NORMAL: Int = 0
         const val IRQ_NMI: Int = 1
         const val IRQ_RESET: Int = 2
+    }
+
+    fun clearCPUMemory() {
+        val random = Random(System.nanoTime())
+
+        for (i in 0..0x1fff) {
+            when (random.nextInt(100)) {
+                in 0 until 33 -> mem[i] = 0x00
+                in 33 until 66 -> mem[i] = 0xFF.toShort()
+                else -> mem[i] = random.nextInt(256).toShort()
+            }
+        }
+
+        for (p in 0..3) {
+            val i = p * 0x800
+            mem[i + 0x008] = 0xF7
+            mem[i + 0x009] = 0xEF
+            mem[i + 0x00A] = 0xDF
+            mem[i + 0x00F] = 0xBF
+        }
     }
 }

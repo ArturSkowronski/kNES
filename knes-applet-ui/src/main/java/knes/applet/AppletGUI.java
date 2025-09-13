@@ -123,7 +123,7 @@ public class AppletGUI implements GUI {
         t1 = t2;
     }
 
-    public void showLoadProgress(int percentComplete) {
+    public void sendDebugMessage(int percentComplete) {
 
         // Show ROM load progress:
         applet.showLoadProgress(percentComplete);
@@ -176,7 +176,7 @@ public class AppletGUI implements GUI {
     }
 
     @Override
-    public void showErrorMsg(String msg) {
+    public void sendErrorMsg(String msg) {
         System.out.println(msg);
     }
 }
