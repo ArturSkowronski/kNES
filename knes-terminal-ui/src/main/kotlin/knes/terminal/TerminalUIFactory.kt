@@ -13,8 +13,6 @@
 
 package knes.terminal
 
-import knes.controllers.ControllerProvider
-import knes.controllers.KeyboardController
 import knes.emulator.input.InputHandler
 import knes.emulator.ui.NESUIFactory
 import knes.emulator.ui.ScreenView
@@ -24,15 +22,7 @@ import knes.emulator.ui.ScreenView
  */
 class TerminalUIFactory : NESUIFactory {
     private val terminalUI = TerminalUI()
-
-    /**
-     * Creates an input handler for the NES emulator.
-     * 
-     * @return An InputHandler implementation
-     */
-    override fun createInputHandler(controller: ControllerProvider): InputHandler {
-        return TerminalInputHandler()
-    }
+    override val inputHandler: InputHandler = TerminalInputHandler()
 
     /**
      * Creates a screen view for the NES emulator.

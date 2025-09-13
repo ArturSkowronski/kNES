@@ -49,7 +49,7 @@ class TerminalScreenView(private var scale: Int) : ScreenView {
 
     private var frameCounter: Long = 0
     private val drawBufferToTerminal = AtomicBoolean(true)
-    private val frameRateLimit = 4 // Only render every 4th frame to avoid terminal spam
+    private val frameRateLimit = 60 // Only render every 10th frame to avoid terminal spam
 
     init {
         buffer.fill(bgColor)
@@ -143,6 +143,7 @@ class TerminalScreenView(private var scale: Int) : ScreenView {
         if (!skipFrame && drawBufferToTerminal.get() && frameCounter % frameRateLimit == 0L) {
             // Visualize the buffer in the terminal
             visualizeBufferInTerminal()
+            Thread.sleep(150)
         }
     }
 

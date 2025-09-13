@@ -31,14 +31,15 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import knes.emulator.NES
+import knes.emulator.input.InputHandler
 
 /**
  * Main UI class for the Compose implementation.
  */
 class ComposeUI {
-    private var nes: NES? = null
-    private var screenView: ComposeScreenView? = null
-    private var inputHandler: ComposeInputHandler? = null
+    private lateinit var nes: NES
+    private lateinit var screenView: ComposeScreenView
+    var inputHandler: ComposeInputHandler? = null
 
     /**
      * Initializes the UI with the specified NES instance.
@@ -50,13 +51,11 @@ class ComposeUI {
         this.nes = nes
         this.screenView = screenView
 
-        // Set the NES instance on the screen view
         screenView.setNES(nes)
 
-        // Set the buffer on the PPU to prevent NullPointerException
-        // The PPU needs a buffer to render to, and it expects this buffer to be set from outside
-        // If the buffer is not set, a NullPointerException will occur in PPU.renderFramePartially
-        nes.ppu!!.buffer = screenView.getBuffer()
+        val buffer = screenView.getBuffer()
+        requireNotNull(buffer) { "ScreenView buffer must not be null" }
+        nes.ppu.buffer = buffer
     }
 
     /**
@@ -65,22 +64,22 @@ class ComposeUI {
      * 
      * @param inputHandler The input handler to use
      */
-    fun setInputHandler(inputHandler: ComposeInputHandler) {
-        this.inputHandler = inputHandler
+    fun setInputHandler(inputHandler: InputHandler) {
+        this.inputHandler = inputHandler as ComposeInputHandler?
     }
 
     /**
      * Starts the emulator.
      */
     fun startEmulator() {
-        nes?.startEmulation()
+        nes.startEmulation()
     }
 
     /**
      * Stops the emulator.
      */
     fun stopEmulator() {
-        nes?.stopEmulation()
+        nes.stopEmulation()
     }
 
     /**
@@ -90,6 +89,6 @@ class ComposeUI {
      * @return True if the ROM was loaded successfully, false otherwise
      */
     fun loadRom(path: String): Boolean {
-        return nes?.loadRom(path) ?: false
+        return nes.loadRom(path) == true
     }
 }
