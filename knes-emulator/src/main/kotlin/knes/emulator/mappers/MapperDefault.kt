@@ -420,54 +420,8 @@ class MapperDefault(nes: NES) : MemoryMapper {
     }
 
     override fun joy2Read(): Short {
-        val st = joy2StrobeState
-
-        joy2StrobeState++
-        if (joy2StrobeState == 24) {
-            joy2StrobeState = 0
-        }
-
-        // Handle the case where inputHandler2 is null (e.g., when using GUIAdapter)
-        if (inputHandler2 == null) {
-            // Return default values for all buttons (not pressed)
-            if (st >= 0 && st <= 7) {
-                return 0 // All buttons not pressed
-            } else if (st == 16 || st == 17 || st == 19) {
-                return 0.toShort()
-            } else if (st == 18) {
-                return 1.toShort()
-            } else {
-                return 0
-            }
-        }
-
-        if (st == 0) {
-            return inputHandler2.getKeyState(InputHandler.Companion.KEY_A)
-        } else if (st == 1) {
-            return inputHandler2.getKeyState(InputHandler.Companion.KEY_B)
-        } else if (st == 2) {
-            return inputHandler2.getKeyState(InputHandler.Companion.KEY_SELECT)
-        } else if (st == 3) {
-            return inputHandler2.getKeyState(InputHandler.Companion.KEY_START)
-        } else if (st == 4) {
-            return inputHandler2.getKeyState(InputHandler.Companion.KEY_UP)
-        } else if (st == 5) {
-            return inputHandler2.getKeyState(InputHandler.Companion.KEY_DOWN)
-        } else if (st == 6) {
-            return inputHandler2.getKeyState(InputHandler.Companion.KEY_LEFT)
-        } else if (st == 7) {
-            return inputHandler2.getKeyState(InputHandler.Companion.KEY_RIGHT)
-        } else if (st == 16) {
-            return 0.toShort()
-        } else if (st == 17) {
-            return 0.toShort()
-        } else if (st == 18) {
-            return 1.toShort()
-        } else if (st == 19) {
-            return 0.toShort()
-        } else {
-            return 0
-        }
+        ///TODO: Support for second controller
+        return 0
     }
 
     override fun loadROM(romData: ROMData?) {
