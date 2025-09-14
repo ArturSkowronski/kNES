@@ -65,7 +65,7 @@ import javax.swing.filechooser.FileNameExtensionFilter
 fun nesScreenRenderer(screenView: ComposeScreenView) {
     var frameCount by remember { mutableStateOf(0) }
     var currentBitmap by remember { mutableStateOf(screenView.getFrameBitmap()) }
-    val baseScale = screenView.getScale()
+    val baseScale = screenView.scale
     val isMacOS = System.getProperty("os.name").lowercase().contains("mac")
     val scale = if (isMacOS) baseScale * 2 else baseScale
 

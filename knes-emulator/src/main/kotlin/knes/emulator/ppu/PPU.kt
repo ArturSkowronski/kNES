@@ -17,19 +17,22 @@ import knes.emulator.Memory
 import knes.emulator.Tile
 import knes.emulator.cpu.CPU
 import knes.emulator.mappers.MemoryMapper
+import knes.emulator.papu.PAPU
 import knes.emulator.ui.ScreenView
+import knes.emulator.utils.Globals
 import knes.emulator.utils.NameTable
 import knes.emulator.utils.PaletteTable
 import java.util.*
 import javax.sound.sampled.SourceDataLine
 
 class PPU : PPUCycles {
-//    private var timer: HiResTimer? = null
+    //    private var timer: HiResTimer? = null
     private lateinit var screenView: ScreenView
     private lateinit var ppuMem: Memory
     private lateinit var sprMem: Memory
 
     private lateinit var cpu: CPU
+    private lateinit var papu: PAPU
     private lateinit var cpuMem: Memory
     private var sourceDataLine: SourceDataLine? = null
     private lateinit var palTable: PaletteTable
@@ -198,7 +201,7 @@ class PPU : PPUCycles {
         sprMem: Memory,
         cpuMem: Memory,
         cpu: CPU,
-        sourceDataLine: SourceDataLine?,
+        papu: PAPU,
         palTable: PaletteTable
     ) {
         this.screenView = screenView
@@ -206,7 +209,8 @@ class PPU : PPUCycles {
         this.sprMem = sprMem
         this.cpuMem = cpuMem
         this.cpu = cpu
-        this.sourceDataLine = sourceDataLine
+        this.papu = papu
+        this.sourceDataLine = papu.line
         this.palTable = palTable
 
         updateControlReg1(0)
@@ -386,6 +390,22 @@ class PPU : PPUCycles {
 
         endFrame()
 
+        val tmp = papu.bufferPos
+        if (Globals.enableSound && Globals.timeEmulation && tmp > 0) {
+            val min_avail = papu.line!!.getBufferSize() - 4 * tmp
+
+            var timeToSleep = papu.getMillisToAvailableAbove(min_avail)
+            do {
+                try {
+                    Thread.sleep(timeToSleep.toLong())
+                } catch (_: InterruptedException) {
+                    // Ignore
+                }
+                timeToSleep = papu.getMillisToAvailableAbove(min_avail)
+            } while (timeToSleep > 0)
+
+            papu.writeBuffer()
+        }
 
         // Notify image buffer:
         screenView.imageReady(false)
@@ -1856,7 +1876,7 @@ class PPU : PPUCycles {
 
         // Initialize stuff:
         init(
-            screenView, ppuMem, sprMem, cpuMem, cpu, sourceDataLine, palTable!!
+            screenView, ppuMem, sprMem, cpuMem, cpu, papu, palTable
         )
     }
 

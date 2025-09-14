@@ -40,7 +40,6 @@ class ComposeUI {
         this.nes = nes
         this.screenView = screenView
         this.inputHandler = inputHandler
-        screenView.setNES(nes)
 
         val buffer = screenView.getBuffer()
         requireNotNull(buffer) { "ScreenView buffer must not be null" }

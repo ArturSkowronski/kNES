@@ -33,7 +33,6 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import knes.compose.utils.ScreenLogger
-import knes.emulator.NES
 import knes.emulator.ui.ScreenView
 import knes.emulator.utils.Globals
 import knes.emulator.utils.HiResTimer
@@ -44,7 +43,7 @@ import java.awt.image.BufferedImage
  * 
  * This implementation uses Compose Desktop to render the NES screen.
  */
-class ComposeScreenView(private var scale: Int) : ScreenView {
+class ComposeScreenView(val scale: Int) : ScreenView {
     private val width = 256
     private val height = 240
 
@@ -60,9 +59,6 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
     private var t1: Long = 0
     private var t2: Long = 0
     private var sleepTime: Int = 0
-
-    // NES instance
-    private var nes: NES? = null
 
     // Callback for when a new frame is ready
     var onFrameReady: (() -> Unit)? = null
@@ -175,26 +171,6 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
      * @param skipFrame Whether this frame should be skipped
      */
     override fun imageReady(skipFrame: Boolean) {
-        // Sound stuff:
-        nes?.let { nes ->
-            val tmp = nes.papu.bufferPos
-            if (Globals.enableSound && Globals.timeEmulation && tmp > 0) {
-                val min_avail = nes.papu.line!!.getBufferSize() - 4 * tmp
-
-                var timeToSleep = nes.papu.getMillisToAvailableAbove(min_avail)
-                do {
-                    try {
-                        Thread.sleep(timeToSleep.toLong())
-                    } catch (e: InterruptedException) {
-                        // Ignore
-                    }
-                    timeToSleep = nes.papu.getMillisToAvailableAbove(min_avail)
-                } while (timeToSleep > 0)
-
-                nes.papu.writeBuffer()
-            }
-        }
-
         // Sleep a bit if sound is disabled:
         if (Globals.timeEmulation && !Globals.enableSound) {
             sleepTime = Globals.frameTime
@@ -267,56 +243,15 @@ class ComposeScreenView(private var scale: Int) : ScreenView {
         }
     }
 
-    /**
-     * Set whether to show the FPS counter.
-     * 
-     * @param val true to show FPS, false to hide
-     */
     override fun setFPSEnabled(value: Boolean) {
         showFPS = value
     }
 
-    /**
-     * Set the background color.
-     * 
-     * @param color The background color in RGB format
-     */
     override fun setBgColor(color: Int) {
         bgColor = color
     }
 
-    /**
-     * Sets the scale factor for the screen view.
-     * 
-     * @param scale The new scale factor
-     */
-    fun setScale(scale: Int) {
-        this.scale = scale
-    }
-
-    /**
-     * Gets the current scale factor.
-     * 
-     * @return The current scale factor
-     */
-    fun getScale(): Int {
-        return scale
-    }
-
-    /**
-     * Sets the NES instance for this screen view.
-     * 
-     * @param nes The NES instance to use
-     */
-    fun setNES(nes: NES) {
-        this.nes = nes
-    }
-
-    /**
-     * Clean up resources used by this screen view.
-     */
     override fun destroy() {
         buffer = IntArray(0)
-        nes = null
     }
 }

@@ -58,7 +58,7 @@ class NES(var gui: GUI) {
             sprMemory,
             cpuMemory,
             cpu,
-            papu.line,
+            papu,
             palTable
         )
 
