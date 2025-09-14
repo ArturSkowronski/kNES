@@ -14,14 +14,6 @@
 package knes.controllers
 
 interface ControllerProvider {
-    fun getButtonState(button: NESButton): Short
-    fun mapButton(button: NESButton, code: Int)
-    fun update()
-    fun configure(config: Map<String, Any> = emptyMap()) {
-        // Default empty implementation
-    }
-    
-    enum class NESButton {
-        A, B, SELECT, START, UP, DOWN, LEFT, RIGHT
-    }
+    fun setKeyState(keyCode: Int, isPressed: Boolean)
+    fun getKeyState(padKey: Int): Short
 }

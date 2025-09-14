@@ -54,21 +54,9 @@ class SkikoInputHandler() : InputHandler {
     private val keyMapping = IntArray(NUM_KEYS) { 0 }
     private val keyAdapter = KeyInputAdapter()
 
-    init {
-        // Default key mappings
-        mapKey(KEY_A, KeyEvent.VK_Z)
-        mapKey(KEY_B, KeyEvent.VK_X)
-        mapKey(KEY_START, KeyEvent.VK_ENTER)
-        mapKey(KEY_SELECT, KeyEvent.VK_SPACE)
-        mapKey(KEY_UP, KeyEvent.VK_UP)
-        mapKey(KEY_DOWN, KeyEvent.VK_DOWN)
-        mapKey(KEY_LEFT, KeyEvent.VK_LEFT)
-        mapKey(KEY_RIGHT, KeyEvent.VK_RIGHT)
-    }
-
     /**
      * Gets the state of a key.
-     * 
+     *
      * @param padKey The key to check
      * @return 0x41 if the key is pressed, 0x40 otherwise
      */
@@ -77,34 +65,8 @@ class SkikoInputHandler() : InputHandler {
     }
 
     /**
-     * Maps a pad key to a device key.
-     * 
-     * @param padKey The pad key to map
-     * @param deviceKey The device key to map to
-     */
-    override fun mapKey(padKey: Int, deviceKey: Int) {
-        keyMapping[padKey] = deviceKey
-    }
-
-    /**
-     * Resets the input handler.
-     */
-    override fun reset() {
-        for (i in keyStates.indices) {
-            keyStates[i] = 0
-        }
-    }
-
-    /**
-     * Updates the input handler.
-     */
-    override fun update() {
-        // No need to update key states here, as they are updated by the key adapter
-    }
-
-    /**
      * Sets the state of a key.
-     * 
+     *
      * @param keyCode The key code
      * @param isPressed Whether the key is pressed
      */
@@ -118,29 +80,13 @@ class SkikoInputHandler() : InputHandler {
 
     /**
      * Registers the key adapter with a component.
-     * 
+     *
      * @param component The component to register with
      */
     fun registerKeyAdapter(component: JComponent) {
         component.addKeyListener(keyAdapter)
         component.isFocusable = true
         component.requestFocus()
-    }
-
-    /**
-     * Unregisters the key adapter from a component.
-     * 
-     * @param component The component to unregister from
-     */
-    fun unregisterKeyAdapter(component: JComponent) {
-        component.removeKeyListener(keyAdapter)
-    }
-
-    /**
-     * Cleans up resources.
-     */
-    override fun destroy() {
-        // Clean up resources
     }
 
     /**

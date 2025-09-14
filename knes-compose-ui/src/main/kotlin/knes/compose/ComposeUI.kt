@@ -30,9 +30,21 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import knes.emulator.NES
 
-class ComposeUI(val nes: NES, val screenView: ComposeScreenView, val inputHandler: ComposeInputHandler)  {
+class ComposeUI(val nes: NES, val screenView: ComposeScreenView, val inputHandler: ComposeKeyboardInputHandler)  {
 
     fun startEmulator() {
         nes.startEmulation()
@@ -44,5 +56,39 @@ class ComposeUI(val nes: NES, val screenView: ComposeScreenView, val inputHandle
 
     fun loadRom(path: String): Boolean {
         return nes.loadRom(path) == true
+    }
+
+    @Composable
+    fun nesScreenRenderer() {
+        var frameCount by remember { mutableStateOf(0) }
+        var currentBitmap by remember { mutableStateOf(screenView.getFrameBitmap()) }
+        val baseScale = screenView.scale
+        val isMacOS = System.getProperty("os.name").lowercase().contains("mac")
+        val scale = if (isMacOS) baseScale * 1 else baseScale
+
+        val scaledWidth = 512 * scale
+        val scaledHeight = 480 * scale
+
+        DisposableEffect(Unit) {
+            screenView.onFrameReady = {
+                currentBitmap = screenView.getFrameBitmap()
+                frameCount++
+            }
+
+            onDispose {
+                screenView.onFrameReady = null
+            }
+        }
+
+        Canvas(
+            modifier = Modifier
+                .width(scaledWidth.dp)
+                .height(scaledHeight.dp)
+        ) {
+            drawImage(
+                image = currentBitmap,
+                dstSize = IntSize(scaledWidth, scaledHeight)
+            )
+        }
     }
 }

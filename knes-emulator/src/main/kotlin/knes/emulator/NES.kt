@@ -176,8 +176,6 @@ class NES(var gui: GUI) {
         ppu.reset()
         palTable.reset()
         papu.reset(this)
-        gui.getJoy1().reset()
-
     }
 
     fun beginExecution() {

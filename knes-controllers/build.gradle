@@ -50,6 +50,10 @@ sourceSets {
     }
 }
 
+dependencies {
+    implementation project(':knes-emulator')
+}
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(11)
