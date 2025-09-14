@@ -13,7 +13,6 @@
 
 package knes.compose
 
-import knes.controllers.ControllerProvider
 import knes.emulator.input.InputHandler
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
@@ -25,7 +24,7 @@ import javax.swing.JComponent
  * Note: This is a temporary implementation using Swing instead of Compose
  * until the Compose UI dependencies are properly configured.
  */
-class ComposeInputHandler(controller: ControllerProvider) : InputHandler {
+class ComposeInputHandler() : InputHandler {
     private val keyStates = ShortArray(InputHandler.Companion.NUM_KEYS) { 0 }
     private val keyMapping = IntArray(InputHandler.Companion.NUM_KEYS) { 0 }
     private val keyAdapter = KeyInputAdapter()

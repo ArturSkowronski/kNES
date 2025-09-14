@@ -17,40 +17,34 @@ import knes.emulator.Memory
 import knes.emulator.Tile
 import knes.emulator.cpu.CPU
 import knes.emulator.mappers.MemoryMapper
-import knes.emulator.ui.GUI
 import knes.emulator.ui.ScreenView
-import knes.emulator.utils.HiResTimer
 import knes.emulator.utils.NameTable
 import knes.emulator.utils.PaletteTable
 import java.util.*
-import java.util.Map
-import java.util.stream.Collectors
 import javax.sound.sampled.SourceDataLine
 
 class PPU : PPUCycles {
 //    private var timer: HiResTimer? = null
     private lateinit var screenView: ScreenView
-    private var ppuMem: Memory? = null
-    private var sprMem: Memory? = null
-    private var cpu: CPU? = null
+    private lateinit var ppuMem: Memory
+    private lateinit var sprMem: Memory
+
+    private lateinit var cpu: CPU
+    private lateinit var cpuMem: Memory
+    private var sourceDataLine: SourceDataLine? = null
+    private lateinit var palTable: PaletteTable
 
     // Rendering Options:
     private val showSpr0Hit = false
     private var memoryMapper: MemoryMapper? = null
-    private var palTable: PaletteTable? = null
-    private var cpuMem: Memory? = null
-    private var sourceDataLine: SourceDataLine? = null
 
     fun setShowSoundBuffer(showSoundBuffer: Boolean) {
         this.showSoundBuffer = showSoundBuffer
     }
 
     private var showSoundBuffer = false
-    var isEnablePpuLogging: Boolean = false
-        get() = field
-        set(value) {
-            field = value
-        }
+    private var isEnablePpuLogging = false
+
     private val clipTVcolumn = true
     private val clipTVrow = false
 
@@ -124,11 +118,11 @@ class PPU : PPUCycles {
 
     // Tiles:
     @JvmField
-    var ptTile: Array<knes.emulator.Tile>? = null
+    var ptTile: Array<Tile>? = null
 
     // Name table data:
     var ntable1: IntArray = IntArray(4)
-    var nameTable: Array<knes.emulator.utils.NameTable?> = arrayOfNulls<knes.emulator.utils.NameTable>(4)
+    var nameTable: Array<NameTable?> = arrayOfNulls<NameTable>(4)
     var currentMirroring: Int = -1
 
     // Palette data:
@@ -166,8 +160,8 @@ class PPU : PPUCycles {
     var isRequestRenderAll: Boolean = false
     private var validTileData = false
     private var att = 0
-    var scantile: Array<knes.emulator.Tile?>? = arrayOfNulls<knes.emulator.Tile>(32)
-    var t: knes.emulator.Tile? = null
+    var scantile: Array<Tile?>? = arrayOfNulls<Tile>(32)
+    var t: Tile? = null
 
     // These are temporary variables used in rendering and sound procedures.
     // Their states outside of those procedures can be ignored.
@@ -198,19 +192,10 @@ class PPU : PPUCycles {
     private val currentFrameColorCounts: MutableMap<Int?, Int?> = HashMap<Int?, Int?>()
     private val previousFrameColorCounts: MutableMap<Int?, Int?> = HashMap<Int?, Int?>()
 
-    val topColors: MutableList<MutableMap.MutableEntry<Int?, Int?>?>
-        /**
-         * Returns the top 5 most common colors in the current frame.
-         *
-         * @return A list of Map.Entry objects containing the color (key) and count (value)
-         */
-        get() = currentFrameColorCounts.entries.stream().sorted(Map.Entry.comparingByValue<Int?, Int?>().reversed())
-            .limit(5).collect(Collectors.toList())
-
     fun init(
         screenView: ScreenView,
-        ppuMem: Memory?,
-        sprMem: Memory?,
+        ppuMem: Memory,
+        sprMem: Memory,
         cpuMem: Memory,
         cpu: CPU,
         sourceDataLine: SourceDataLine?,
@@ -390,7 +375,7 @@ class PPU : PPUCycles {
         // Start VBlank period:
         // Do NMI:
 
-        cpu!!.requestIrq(knes.emulator.cpu.CPU.Companion.IRQ_NMI)
+        cpu!!.requestIrq(CPU.Companion.IRQ_NMI)
 
         // Make sure everything is rendered:
         if (lastRenderedScanline < 239) {
@@ -1871,17 +1856,11 @@ class PPU : PPUCycles {
 
         // Initialize stuff:
         init(
-            screenView, ppuMem, sprMem, cpuMem!!, cpu!!, sourceDataLine, palTable!!
+            screenView, ppuMem, sprMem, cpuMem, cpu, sourceDataLine, palTable!!
         )
     }
 
-    fun destroy() {
-        ppuMem = null
-        sprMem = null
-        scantile = null
-    }
-
-    fun setMapper(memMapper: knes.emulator.mappers.MemoryMapper) {
+    fun setMapper(memMapper: MemoryMapper) {
         this.memoryMapper = memMapper
     }
 }
