@@ -186,7 +186,7 @@ public class AppletScreenView extends JPanel implements ScreenView {
 
     }
 
-    public void imageReady(boolean skipFrame, int @NotNull [] buffer) {
+    public void imageReady(boolean skipFrame, int [] buffer) {
 
         if (!Globals.focused) {
             setFocusable(true);

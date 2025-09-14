@@ -57,6 +57,9 @@ import androidx.compose.ui.window.rememberWindowState
 import knes.controllers.KeyboardController
 import kotlinx.coroutines.delay
 import knes.emulator.NES
+import knes.emulator.input.InputHandler
+import knes.emulator.ui.GUIAdapter
+import knes.emulator.ui.ScreenView
 import java.awt.event.KeyEvent
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
@@ -99,15 +102,13 @@ fun nesScreenRenderer(screenView: ComposeScreenView) {
 fun main() = application {
     val windowState = rememberWindowState(width = 800.dp, height = 700.dp)
     var isEmulatorRunning by remember { mutableStateOf(false) }
-    val uiFactory = remember { ComposeUIFactory() }
-    val screenView = remember { uiFactory.screenView as ComposeScreenView }
 
-    val nes = remember { NES(uiFactory, screenView) }
-    val composeUI = remember { uiFactory.composeUI }
+    val inputHandler = ComposeInputHandler()
 
-    LaunchedEffect(Unit) {
-        composeUI.init(nes, screenView, uiFactory.inputHandler as ComposeInputHandler)
-    }
+    val screenView = remember { ComposeScreenView(1) }
+
+    val nes = remember { NES(GUIAdapter(inputHandler, screenView)) }
+    val composeUI = remember { ComposeUI(nes, screenView, inputHandler) }
 
     fun mapKeyCode(key: Key): Int {
         return when (key) {

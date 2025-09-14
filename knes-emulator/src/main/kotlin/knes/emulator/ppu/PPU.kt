@@ -18,7 +18,6 @@ import knes.emulator.Tile
 import knes.emulator.cpu.CPU
 import knes.emulator.mappers.MemoryMapper
 import knes.emulator.papu.PAPU
-import knes.emulator.ui.ScreenView
 import knes.emulator.utils.Globals
 import knes.emulator.utils.NameTable
 import knes.emulator.utils.PaletteTable
@@ -27,7 +26,7 @@ import javax.sound.sampled.SourceDataLine
 
 class PPU : PPUCycles {
     //    private var timer: HiResTimer? = null
-    private lateinit var screenView: ScreenView
+    private lateinit var imageReadyHandler: (Boolean, IntArray) -> Unit
     private lateinit var ppuMem: Memory
     private lateinit var sprMem: Memory
 
@@ -46,7 +45,7 @@ class PPU : PPUCycles {
     }
 
     private var showSoundBuffer = false
-    private var isEnablePpuLogging = false
+    var isEnablePpuLogging = false
 
     private val clipTVcolumn = true
     private val clipTVrow = false
@@ -196,7 +195,7 @@ class PPU : PPUCycles {
     private val previousFrameColorCounts: MutableMap<Int?, Int?> = HashMap<Int?, Int?>()
 
     fun init(
-        screenView: ScreenView,
+        imageReadyHandler: (Boolean, IntArray) -> Unit,
         ppuMem: Memory,
         sprMem: Memory,
         cpuMem: Memory,
@@ -204,7 +203,7 @@ class PPU : PPUCycles {
         papu: PAPU,
         palTable: PaletteTable
     ) {
-        this.screenView = screenView
+        this.imageReadyHandler = imageReadyHandler
         this.ppuMem = ppuMem
         this.sprMem = sprMem
         this.cpuMem = cpuMem
@@ -409,7 +408,7 @@ class PPU : PPUCycles {
         }
 
         // Notify image buffer:
-        screenView.imageReady(false, buffer)
+        imageReadyHandler.invoke(false, buffer)
 
         // Reset scanline counter:
         lastRenderedScanline = -1
@@ -1065,37 +1064,10 @@ class PPU : PPUCycles {
             renderSpritesPartially(startScan, scanCount, false)
         }
 
-        if (this.isNonHWScalingEnabled && !this.isRequestRenderAll) {
-            // Check which scanlines have changed, to try to
-            // speed up scaling:
 
-            var j: Int
-            var jmax: Int
-            if (startScan + scanCount > 240) {
-                scanCount = 240 - startScan
-            }
-            for (i in startScan until startScan + scanCount) {
-                scanlineChanged[i] = false
-                si = i shl 8
-                jmax = si + 256
-                j = si
-                while (j < jmax) {
-                    if (buffer[j] != oldFrame[j]) {
-                        scanlineChanged[i] = true
-                        break
-                    }
-                    oldFrame[j] = buffer[j]
-                    j++
-                }
-                System.arraycopy(buffer, j, oldFrame, j, jmax - j)
-            }
-        }
 
         validTileData = false
     }
-
-    val isNonHWScalingEnabled: Boolean
-        get() = screenView.scalingEnabled() && screenView.useHWScaling()
 
     private fun renderBgScanline(buffer: IntArray, scan: Int) {
         baseTile = (if (regS == 0) 0 else 256)
@@ -1871,7 +1843,7 @@ class PPU : PPUCycles {
 
         // Initialize stuff:
         init(
-            screenView, ppuMem, sprMem, cpuMem, cpu, papu, palTable
+            imageReadyHandler, ppuMem, sprMem, cpuMem, cpu, papu, palTable
         )
     }
 

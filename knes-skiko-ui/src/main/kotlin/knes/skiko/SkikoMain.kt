@@ -31,6 +31,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import knes.emulator.NES
+import knes.emulator.ui.GUIAdapter
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skia.Image
 import org.jetbrains.skia.Paint
@@ -62,10 +63,11 @@ fun main() {
  * Main class for the Skiko UI implementation.
  */
 class SkikoMain {
-    private val uiFactory = SkikoUIFactory()
-    private val screenView = uiFactory.screenView as SkikoScreenView
-    private val nes = NES(uiFactory, screenView)
-    private val skikoUI = uiFactory.skikoUI
+    val inputHandler = SkikoInputHandler()
+    val screenView = SkikoScreenView(1)
+
+    private val nes = NES(GUIAdapter(inputHandler, screenView))
+    private val skikoUI = SkikoUI(nes, screenView)
 
     private var isEmulatorRunning = false
     private val renderExecutor = Executors.newSingleThreadScheduledExecutor()
@@ -74,10 +76,6 @@ class SkikoMain {
      * Starts the application.
      */
     fun start() {
-        // Initialize the UI
-        skikoUI.init(nes, screenView)
-
-        // Create the main window
         val frame = JFrame("kNES Emulator - Skiko UI")
         frame.defaultCloseOperation = JFrame.EXIT_ON_CLOSE
         frame.layout = BorderLayout()
@@ -202,8 +200,6 @@ class SkikoMain {
         skiaLayer.isFocusable = true
         skiaLayer.requestFocus()
 
-        // Register the input handler with the Skia layer
-        val inputHandler = uiFactory.inputHandler as SkikoInputHandler
         inputHandler.registerKeyAdapter(skiaLayer)
 
         // Set the callback for when a new frame is ready

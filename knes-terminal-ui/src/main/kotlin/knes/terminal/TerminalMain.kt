@@ -13,9 +13,10 @@
 
 package knes.terminal
 
-import knes.controllers.KeyboardController
 import knes.emulator.NES
-import java.io.File
+import knes.emulator.input.InputHandler
+import knes.emulator.ui.GUIAdapter
+import knes.emulator.ui.ScreenView
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
 
@@ -40,10 +41,10 @@ fun main(args: Array<String>) {
  * Main class for the Terminal UI implementation.
  */
 class TerminalMain(enablePpuLogging: Boolean = true) {
-    private val uiFactory = TerminalUIFactory()
-    private val screenView = uiFactory.screenView
-    private val nes = NES(uiFactory, screenView)
-    private val terminalUI = uiFactory.terminalUI
+    val inputHandler: InputHandler = TerminalInputHandler()
+    val screenView = TerminalScreenView(1)
+
+    private val nes = NES(GUIAdapter(inputHandler, screenView))
 
     init {
         // Set PPU logging flag
@@ -59,8 +60,8 @@ class TerminalMain(enablePpuLogging: Boolean = true) {
         println("kNES Terminal UI")
         println("================")
 
+        val terminalUI = TerminalUI(nes, screenView)
         // Initialize the UI
-        terminalUI.init(nes, uiFactory.screenView as TerminalScreenView)
 
         // Check if a ROM file was specified as a command line argument
         var romPath: String? = null

@@ -22,15 +22,10 @@ import knes.emulator.producers.ChannelRegistryProducer
 import knes.emulator.producers.MapperProducer
 import knes.emulator.rom.ROMData
 import knes.emulator.ui.GUI
-import knes.emulator.ui.GUIAdapter
-import knes.emulator.ui.NESUIFactory
-import knes.emulator.ui.ScreenView
 import knes.emulator.utils.PaletteTable
 import java.util.function.Consumer
 
 class NES(var gui: GUI) {
-    constructor(uiFactory: NESUIFactory, screenView: ScreenView) :
-            this(GUIAdapter(uiFactory.inputHandler, screenView))
 
     val ppu: PPU = PPU()
     val papu: PAPU = PAPU(this)
@@ -53,7 +48,7 @@ class NES(var gui: GUI) {
     init {
         cpu.init(cpuMemory)
         ppu.init(
-            gui.getScreenView(),
+            gui::imageReady,
             ppuMemory,
             sprMemory,
             cpuMemory,

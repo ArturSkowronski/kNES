@@ -31,12 +31,7 @@ class GUIAdapter(
     }
 
     override fun getJoy2(): InputHandler? {
-        // Currently only supporting one input handler
         return null
-    }
-
-    override fun getScreenView(): ScreenView {
-        return screenView
     }
 
     override fun getTimer(): HiResTimer {
@@ -47,21 +42,12 @@ class GUIAdapter(
         screenView.imageReady(skipFrame, buffer)
     }
 
-    override fun println(s: String) {
-        println(s)
-    }
-
     override fun sendErrorMsg(message: String) {
         System.err.println("ERROR: $message")
     }
 
-    override fun sendDebugMessage(message: String) {
-        // Default implementation does nothing
-    }
+    override fun sendDebugMessage(message: String) {}
 
-    /**
-     * Cleans up resources used by this GUI adapter.
-     */
     override fun destroy() {
         inputHandler.destroy()
         screenView.destroy()

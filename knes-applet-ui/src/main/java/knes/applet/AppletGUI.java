@@ -94,7 +94,7 @@ public class AppletGUI implements GUI {
 
 
     @Override
-    public void imageReady(boolean skipFrame, int @NotNull [] buffer) {
+    public void imageReady(boolean skipFrame, int [] buffer) {
         // Sound stuff:
         int tmp = papuProvider.getBufferIndex();
         if (Globals.enableSound && Globals.timeEmulation && tmp > 0) {
@@ -160,7 +160,6 @@ public class AppletGUI implements GUI {
         return kbJoy2;
     }
 
-    @Override
     public AppletScreenView getScreenView() {
         return vScreen;
     }
@@ -168,11 +167,6 @@ public class AppletGUI implements GUI {
     @Override
     public HiResTimer getTimer() {
         return timer;
-    }
-
-    @Override
-    public void println(String s) {
-        // Not implemented for applet
     }
 
     @Override
