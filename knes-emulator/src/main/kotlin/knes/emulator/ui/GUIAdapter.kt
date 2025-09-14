@@ -49,7 +49,6 @@ class GUIAdapter(
     override fun sendDebugMessage(message: String) {}
 
     override fun destroy() {
-        inputHandler.destroy()
         screenView.destroy()
     }
 }

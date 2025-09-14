@@ -137,8 +137,6 @@ public class AppletGUI implements GUI {
     public void destroy() {
         for (int i = 0; i < inputHandlers.length; i++) {
             if (inputHandlers[i] != null) {
-                inputHandlers[i].reset();
-                inputHandlers[i].destroy();
                 inputHandlers[i] = null;
             }
             inputCallbacks[i] = null;

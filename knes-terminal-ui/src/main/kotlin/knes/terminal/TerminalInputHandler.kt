@@ -48,20 +48,6 @@ class TerminalInputHandler() : InputHandler {
     private val executor = Executors.newSingleThreadExecutor()
     private var running = true
 
-    init {
-        // Default key mappings (these are just for reference, as we'll use commands instead)
-        mapKey(InputHandler.Companion.KEY_A, KeyEvent.VK_Z)
-        mapKey(InputHandler.Companion.KEY_B, KeyEvent.VK_X)
-        mapKey(InputHandler.Companion.KEY_START, KeyEvent.VK_ENTER)
-        mapKey(InputHandler.Companion.KEY_SELECT, KeyEvent.VK_SPACE)
-        mapKey(InputHandler.Companion.KEY_UP, KeyEvent.VK_UP)
-        mapKey(InputHandler.Companion.KEY_DOWN, KeyEvent.VK_DOWN)
-        mapKey(InputHandler.Companion.KEY_LEFT, KeyEvent.VK_LEFT)
-        mapKey(InputHandler.Companion.KEY_RIGHT, KeyEvent.VK_RIGHT)
-
-        // Start a thread to read commands from the console
-        startCommandReader()
-    }
 
     /**
      * Starts a thread to read commands from the console.
@@ -169,36 +155,4 @@ class TerminalInputHandler() : InputHandler {
      * @param padKey The pad key to map
      * @param deviceKey The device key to map to
      */
-    override fun mapKey(padKey: Int, deviceKey: Int) {
-        keyMapping[padKey] = deviceKey
-    }
-
-    /**
-     * Resets the input handler.
-     */
-    override fun reset() {
-        for (i in keyStates.indices) {
-            keyStates[i] = 0
-        }
-    }
-
-    /**
-     * Updates the input handler.
-     */
-    override fun update() {
-        // No need to update key states here, as they are updated by the command reader
-    }
-
-    /**
-     * Cleans up resources.
-     */
-    override fun destroy() {
-        running = false
-        executor.shutdown()
-        try {
-            executor.awaitTermination(1, TimeUnit.SECONDS)
-        } catch (e: InterruptedException) {
-            println("Error shutting down input handler: ${e.message}")
-        }
-    }
 }

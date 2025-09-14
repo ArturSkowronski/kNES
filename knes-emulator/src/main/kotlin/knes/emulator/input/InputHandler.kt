@@ -15,14 +15,6 @@ package knes.emulator.input
 
 interface InputHandler {
     fun getKeyState(padKey: Int): Short
-    fun mapKey(padKey: Int, deviceKey: Int)
-    fun reset()
-    fun update()
-
-    /**
-     * Clean up resources used by this input handler.
-     */
-    fun destroy()
 
     companion object {
         const val KEY_A: Int = 0
@@ -33,7 +25,6 @@ interface InputHandler {
         const val KEY_DOWN: Int = 5
         const val KEY_LEFT: Int = 6
         const val KEY_RIGHT: Int = 7
-
         const val NUM_KEYS: Int = 8
     }
 }
