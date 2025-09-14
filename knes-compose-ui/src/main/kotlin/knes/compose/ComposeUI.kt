@@ -31,6 +31,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import knes.emulator.NES
+
 class ComposeUI {
     private lateinit var nes: NES
     private lateinit var screenView: ComposeScreenView
@@ -40,10 +41,6 @@ class ComposeUI {
         this.nes = nes
         this.screenView = screenView
         this.inputHandler = inputHandler
-
-        val buffer = screenView.getBuffer()
-        requireNotNull(buffer) { "ScreenView buffer must not be null" }
-        nes.ppu.buffer = buffer
     }
 
     fun startEmulator() {

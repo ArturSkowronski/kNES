@@ -153,7 +153,6 @@ class PPU : PPUCycles {
     private val dummyPixPriTable = IntArray(256 * 240)
     private val oldFrame = IntArray(256 * 240)
 
-    @JvmField
     var buffer: IntArray = IntArray(256 * 240)
 
     private var tpix: IntArray = IntArray(64)
@@ -165,6 +164,7 @@ class PPU : PPUCycles {
     private var att = 0
     var scantile: Array<Tile?>? = arrayOfNulls<Tile>(32)
     var t: Tile? = null
+    private var bgColor = 0xFF333333.toInt()
 
     // These are temporary variables used in rendering and sound procedures.
     // Their states outside of those procedures can be ignored.
@@ -228,6 +228,7 @@ class PPU : PPUCycles {
         vertFlip = BooleanArray(64)
         horiFlip = BooleanArray(64)
         bgPriority = BooleanArray(64)
+        buffer.fill(bgColor)
 
         // Create pattern table tile buffers:
         if (ptTile == null) {
@@ -384,7 +385,7 @@ class PPU : PPUCycles {
         // Make sure everything is rendered:
         if (lastRenderedScanline < 239) {
             renderFramePartially(
-                screenView.getBuffer(), lastRenderedScanline + 1, 240 - lastRenderedScanline
+                buffer, lastRenderedScanline + 1, 240 - lastRenderedScanline
             )
         }
 
@@ -408,7 +409,7 @@ class PPU : PPUCycles {
         }
 
         // Notify image buffer:
-        screenView.imageReady(false)
+        screenView.imageReady(false, buffer)
 
         // Reset scanline counter:
         lastRenderedScanline = -1
@@ -512,9 +513,6 @@ class PPU : PPUCycles {
     }
 
     fun startFrame() {
-        val buffer = screenView.getBuffer()
-
-        // Set background color:
         var bgColor = 0
 
         if (f_dispType == 0) {
@@ -607,8 +605,6 @@ class PPU : PPUCycles {
     }
 
     fun endFrame() {
-        val buffer = screenView.getBuffer()
-
         // Count colors in the buffer
         currentFrameColorCounts.clear()
         for (pixel in buffer) {
@@ -1199,7 +1195,6 @@ class PPU : PPUCycles {
     }
 
     private fun renderSpritesPartially(startscan: Int, scancount: Int, bgPri: Boolean) {
-        buffer = screenView.getBuffer()
         if (f_spVisibility == 1) {
             var sprT1: Int
             var sprT2: Int

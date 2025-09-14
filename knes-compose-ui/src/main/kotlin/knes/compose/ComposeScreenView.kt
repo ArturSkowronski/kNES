@@ -46,11 +46,9 @@ import java.awt.image.BufferedImage
 class ComposeScreenView(val scale: Int) : ScreenView {
     private val width = 256
     private val height = 240
-
-    private var buffer: IntArray = IntArray(width * height)
+    private var currentBuffer = IntArray(width * height)
     private var scaleMode = 0
     private var showFPS = false
-    private var bgColor = 0xFF333333.toInt()
 
     private var frameCounter: Long = 0
 
@@ -64,113 +62,36 @@ class ComposeScreenView(val scale: Int) : ScreenView {
     var onFrameReady: (() -> Unit)? = null
 
     init {
-        buffer.fill(bgColor)
         t1 = timer.currentMicros()
     }
 
     fun getFrameBitmap(): ImageBitmap {
-        val imageData = IntArray(buffer.size)
+        val imageData = IntArray(currentBuffer.size)
 
         frameCounter++
 
-        for (i in buffer.indices) {
-            // Use the conversion method from ScreenLogger
-            // Make sure alpha channel is explicitly set to fully opaque
-            val color = ScreenLogger.convertColorToHSB(buffer[i])
+        for (i in currentBuffer.indices) {
+            val color = ScreenLogger.convertColorToHSB(currentBuffer[i])
             imageData[i] = color or 0xFF000000.toInt()
         }
-
-//        // Log some color information for debugging
-//        if (frameCounter % 60L == 0L) { // Log once per second at 60fps
-//            println("[DEBUG] First few pixels in getFrameBitmap: " +
-//                    "${Integer.toHexString(imageData[0])}, " +
-//                    "${Integer.toHexString(imageData[1])}, " +
-//                    "${Integer.toHexString(imageData[2])}")
-//        }
-
-        // Skip the to5Colors call as it might be modifying the colors unexpectedly
-        // ScreenLogger.to5Colors(imageData, width, height)
 
         // Create a BufferedImage with TYPE_INT_ARGB to ensure alpha channel support
         val newImage = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB).apply {
             setRGB(0, 0, width, height, imageData, 0, width)
         }
 
-        // Convert to Compose ImageBitmap
         return newImage.toComposeImageBitmap()
     }
 
-    /**
-     * Creates a safe copy of the frame bitmap for preview purposes.
-     * This method creates a smaller, simplified version of the bitmap
-     * to avoid performance issues when previewing.
-     *
-     * @return A simplified ImageBitmap suitable for preview
-     */
-    fun getSafePreviewBitmap(): ImageBitmap {
-        // Create a smaller version of the bitmap (e.g., 128x120 instead of 256x240)
-        val previewWidth = width / 2
-        val previewHeight = height / 2
-        val imageData = IntArray(previewWidth * previewHeight)
-
-        // Sample the buffer to create a smaller image
-        for (y in 0 until previewHeight) {
-            for (x in 0 until previewWidth) {
-                // Sample from the original buffer (take every other pixel)
-                val srcX = x * 2
-                val srcY = y * 2
-                val srcIndex = srcY * width + srcX
-
-                // Ensure the alpha channel is set
-                val color = ScreenLogger.convertColorToHSB(buffer[srcIndex])
-                imageData[y * previewWidth + x] = color or 0xFF000000.toInt()
-            }
-        }
-
-        // Create a smaller BufferedImage
-        val previewImage = BufferedImage(previewWidth, previewHeight, BufferedImage.TYPE_INT_ARGB).apply {
-            setRGB(0, 0, previewWidth, previewHeight, imageData, 0, previewWidth)
-        }
-
-        return previewImage.toComposeImageBitmap()
-    }
-
-    override fun init() {
-    }
-
-    /**
-     * Gets the buffer of pixel data for the screen.
-     * 
-     * @return Array of pixel data in RGB format
-     */
-    override fun getBuffer(): IntArray {
-        return buffer
-    }
-
-    /**
-     * Gets the width of the buffer.
-     * 
-     * @return The width in pixels
-     */
     override fun getBufferWidth(): Int {
         return width
     }
 
-    /**
-     * Gets the height of the buffer.
-     * 
-     * @return The height in pixels
-     */
     override fun getBufferHeight(): Int {
         return height
     }
 
-    /**
-     * Notify that an image is ready to be displayed.
-     * 
-     * @param skipFrame Whether this frame should be skipped
-     */
-    override fun imageReady(skipFrame: Boolean) {
+    override fun imageReady(skipFrame: Boolean, buffer: IntArray) {
         // Sleep a bit if sound is disabled:
         if (Globals.timeEmulation && !Globals.enableSound) {
             sleepTime = Globals.frameTime
@@ -181,60 +102,30 @@ class ComposeScreenView(val scale: Int) : ScreenView {
             }
         }
 
-        // Update timer
         t1 = timer.currentMicros()
-
+        currentBuffer = buffer.copyOf()
         if (!skipFrame) {
-            // Mark the image as needing an update
             getFrameBitmap()
-
-            // Notify that a new frame is ready
             onFrameReady?.invoke()
         }
     }
 
-    /**
-     * Check if scaling is enabled for this screen view.
-     * 
-     * @return true if scaling is enabled, false otherwise
-     */
     override fun scalingEnabled(): Boolean {
         return scaleMode != 0
     }
 
-    /**
-     * Check if hardware scaling is being used.
-     * 
-     * @return true if hardware scaling is being used, false otherwise
-     */
     override fun useHWScaling(): Boolean {
         return true // Compose uses hardware acceleration
     }
 
-    /**
-     * Get the current scale mode.
-     * 
-     * @return The current scale mode
-     */
     override fun getScaleMode(): Int {
         return scaleMode
     }
 
-    /**
-     * Set the scale mode for the screen view.
-     * 
-     * @param newMode The new scale mode
-     */
     override fun setScaleMode(newMode: Int) {
         scaleMode = newMode
     }
 
-    /**
-     * Get the scale factor for a given scale mode.
-     * 
-     * @param mode The scale mode
-     * @return The scale factor
-     */
     override fun getScaleModeScale(mode: Int): Int {
         return when (mode) {
             0 -> 1
@@ -248,10 +139,8 @@ class ComposeScreenView(val scale: Int) : ScreenView {
     }
 
     override fun setBgColor(color: Int) {
-        bgColor = color
+
     }
 
-    override fun destroy() {
-        buffer = IntArray(0)
-    }
+    override fun destroy() {}
 }

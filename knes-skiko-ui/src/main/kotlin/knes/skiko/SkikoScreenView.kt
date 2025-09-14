@@ -30,6 +30,7 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import knes.emulator.BlipBuffer
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorType
@@ -126,10 +127,10 @@ class SkikoScreenView(private var scale: Int) : ScreenView {
 
     /**
      * Creates a BufferedImage from the current frame for preview purposes.
-     * 
+     *
      * @return A BufferedImage containing the current frame
      */
-    fun getFrameBufferedImage(): BufferedImage {
+    fun getFrameBufferedImage(buffer: IntArray): BufferedImage {
         // Create a copy of the buffer with alpha channel set
         val pixelsWithAlpha = IntArray(buffer.size)
         for (i in buffer.indices) {
@@ -148,19 +149,6 @@ class SkikoScreenView(private var scale: Int) : ScreenView {
         return BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB).apply {
             setRGB(0, 0, width, height, pixelsWithAlpha, 0, width)
         }
-    }
-
-    override fun init() {
-        // No initialization needed
-    }
-
-    /**
-     * Gets the buffer of pixel data for the screen.
-     * 
-     * @return Array of pixel data in RGB format
-     */
-    override fun getBuffer(): IntArray {
-        return buffer
     }
 
     /**
@@ -186,7 +174,7 @@ class SkikoScreenView(private var scale: Int) : ScreenView {
      * 
      * @param skipFrame Whether this frame should be skipped
      */
-    override fun imageReady(skipFrame: Boolean) {
+    override fun imageReady(skipFrame: Boolean, buffer: IntArray) {
         if (!skipFrame) {
             // Notify that a new frame is ready
             // This will trigger a redraw in SkikoMain

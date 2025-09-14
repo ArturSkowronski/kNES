@@ -42,7 +42,6 @@ class TerminalScreenView(private var scale: Int) : ScreenView {
     private val width = 256
     private val height = 240
 
-    private var buffer: IntArray = IntArray(width * height)
     private var scaleMode = 0
     private var showFPS = false
     private var bgColor = 0xFF333333.toInt()
@@ -50,10 +49,6 @@ class TerminalScreenView(private var scale: Int) : ScreenView {
     private var frameCounter: Long = 0
     private val drawBufferToTerminal = AtomicBoolean(true)
     private val frameRateLimit = 60 // Only render every 10th frame to avoid terminal spam
-
-    init {
-        buffer.fill(bgColor)
-    }
 
     /**
      * Visualizes the buffer in the terminal.
@@ -64,7 +59,7 @@ class TerminalScreenView(private var scale: Int) : ScreenView {
      * @param width The width of the buffer
      * @param height The height of the buffer
      */
-    private fun visualizeBufferInTerminal() {
+    private fun visualizeBufferInTerminal(buffer: IntArray) {
 
         // ANSI escape code for reset
         val reset = "\u001B[0m"
@@ -99,22 +94,6 @@ class TerminalScreenView(private var scale: Int) : ScreenView {
     }
 
     /**
-     * Initialize the screen view.
-     */
-    override fun init() {
-        // No initialization needed
-    }
-
-    /**
-     * Gets the buffer of pixel data for the screen.
-     * 
-     * @return Array of pixel data in RGB format
-     */
-    override fun getBuffer(): IntArray {
-        return buffer
-    }
-
-    /**
      * Gets the width of the buffer.
      * 
      * @return The width in pixels
@@ -137,12 +116,12 @@ class TerminalScreenView(private var scale: Int) : ScreenView {
      * 
      * @param skipFrame Whether this frame should be skipped
      */
-    override fun imageReady(skipFrame: Boolean) {
+    override fun imageReady(skipFrame: Boolean, buffer: IntArray) {
         frameCounter++
 
         if (!skipFrame && drawBufferToTerminal.get() && frameCounter % frameRateLimit == 0L) {
             // Visualize the buffer in the terminal
-            visualizeBufferInTerminal()
+            visualizeBufferInTerminal(buffer)
             Thread.sleep(150)
         }
     }
@@ -255,6 +234,5 @@ class TerminalScreenView(private var scale: Int) : ScreenView {
      * Clean up resources used by this screen view.
      */
     override fun destroy() {
-        buffer = IntArray(0)
     }
 }
