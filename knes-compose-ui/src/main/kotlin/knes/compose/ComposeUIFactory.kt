@@ -33,13 +33,9 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 import knes.emulator.input.InputHandler
 import knes.emulator.ui.NESUIFactory
 import knes.emulator.ui.ScreenView
-import knes.controllers.ControllerProvider
 
-/**
- * Factory for creating Compose UI components for the NES emulator.
- */
-class ComposeUIFactory(controller: ControllerProvider) : NESUIFactory {
+class ComposeUIFactory() : NESUIFactory {
     val composeUI = ComposeUI()
-    override val inputHandler: InputHandler = ComposeInputHandler(controller)
+    override val inputHandler: InputHandler = ComposeInputHandler()
     override val screenView: ScreenView = ComposeScreenView(1)
 }

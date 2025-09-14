@@ -65,7 +65,7 @@ import javax.swing.filechooser.FileNameExtensionFilter
 fun nesScreenRenderer(screenView: ComposeScreenView) {
     var frameCount by remember { mutableStateOf(0) }
     var currentBitmap by remember { mutableStateOf(screenView.getFrameBitmap()) }
-    val baseScale = screenView.getScale()
+    val baseScale = screenView.scale
     val isMacOS = System.getProperty("os.name").lowercase().contains("mac")
     val scale = if (isMacOS) baseScale * 2 else baseScale
 
@@ -99,17 +99,14 @@ fun nesScreenRenderer(screenView: ComposeScreenView) {
 fun main() = application {
     val windowState = rememberWindowState(width = 800.dp, height = 700.dp)
     var isEmulatorRunning by remember { mutableStateOf(false) }
-    val controller = remember { KeyboardController() }
-
-    val uiFactory = remember { ComposeUIFactory(controller) }
+    val uiFactory = remember { ComposeUIFactory() }
     val screenView = remember { uiFactory.screenView as ComposeScreenView }
 
     val nes = remember { NES(uiFactory, screenView) }
     val composeUI = remember { uiFactory.composeUI }
 
     LaunchedEffect(Unit) {
-        composeUI.init(nes, screenView)
-        composeUI.setInputHandler(uiFactory.inputHandler)
+        composeUI.init(nes, screenView, uiFactory.inputHandler as ComposeInputHandler)
     }
 
     fun mapKeyCode(key: Key): Int {
@@ -155,15 +152,15 @@ fun main() = application {
             }
 
             if (keyCode != 0) {
-                System.out.println("Key event: ${event.type} ${event.key} keyCode: $keyCode (${getKeyName(keyCode)})")
+                println("Key event: ${event.type} ${event.key} keyCode: $keyCode (${getKeyName(keyCode)})")
 
                 when (event.type) {
                     KeyEventType.KeyDown -> {
-                        composeUI.inputHandler!!.setKeyState(keyCode, true)
+                        composeUI.inputHandler.setKeyState(keyCode, true)
                         true
                     }
                     KeyEventType.KeyUp -> {
-                        composeUI.inputHandler!!.setKeyState(keyCode, false)
+                        composeUI.inputHandler.setKeyState(keyCode, false)
                         true
                     }
                     else -> true  // Always consume key events

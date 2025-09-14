@@ -31,63 +31,26 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 import knes.emulator.NES
-import knes.emulator.input.InputHandler
 
-/**
- * Main UI class for the Compose implementation.
- */
 class ComposeUI {
     private lateinit var nes: NES
     private lateinit var screenView: ComposeScreenView
-    var inputHandler: ComposeInputHandler? = null
+    lateinit var inputHandler: ComposeInputHandler
 
-    /**
-     * Initializes the UI with the specified NES instance.
-     * 
-     * @param nes The NES instance to use
-     * @param screenView The ComposeScreenView to use for rendering
-     */
-    fun init(nes: NES, screenView: ComposeScreenView) {
+    fun init(nes: NES, screenView: ComposeScreenView, inputHandler: ComposeInputHandler) {
         this.nes = nes
         this.screenView = screenView
-
-        screenView.setNES(nes)
-
-        val buffer = screenView.getBuffer()
-        requireNotNull(buffer) { "ScreenView buffer must not be null" }
-        nes.ppu.buffer = buffer
+        this.inputHandler = inputHandler
     }
 
-    /**
-     * Sets the input handler for this UI.
-     * This is necessary to connect the input handler to the NES instance.
-     * 
-     * @param inputHandler The input handler to use
-     */
-    fun setInputHandler(inputHandler: InputHandler) {
-        this.inputHandler = inputHandler as ComposeInputHandler?
-    }
-
-    /**
-     * Starts the emulator.
-     */
     fun startEmulator() {
         nes.startEmulation()
     }
 
-    /**
-     * Stops the emulator.
-     */
     fun stopEmulator() {
         nes.stopEmulation()
     }
 
-    /**
-     * Loads a ROM file.
-     * 
-     * @param path The path to the ROM file
-     * @return True if the ROM was loaded successfully, false otherwise
-     */
     fun loadRom(path: String): Boolean {
         return nes.loadRom(path) == true
     }

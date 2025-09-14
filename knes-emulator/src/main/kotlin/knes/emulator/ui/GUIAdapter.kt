@@ -39,16 +39,12 @@ class GUIAdapter(
         return screenView
     }
 
-    override fun getTimer(): knes.emulator.utils.HiResTimer {
+    override fun getTimer(): HiResTimer {
         return timer
     }
 
-    override fun imageReady(skipFrame: Boolean) {
-        screenView.imageReady(skipFrame)
-    }
-
-    override fun init(papuAppletFunctionality: PAPU_Applet_Functionality, showGui: Boolean) {
-        screenView.init()
+    override fun imageReady(skipFrame: Boolean, buffer: IntArray) {
+        screenView.imageReady(skipFrame, buffer)
     }
 
     override fun println(s: String) {

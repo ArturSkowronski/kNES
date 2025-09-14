@@ -16,6 +16,7 @@ package knes.applet;
 import knes.emulator.ui.GUI;
 import knes.emulator.ui.ScreenView;
 import knes.emulator.utils.Globals;
+import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import java.awt.*;
@@ -94,9 +95,7 @@ public class AppletScreenView extends JPanel implements ScreenView {
     }
 
     public void init() {
-
         setScaleMode(SCALE_NONE);
-
     }
 
     private void createView() {
@@ -187,7 +186,7 @@ public class AppletScreenView extends JPanel implements ScreenView {
 
     }
 
-    public void imageReady(boolean skipFrame) {
+    public void imageReady(boolean skipFrame, int @NotNull [] buffer) {
 
         if (!Globals.focused) {
             setFocusable(true);
@@ -205,7 +204,7 @@ public class AppletScreenView extends JPanel implements ScreenView {
 
         // Notify GUI, so it can write the sound buffer:
         if (notifyImageReady) {
-            gui.imageReady(skipFrame);
+            gui.imageReady(skipFrame, buffer);
         }
 
     }

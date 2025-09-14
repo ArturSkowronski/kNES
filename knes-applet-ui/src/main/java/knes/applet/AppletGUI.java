@@ -19,6 +19,7 @@ import knes.emulator.ui.GUI;
 import knes.emulator.ui.PAPU_Applet_Functionality;
 import knes.emulator.utils.Globals;
 import knes.emulator.utils.HiResTimer;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * AWT-specific implementation of the UI interface.
@@ -52,7 +53,6 @@ public class AppletGUI implements GUI {
         this.applet = applet;
     }
 
-    @Override
     public void init(PAPU_Applet_Functionality papu_applet_functionality, boolean showGui) {
         // Create the screen view
         papuProvider = papu_applet_functionality;
@@ -94,7 +94,7 @@ public class AppletGUI implements GUI {
 
 
     @Override
-    public void imageReady(boolean skipFrame) {
+    public void imageReady(boolean skipFrame, int @NotNull [] buffer) {
         // Sound stuff:
         int tmp = papuProvider.getBufferIndex();
         if (Globals.enableSound && Globals.timeEmulation && tmp > 0) {
@@ -178,5 +178,10 @@ public class AppletGUI implements GUI {
     @Override
     public void sendErrorMsg(String msg) {
         System.out.println(msg);
+    }
+
+    @Override
+    public void sendDebugMessage(@NotNull String message) {
+
     }
 }

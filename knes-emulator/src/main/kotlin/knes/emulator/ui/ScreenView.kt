@@ -21,18 +21,6 @@ package knes.emulator.ui
 interface ScreenView {
 
     /**
-     * Initialize the screen view.
-     */
-    fun init()
-
-    /**
-     * Get the buffer of pixel data for the screen.
-     *
-     * @return Array of pixel data in RGB format
-     */
-    fun getBuffer(): IntArray
-
-    /**
      * Get the width of the buffer.
      *
      * @return The width in pixels
@@ -51,7 +39,7 @@ interface ScreenView {
      *
      * @param skipFrame Whether this frame should be skipped
      */
-    fun imageReady(skipFrame: Boolean)
+    fun imageReady(skipFrame: Boolean, buffer: IntArray)
 
     /**
      * Check if scaling is enabled for this screen view.

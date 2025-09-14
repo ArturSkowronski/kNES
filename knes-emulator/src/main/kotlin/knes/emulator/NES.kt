@@ -29,7 +29,8 @@ import knes.emulator.utils.PaletteTable
 import java.util.function.Consumer
 
 class NES(var gui: GUI) {
-    constructor(uiFactory: NESUIFactory, screenView: ScreenView) : this(GUIAdapter(uiFactory.inputHandler, screenView))
+    constructor(uiFactory: NESUIFactory, screenView: ScreenView) :
+            this(GUIAdapter(uiFactory.inputHandler, screenView))
 
     val ppu: PPU = PPU()
     val papu: PAPU = PAPU(this)
@@ -57,7 +58,7 @@ class NES(var gui: GUI) {
             sprMemory,
             cpuMemory,
             cpu,
-            papu.line,
+            papu,
             palTable
         )
 

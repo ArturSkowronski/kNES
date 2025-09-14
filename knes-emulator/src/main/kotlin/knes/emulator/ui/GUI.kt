@@ -35,7 +35,6 @@ interface GUI {
     fun getJoy2(): InputHandler?
     fun getScreenView(): ScreenView
     fun getTimer(): HiResTimer
-    fun imageReady(skipFrame: Boolean)
-    fun init(papuAppletFunctionality: PAPU_Applet_Functionality, showGui: Boolean)
+    fun imageReady(skipFrame: Boolean, buffer: IntArray)
     fun println(s: String)
 }
