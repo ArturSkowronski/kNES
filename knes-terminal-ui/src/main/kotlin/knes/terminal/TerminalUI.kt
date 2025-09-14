@@ -35,32 +35,14 @@ import knes.emulator.NES
 /**
  * Main UI class for the Terminal implementation.
  */
-class TerminalUI {
-    private var nes: NES? = null
-    private var screenView: TerminalScreenView? = null
-
-    /**
-     * Initializes the UI with the specified NES instance.
-     * 
-     * @param nes The NES instance to use
-     * @param screenView The TerminalScreenView to use for rendering
-     */
-    fun init(nes: NES, screenView: TerminalScreenView) {
-        this.nes = nes
-        this.screenView = screenView
-
-        // Set the buffer on the PPU to prevent NullPointerException
-        // The PPU needs a buffer to render to, and it expects this buffer to be set from outside
-        // If the buffer is not set, a NullPointerException will occur in PPU.renderFramePartially
-        nes.ppu.buffer = screenView.getBuffer()
-    }
+class TerminalUI(val nes: NES, val screenView: TerminalScreenView) {
 
     /**
      * Starts the emulator.
      */
     fun startEmulator() {
         println("Starting NES emulation in terminal mode...")
-        nes?.startEmulation()
+        nes.startEmulation()
     }
 
     /**
@@ -68,7 +50,7 @@ class TerminalUI {
      */
     fun stopEmulator() {
         println("Stopping NES emulation...")
-        nes?.stopEmulation()
+        nes.stopEmulation()
     }
 
     /**
@@ -79,7 +61,7 @@ class TerminalUI {
      */
     fun loadRom(path: String): Boolean {
         println("Loading ROM: $path")
-        return nes?.loadRom(path) ?: false
+        return nes.loadRom(path)
     }
 
     /**
@@ -87,9 +69,6 @@ class TerminalUI {
      */
     fun destroy() {
         println("Cleaning up resources...")
-        screenView?.destroy()
-        screenView = null
-
-        nes = null
+        screenView.destroy()
     }
 }

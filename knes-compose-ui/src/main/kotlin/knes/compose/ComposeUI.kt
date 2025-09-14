@@ -32,16 +32,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import knes.emulator.NES
 
-class ComposeUI {
-    private lateinit var nes: NES
-    private lateinit var screenView: ComposeScreenView
-    lateinit var inputHandler: ComposeInputHandler
-
-    fun init(nes: NES, screenView: ComposeScreenView, inputHandler: ComposeInputHandler) {
-        this.nes = nes
-        this.screenView = screenView
-        this.inputHandler = inputHandler
-    }
+class ComposeUI(val nes: NES, val screenView: ComposeScreenView, val inputHandler: ComposeInputHandler)  {
 
     fun startEmulator() {
         nes.startEmulation()

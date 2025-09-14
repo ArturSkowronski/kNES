@@ -32,60 +32,21 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import knes.emulator.NES
 
-/**
- * Main UI class for the Skiko implementation.
- */
-class SkikoUI {
-    private var nes: NES? = null
-    private var screenView: SkikoScreenView? = null
+class SkikoUI(val nes: NES, val screenView: SkikoScreenView) {
 
-    /**
-     * Initializes the UI with the specified NES instance.
-     * 
-     * @param nes The NES instance to use
-     * @param screenView The SkikoScreenView to use for rendering
-     */
-    fun init(nes: NES, screenView: SkikoScreenView) {
-        this.nes = nes
-        this.screenView = screenView
-
-        // Set the buffer on the PPU to prevent NullPointerException
-        // The PPU needs a buffer to render to, and it expects this buffer to be set from outside
-        // If the buffer is not set, a NullPointerException will occur in PPU.renderFramePartially
-        nes.ppu!!.buffer = screenView.getBuffer()
-    }
-
-    /**
-     * Starts the emulator.
-     */
     fun startEmulator() {
-        nes?.startEmulation()
+        nes.startEmulation()
     }
 
-    /**
-     * Stops the emulator.
-     */
-    fun stopEmulator() {
-        nes?.stopEmulation()
+      fun stopEmulator() {
+        nes.stopEmulation()
     }
 
-    /**
-     * Loads a ROM file.
-     * 
-     * @param path The path to the ROM file
-     * @return True if the ROM was loaded successfully, false otherwise
-     */
-    fun loadRom(path: String): Boolean {
-        return nes?.loadRom(path) ?: false
+     fun loadRom(path: String): Boolean {
+        return nes.loadRom(path)
     }
 
-    /**
-     * Cleans up resources.
-     */
     fun destroy() {
-        screenView?.destroy()
-        screenView = null
-
-        nes = null
+        screenView.destroy()
     }
 }

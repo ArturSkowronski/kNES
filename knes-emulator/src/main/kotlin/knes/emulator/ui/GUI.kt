@@ -33,8 +33,6 @@ interface GUI {
     // GUI-specific methods
     fun getJoy1(): InputHandler
     fun getJoy2(): InputHandler?
-    fun getScreenView(): ScreenView
     fun getTimer(): HiResTimer
     fun imageReady(skipFrame: Boolean, buffer: IntArray)
-    fun println(s: String)
 }
