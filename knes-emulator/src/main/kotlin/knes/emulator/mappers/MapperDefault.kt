@@ -325,13 +325,13 @@ class MapperDefault(nes: NES) : MemoryMapper {
         when (address) {
             0x2000 -> {
                 // PPU Control register 1
-                cpuMem!!.write(address, value)
+                cpuMem.write(address, value)
                 ppu!!.updateControlReg1(value.toInt())
             }
 
             0x2001 -> {
                 // PPU Control register 2
-                cpuMem!!.write(address, value)
+                cpuMem.write(address, value)
                 ppu!!.updateControlReg2(value.toInt())
             }
 

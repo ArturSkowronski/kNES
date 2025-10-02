@@ -13,9 +13,6 @@
 
 package knes.emulator
 
-import java.io.*
-import java.util.zip.*
-
 class ByteBuffer {
     companion object {
         @JvmField
@@ -26,81 +23,6 @@ class ByteBuffer {
 
         @JvmField
         val BO_LITTLE_ENDIAN = 1
-
-        @JvmStatic
-        fun asciiEncode(buf: ByteBuffer): ByteBuffer {
-            val data = buf.buf
-            val enc = ByteArray(buf.getSize() * 2)
-
-            var encpos = 0
-            var tmp: Int
-            for (i in data.indices) {
-                tmp = data[i].toInt()
-                enc[encpos] = (65 + (tmp and 0xF)).toByte()
-                enc[encpos + 1] = (65 + (tmp shr 4 and 0xF)).toByte()
-                encpos += 2
-            }
-            return ByteBuffer(enc, BO_BIG_ENDIAN)
-        }
-
-        @JvmStatic
-        fun asciiDecode(@Suppress("UNUSED_PARAMETER") buf: ByteBuffer): ByteBuffer? {
-            // This method is not implemented in the original Java code
-            return null
-        }
-
-        @JvmStatic
-        fun saveToZipFile(f: File, buf: ByteBuffer) {
-            try {
-                val fOut = FileOutputStream(f)
-                val zipOut = ZipOutputStream(fOut)
-                zipOut.putNextEntry(ZipEntry("contents"))
-                zipOut.write(buf.getBytes())
-                zipOut.closeEntry()
-                zipOut.close()
-                fOut.close()
-                //System.out.println("Buffer was successfully saved to "+f.getPath());
-            } catch (e: Exception) {
-                //System.out.println("Unable to save buffer to file "+f.getPath());
-                e.printStackTrace()
-            }
-        }
-
-        @JvmStatic
-        fun readFromZipFile(f: File): ByteBuffer? {
-            try {
-                val `in` = FileInputStream(f)
-                val zipIn = ZipInputStream(`in`)
-                val zip = ZipFile(f)
-                val entry = zip.getEntry("contents")
-                val len = entry.size.toInt()
-                //System.out.println("Len = "+len);
-
-                var curlen = 0
-                val buf = ByteArray(len)
-                zipIn.nextEntry
-                while (curlen < len) {
-                    val read = zipIn.read(buf, curlen, len - curlen)
-                    if (read >= 0) {
-                        curlen += read
-                    } else {
-                        // end of file.
-                        break
-                    }
-                }
-                zipIn.closeEntry()
-                zipIn.close()
-                `in`.close()
-                zip.close()
-                return ByteBuffer(buf, BO_BIG_ENDIAN)
-            } catch (e: Exception) {
-                //System.out.println("Unable to load buffer from file "+f.getPath());
-                e.printStackTrace()
-            }
-
-            // fail:
-            return null
-        }
     }
 
     private var byteOrder = BO_BIG_ENDIAN
@@ -122,19 +44,12 @@ class ByteBuffer {
     }
 
     constructor(content: ByteArray, byteOrdering: Int) {
-        try {
-            buf = ShortArray(content.size)
-            for (i in content.indices) {
-                buf[i] = (content[i].toInt() and 255).toShort()
-            }
-            size = content.size
-            this.byteOrder = byteOrdering
-        } catch (e: Exception) {
-            // Initialize with defaults in case of exception
-            buf = ShortArray(1)
-            size = 1
-            //System.out.println("ByteBuffer: Couldn't create buffer from empty array.");
+        buf = ShortArray(content.size)
+        for (i in content.indices) {
+            buf[i] = (content[i].toInt() and 255).toShort()
         }
+        size = content.size
+        this.byteOrder = byteOrdering
     }
 
     fun setExpandable(exp: Boolean) {
@@ -171,7 +86,6 @@ class ByteBuffer {
 
     private fun error() {
         hasBeenErrors = true
-        //System.out.println("Not in range!");
     }
 
     fun hasHadErrors(): Boolean {
@@ -644,13 +558,6 @@ class ByteBuffer {
     }
 
     @Throws(ArrayIndexOutOfBoundsException::class)
-    fun readStringWithShortLength(): String {
-        val ret = readStringWithShortLength(curPos)
-        move(ret.length * 2 + 2)
-        return ret
-    }
-
-    @Throws(ArrayIndexOutOfBoundsException::class)
     fun readStringWithShortLength(pos: Int): String {
         if (inRange(pos, 2)) {
             val len = readShort(pos).toInt()
@@ -685,13 +592,6 @@ class ByteBuffer {
     }
 
     @Throws(ArrayIndexOutOfBoundsException::class)
-    fun readStringAsciiWithShortLength(): String {
-        val ret = readStringAsciiWithShortLength(curPos)
-        move(ret.length + 2)
-        return ret
-    }
-
-    @Throws(ArrayIndexOutOfBoundsException::class)
     fun readStringAsciiWithShortLength(pos: Int): String {
         if (inRange(pos, 2)) {
             val len = readShort(pos).toInt()
@@ -702,28 +602,6 @@ class ByteBuffer {
             }
         } else {
             throw ArrayIndexOutOfBoundsException()
-        }
-    }
-
-    private fun expandShortArray(array: ShortArray, size: Int): ShortArray {
-        val newArr = ShortArray(array.size + size)
-        if (size > 0) {
-            System.arraycopy(array, 0, newArr, 0, array.size)
-        } else {
-            System.arraycopy(array, 0, newArr, 0, newArr.size)
-        }
-        return newArr
-    }
-
-    fun crop() {
-        if (curPos > 0) {
-            if (curPos < buf.size) {
-                val newBuf = ShortArray(curPos)
-                System.arraycopy(buf, 0, newBuf, 0, curPos)
-                buf = newBuf
-            }
-        } else {
-            //System.out.println("Could not crop buffer, as the current position is 0. The buffer may not be empty.");
         }
     }
 }
