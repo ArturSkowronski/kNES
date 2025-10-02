@@ -22,10 +22,10 @@ class ROM(private val showLoadProgress: Consumer<Int>, private val showErrorMsg:
     var failedSaveFile: Boolean = false
     var saveRamUpToDate: Boolean = true
     override lateinit var header: ShortArray
-    lateinit var rom: Array<ShortArray?>
-    lateinit var vrom: Array<ShortArray?>
+    lateinit var rom: Array<ShortArray>
+    lateinit var vrom: Array<ShortArray>
     lateinit var saveRam: ShortArray
-    lateinit var vromTile: Array<Array<Tile?>?>
+    lateinit var vromTile: Array<Array<Tile>>
     var romCount: Int = 0
     var vromCount: Int = 0
     var mirroring: Int = 0
@@ -45,101 +45,63 @@ class ROM(private val showLoadProgress: Consumer<Int>, private val showErrorMsg:
         val b = loader.loadFile(fileName, showLoadProgress)
 
         if (b == null || b.size == 0) {
-            // Unable to load file.
             println("ROM: Failed to load file: $fileName")
             showErrorMsg.accept("Unable to load ROM file.")
             valid = false
             return
         }
 
-        // Read header:
-        header = ShortArray(16)
-        System.arraycopy(b, 0, header, 0, 16)
+        header = b.copyOfRange(0, 16)
 
-        // Check first four bytes:
         val fcode = String(byteArrayOf(b[0].toByte(), b[1].toByte(), b[2].toByte(), b[3].toByte()))
         if (fcode != "NES" + String(byteArrayOf(0x1A))) {
-            System.out.println("Header is incorrect.");
+            println("Header is incorrect.")
             valid = false
             return
         }
 
-        // Read header:
         romCount = header[4].toInt()
         vromCount = header[5] * 2 // Get the number of 4kB banks, not 8kB
-        mirroring = (if ((header[6].toInt() and 1) != 0) 1 else 0)
+        mirroring = if ((header[6].toInt() and 1) != 0) 1 else 0
         saveRam = ShortArray(0)
         trainer = (header[6].toInt() and 4) != 0
         fourScreen = (header[6].toInt() and 8) != 0
         mapperType = (header[6].toInt() shr 4) or (header[7].toInt() and 0xF0)
 
-        // Battery RAM?
-//        if (batteryRam) {
-//            loadBatteryRam();
-//        }
-
         // Check whether byte 8-15 are zero's:
-        var foundError = false
-        for (i in 8..15) {
-            if (header[i].toInt() != 0) {
-                foundError = true
-                break
-            }
-        }
+        val foundError = (8..15).any { header[it].toInt() != 0 }
         if (foundError) {
-            // Ignore byte 7.
             mapperType = mapperType and 0xF
         }
 
-        rom = Array<ShortArray?>(romCount) { ShortArray(16384) }
-        vrom = Array<ShortArray?>(vromCount) { ShortArray(4096) }
-        vromTile = Array<Array<Tile?>?>(vromCount) { arrayOfNulls<Tile>(256) }
-
-        //try{
+        rom = Array(romCount) { ShortArray(16384) }
+        vrom = Array(vromCount) { ShortArray(4096) }
+        vromTile = Array(vromCount) { Array(256) { Tile() } }
 
         // Load PRG-ROM banks:
         var offset = 16
         for (i in 0 until romCount) {
-            for (j in 0..16383) {
-                if (offset + j >= b.size) {
-                    break
-                }
-                rom[i]!![j] = b[offset + j]
-            }
+            val end = minOf(offset + 16384, b.size)
+            b.copyInto(rom[i], 0, offset, end)
             offset += 16384
         }
 
         // Load CHR-ROM banks:
         for (i in 0 until vromCount) {
-            for (j in 0..4095) {
-                if (offset + j >= b.size) {
-                    break
-                }
-                vrom[i]!![j] = b[offset + j]
-            }
+            val end = minOf(offset + 4096, b.size)
+            b.copyInto(vrom[i], 0, offset, end)
             offset += 4096
         }
 
-        // Create VROM tiles:
-        for (i in 0 until vromCount) {
-            for (j in 0..255) {
-                vromTile[i]!![j] = Tile()
-            }
-        }
-
         // Convert CHR-ROM banks to tiles:
-        //System.out.println("Converting CHR-ROM image data..");
-        //System.out.println("VROM bank count: "+vromCount);
-        var tileIndex: Int
-        var leftOver: Int
         for (v in 0 until vromCount) {
             for (i in 0..4095) {
-                tileIndex = i shr 4
-                leftOver = i % 16
+                val tileIndex = i shr 4
+                val leftOver = i % 16
                 if (leftOver < 8) {
-                    vromTile[v]!![tileIndex]!!.setScanline(leftOver, vrom[v]!![i], vrom[v]!![i + 8])
+                    vromTile[v][tileIndex].setScanline(leftOver, vrom[v][i], vrom[v][i + 8])
                 } else {
-                    vromTile[v]!![tileIndex]!!.setScanline(leftOver - 8, vrom[v]!![i - 8], vrom[v]!![i])
+                    vromTile[v][tileIndex].setScanline(leftOver - 8, vrom[v][i - 8], vrom[v][i])
                 }
             }
         }
@@ -147,66 +109,37 @@ class ROM(private val showLoadProgress: Consumer<Int>, private val showErrorMsg:
         valid = true
     }
 
-    override fun isValid(): Boolean {
-        return valid
-    }
+    override fun isValid(): Boolean = valid
 
-    override fun getRomBankCount(): Int {
-        return romCount
-    }
+    override fun getRomBankCount(): Int = romCount
 
     // Returns number of 4kB VROM banks.
-    override fun getVromBankCount(): Int {
-        return vromCount
-    }
+    override fun getVromBankCount(): Int = vromCount
 
-    override fun getRomBank(bank: Int): ShortArray? {
-        return rom[bank]
-    }
+    override fun getRomBank(bank: Int): ShortArray = rom[bank]
 
-    override fun getVromBank(bank: Int): ShortArray? {
-        return vrom[bank]
-    }
+    override fun getVromBank(bank: Int): ShortArray = vrom[bank]
 
-    override fun getVromBankTiles(bank: Int): Array<Tile?>? {
-        return vromTile[bank]
-    }
+    override fun getVromBankTiles(bank: Int): Array<Tile> = vromTile[bank]
 
     override val mirroringType: Int
-        get() {
-            if (fourScreen) {
-                return FOURSCREEN_MIRRORING
-            }
-
-            if (mirroring == 0) {
-                return HORIZONTAL_MIRRORING
-            }
-
-            // default:
-            return VERTICAL_MIRRORING
+        get() = when {
+            fourScreen -> FOURSCREEN_MIRRORING
+            mirroring == 0 -> HORIZONTAL_MIRRORING
+            else -> VERTICAL_MIRRORING
         }
 
-    override fun hasBatteryRam(): Boolean {
-        return saveBatteryRam().isNotEmpty()
-    }
-
-    fun hasTrainer(): Boolean {
-        return trainer
-    }
+    override fun hasBatteryRam(): Boolean = saveBatteryRam().isNotEmpty()
 
     fun setSaveState(enableSave: Boolean) {
-        //this.enableSave = enableSave;
         if (enableSave && hasBatteryRam()) {
-//          loadBatteryRam();
+            // loadBatteryRam()
         }
     }
 
-    override fun saveBatteryRam(): ShortArray {
-        return saveRam
-    }
+    override fun saveBatteryRam(): ShortArray = saveRam
 
-    fun destroy() {
-    }
+    fun destroy() {}
 
     companion object {
         // Mirroring types:
@@ -218,20 +151,8 @@ class ROM(private val showLoadProgress: Consumer<Int>, private val showErrorMsg:
         const val SINGLESCREEN_MIRRORING3: Int = 5
         const val SINGLESCREEN_MIRRORING4: Int = 6
         const val CHRROM_MIRRORING: Int = 7
-        var mapperName: Array<String?>
-        var mapperSupported: BooleanArray
 
-        init {
-            mapperName = arrayOfNulls<String>(255)
-            mapperSupported = BooleanArray(255)
-            for (i in 0..254) {
-                mapperName[i] = "Unknown Mapper"
-            }
-
-            mapperName[0] = "NROM"
-
-            // The mappers supported:
-            mapperSupported[0] = true // No Mapper
-        }
+        val mapperName: Array<String> = Array(255) { "Unknown Mapper" }.apply { this[0] = "NROM" }
+        val mapperSupported: BooleanArray = BooleanArray(255).apply { this[0] = true }
     }
 }

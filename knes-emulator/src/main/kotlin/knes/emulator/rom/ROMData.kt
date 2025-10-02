@@ -28,50 +28,12 @@ interface ROMData {
     fun saveBatteryRam(): ShortArray
     fun getRomBankCount(): Int
     fun getVromBankCount(): Int
-
-    /**
-     * Gets the ROM header.
-     * @return the ROM header
-     */
     val header: ShortArray?
-
-    /**
-     * Gets a specific ROM bank.
-     * @param bank the bank number
-     * @return the ROM bank data
-     */
     fun getRomBank(bank: Int): ShortArray?
-
-    /**
-     * Gets a specific VROM bank.
-     * @param bank the bank number
-     * @return the VROM bank data
-     */
     fun getVromBank(bank: Int): ShortArray?
+    fun getVromBankTiles(bank: Int): Array<Tile>
 
-    /**
-     * Gets the tiles for a specific VROM bank.
-     * @param bank the bank number
-     * @return the VROM bank tiles
-     */
-    fun getVromBankTiles(bank: Int): Array<Tile?>?
-
-    /**
-     * Gets the mirroring type.
-     * @return the mirroring type
-     */
     val mirroringType: Int
-
-    /**
-     * Checks if the ROM has battery RAM.
-     * @return true if the ROM has battery RAM, false otherwise
-     */
     fun hasBatteryRam(): Boolean
-
-
-    /**
-     * Gets the mapper type.
-     * @return the mapper type
-     */
     val mapperType: Int
 }

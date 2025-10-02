@@ -1696,8 +1696,6 @@ class PPU : PPUCycles {
 
     fun stateSave(buf: knes.emulator.ByteBuffer) {
         // Version:
-
-
         buf.putByte(1.toShort())
 
 

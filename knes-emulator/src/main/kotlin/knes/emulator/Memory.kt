@@ -13,16 +13,8 @@
 
 package knes.emulator
 
-import java.io.File
-import java.io.FileWriter
-import java.io.IOException
-
 class Memory(var memSize: Int) {
-	var mem: ShortArray
-
-    init {
-        mem = ShortArray(memSize)
-    }
+	var mem = ShortArray(memSize)
 
     fun stateLoad(buf: ByteBuffer) {
         if (false) mem = ShortArray(this.memSize)
@@ -43,25 +35,6 @@ class Memory(var memSize: Int) {
 
     fun load(address: Int): Short {
         return mem[address]
-    }
-
-    @JvmOverloads
-    fun dump(file: String, offset: Int = 0, length: Int = mem.size) {
-        val ch = CharArray(length)
-        for (i in 0 until length) {
-            ch[i] = Char(mem[offset + i].toUShort())
-        }
-
-        try {
-            val f = File(file)
-            val writer = FileWriter(f)
-            writer.write(ch)
-            writer.close()
-
-            //System.out.println("Memory dumped to file "+file+".");
-        } catch (ioe: IOException) {
-            //System.out.println("Memory dump to file: IO Error!");
-        }
     }
 
     fun write(address: Int, array: ShortArray, length: Int) {
