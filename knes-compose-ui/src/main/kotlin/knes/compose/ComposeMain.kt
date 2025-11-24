@@ -60,11 +60,11 @@ fun main() = application {
     val windowState = rememberWindowState(width = 800.dp, height = 700.dp)
     var isEmulatorRunning by remember { mutableStateOf(false) }
 
-    val inputHandler = ComposeKeyboardInputHandler(KeyboardController())
+    val inputHandler = ComposeInputHandler(KeyboardController())
 
     val screenView = remember { ComposeScreenView(1) }
     val nes = remember { NES(GUIAdapter(inputHandler, screenView)) }
-    val composeUI = remember { ComposeUI(nes, screenView, inputHandler) }
+    val composeUI = remember { ComposeUI(nes, screenView) }
     val focusRequester = remember { FocusRequester() }
 
     Window(
