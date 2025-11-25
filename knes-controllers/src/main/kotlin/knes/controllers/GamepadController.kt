@@ -26,10 +26,13 @@ import com.badlogic.gdx.Net
 import com.badlogic.gdx.Preferences
 import com.badlogic.gdx.utils.Clipboard
 import com.badlogic.gdx.LifecycleListener
+import com.badlogic.gdx.backends.lwjgl3.Lwjgl3NativesLoader
 import com.badlogic.gdx.controllers.Controllers
 import com.badlogic.gdx.controllers.Controller
 import com.badlogic.gdx.controllers.ControllerAdapter
 import com.badlogic.gdx.utils.Array
+import knes.controllers.helpers.JoyConInitializer
+import knes.controllers.helpers.MacOsPermissionHelper
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -45,8 +48,10 @@ class GamepadController : ControllerProvider {
 
     init {
         try {
+            Lwjgl3NativesLoader.load()
+
             if (Gdx.app == null) {
-                Gdx.app = DummyApplication()
+                Gdx.app = GDXApplication()
             }
             refreshControllers()
         } catch (e: Exception) {
@@ -89,14 +94,6 @@ class GamepadController : ControllerProvider {
 
             // Dual Joy-Con Mode
             if (leftJoyCon != null && rightJoyCon != null) {
-                // Debug: Print any pressed button to help identify mappings
-                /*
-                for (i in 0..20) {
-                    if (leftJoyCon!!.getButton(i)) println("[Joy-Con L] Button $i pressed")
-                    if (rightJoyCon!!.getButton(i)) println("[Joy-Con R] Button $i pressed")
-                }
-                */
-                
                 val isPressed = when (padKey) {
                     // Right Joy-Con for Actions
                     // A (East) -> Button 0 or 1 or 2 or 3? 
@@ -127,7 +124,6 @@ class GamepadController : ControllerProvider {
                 return if (isPressed) 0x41 else 0x40
             }
 
-            // Single Controller Fallback
             val controller = currentControllers.first()
 
             val isPressed = if (controller.name.contains("Joy-Con (L)", ignoreCase = true)) {
@@ -171,20 +167,18 @@ class GamepadController : ControllerProvider {
     }
 
     override fun setKeyState(keyCode: Int, isPressed: Boolean) {
-        // No-op for Gamepad
     }
 
     fun close() {
-        // No explicit close
     }
 }
 
-class DummyApplication : Application {
+class GDXApplication : Application {
     private val executor = Executors.newSingleThreadScheduledExecutor()
     private var postRunnableCount = 0
 
     init {
-        println("DummyApplication Initialized")
+        println("GDXApplication Initialized")
     }
 
     override fun getApplicationListener(): ApplicationListener? = null
@@ -211,7 +205,7 @@ class DummyApplication : Application {
     override fun postRunnable(runnable: Runnable?) {
         postRunnableCount++
         if (postRunnableCount % 60 == 0) { // Log once every ~1 second (assuming 60fps)
-             println("DummyApplication: Heartbeat (polling active)")
+             println("GDXApplication: Heartbeat (polling active)")
         }
         runnable?.let {
             executor.schedule(it, 16, TimeUnit.MILLISECONDS)

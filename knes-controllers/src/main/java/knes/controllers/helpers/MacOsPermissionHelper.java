@@ -11,7 +11,7 @@
  *
  */
 
-package knes.controllers;
+package knes.controllers.helpers;
 
 import com.sun.jna.Library;
 import com.sun.jna.Native;

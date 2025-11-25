@@ -11,7 +11,7 @@
  *
  */
 
-package knes.controllers;
+package knes.controllers.helpers;
 
 import org.hid4java.HidDevice;
 import org.hid4java.HidManager;
