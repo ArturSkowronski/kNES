@@ -26,9 +26,13 @@ import com.badlogic.gdx.Net
 import com.badlogic.gdx.Preferences
 import com.badlogic.gdx.utils.Clipboard
 import com.badlogic.gdx.LifecycleListener
+import com.badlogic.gdx.backends.lwjgl3.Lwjgl3NativesLoader
 import com.badlogic.gdx.controllers.Controllers
 import com.badlogic.gdx.controllers.Controller
+import com.badlogic.gdx.controllers.ControllerAdapter
 import com.badlogic.gdx.utils.Array
+import knes.controllers.helpers.JoyConInitializer
+import knes.controllers.helpers.MacOsPermissionHelper
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -36,24 +40,43 @@ import kotlin.math.abs
 class GamepadController : ControllerProvider {
 
     private var controllers: Array<Controller>? = null
+    private var leftJoyCon: Controller? = null
+    private var rightJoyCon: Controller? = null
+
     var statusMessage: String = "Initializing..."
         private set
 
     init {
         try {
+            Lwjgl3NativesLoader.load()
+
             if (Gdx.app == null) {
-                Gdx.app = DummyApplication()
+                Gdx.app = GDXApplication()
             }
-            controllers = Controllers.getControllers()
-            statusMessage = if (controllers == null || controllers!!.size == 0) {
-                "No controllers found"
-            } else {
-                "Controllers: " + controllers!!.joinToString { it.name }
-            }
+            refreshControllers()
         } catch (e: Exception) {
             e.printStackTrace()
             statusMessage = "No controllers detected"
             controllers = null
+        }
+    }
+
+    private fun refreshControllers() {
+        controllers = Controllers.getControllers()
+        if (controllers == null || controllers!!.size == 0) {
+            statusMessage = "No controllers found"
+            leftJoyCon = null
+            rightJoyCon = null
+        } else {
+            leftJoyCon = controllers?.firstOrNull { it.name.contains("Joy-Con (L)", ignoreCase = true) }
+            rightJoyCon = controllers?.firstOrNull { it.name.contains("Joy-Con (R)", ignoreCase = true) }
+
+            val names = controllers!!.joinToString { it.name }
+            statusMessage = if (leftJoyCon != null && rightJoyCon != null) {
+                "Paired Joy-Cons detected. Controllers: $names"
+            } else {
+                "Controllers: $names"
+            }
         }
     }
 
@@ -68,6 +91,39 @@ class GamepadController : ControllerProvider {
             if (currentControllers == null || currentControllers.size == 0) {
                 return 0x40
             }
+
+            // Dual Joy-Con Mode
+            if (leftJoyCon != null && rightJoyCon != null) {
+                val isPressed = when (padKey) {
+                    // Right Joy-Con for Actions
+                    // A (East) -> Button 0 or 1 or 2 or 3? 
+                    // Based on Xbox layout: A=0, B=1, X=2, Y=3.
+                    // If Joy-Con follows standard layout: B=0, A=1, Y=2, X=3?
+                    // Let's try standard SDL layout: 0=A(South/B), 1=B(East/A), 2=X(West/Y), 3=Y(North/X)
+                    // Wait, SDL GameController: A=0 (South), B=1 (East), X=2 (West), Y=3 (North).
+                    // Nintendo Layout: B is South, A is East.
+                    // So B -> 0, A -> 1.
+                    InputHandler.KEY_A -> rightJoyCon!!.getButton(1) // East (A)
+                    InputHandler.KEY_B -> rightJoyCon!!.getButton(0) // South (B)
+                    InputHandler.KEY_START -> rightJoyCon!!.getButton(9) // Plus -> Start or 9/10?
+                    
+                    // Left Joy-Con for Movement & Select
+                    InputHandler.KEY_SELECT -> leftJoyCon!!.getButton(8) // Minus -> Select (often 8)
+                    
+                    // D-Pad / Analog Stick
+                    // Stick is usually Axis 0 (X) and 1 (Y).
+                    // D-Buttons on L:
+                    // If mapped as buttons: 0 (Down/Left?), 1 (Right/Down?), 2 (Left/Up?), 3 (Up/Right?)
+                    // Let's rely on Axis first as it's more reliable for movement
+                    InputHandler.KEY_UP -> leftJoyCon!!.getAxis(1) < -0.5f || leftJoyCon!!.getButton(2)
+                    InputHandler.KEY_DOWN -> leftJoyCon!!.getAxis(1) > 0.5f || leftJoyCon!!.getButton(1)
+                    InputHandler.KEY_LEFT -> leftJoyCon!!.getAxis(0) < -0.5f || leftJoyCon!!.getButton(0)
+                    InputHandler.KEY_RIGHT -> leftJoyCon!!.getAxis(0) > 0.5f || leftJoyCon!!.getButton(3)
+                    else -> false
+                }
+                return if (isPressed) 0x41 else 0x40
+            }
+
             val controller = currentControllers.first()
 
             val isPressed = if (controller.name.contains("Joy-Con (L)", ignoreCase = true)) {
@@ -111,20 +167,18 @@ class GamepadController : ControllerProvider {
     }
 
     override fun setKeyState(keyCode: Int, isPressed: Boolean) {
-        // No-op for Gamepad
     }
 
     fun close() {
-        // No explicit close
     }
 }
 
-class DummyApplication : Application {
+class GDXApplication : Application {
     private val executor = Executors.newSingleThreadScheduledExecutor()
     private var postRunnableCount = 0
 
     init {
-        println("DummyApplication Initialized")
+        println("GDXApplication Initialized")
     }
 
     override fun getApplicationListener(): ApplicationListener? = null
@@ -151,7 +205,7 @@ class DummyApplication : Application {
     override fun postRunnable(runnable: Runnable?) {
         postRunnableCount++
         if (postRunnableCount % 60 == 0) { // Log once every ~1 second (assuming 60fps)
-             println("DummyApplication: Heartbeat (polling active)")
+             println("GDXApplication: Heartbeat (polling active)")
         }
         runnable?.let {
             executor.schedule(it, 16, TimeUnit.MILLISECONDS)
@@ -169,39 +223,77 @@ class DummyApplication : Application {
 }
 
 fun main() {
+    // 1. macOS Permissions
+    println("--- Checking macOS Permissions ---")
+    val hasPermission = MacOsPermissionHelper.checkAndRequestInputMonitoring()
+    if (!hasPermission) {
+        println("WARNING: Input Monitoring permission missing or denied. Joy-Cons may not work.")
+    }
+
+    // 2. Joy-Con Handshake
+    println("--- Initializing Joy-Cons (HID Handshake) ---")
+    try {
+        JoyConInitializer.initializeJoyCons()
+    } catch (e: Throwable) {
+        println("Failed to initialize Joy-Cons via HID: ${e.message}")
+        e.printStackTrace()
+    }
+
     val gamepadController = GamepadController()
     println("--- DIAGNOSTIC MODE ---")
     println(gamepadController.statusMessage)
-    println("Press buttons and move sticks to identify IDs...")
+    println("Press buttons and move sticks on ANY controller to identify IDs...")
 
     val controllers = Controllers.getControllers()
     if (controllers.size == 0) return
 
-    val controller = controllers.first()
-    println("Controller Name: '${controller.name}'")
-    println("Button Count: ${controller.minButtonIndex} to ${controller.maxButtonIndex}")
+    for (controller in controllers) {
+        println("Controller Found: '${controller.name}'")
+        println("  Buttons: ${controller.minButtonIndex} to ${controller.maxButtonIndex}")
+    }
     
+    // Add global listener to catch events
+    Controllers.addListener(object : ControllerAdapter() {
+        override fun connected(controller: Controller) {
+            println("Connected: ${controller.name}")
+        }
+
+        override fun disconnected(controller: Controller) {
+            println("Disconnected: ${controller.name}")
+        }
+
+        override fun buttonDown(controller: Controller, buttonCode: Int): Boolean {
+            println("[LISTENER] ${controller.name} Button DOWN: $buttonCode")
+            return false
+        }
+
+        override fun buttonUp(controller: Controller, buttonCode: Int): Boolean {
+            println("[LISTENER] ${controller.name} Button UP: $buttonCode")
+            return false
+        }
+
+        override fun axisMoved(controller: Controller, axisCode: Int, value: Float): Boolean {
+            if (abs(value) > 0.2) {
+                println("[LISTENER] ${controller.name} Axis $axisCode: $value")
+            }
+            return false
+        }
+    })
+
     while (true) {
         gamepadController.update()
 
-        // Scan all potential buttons
-        val pressed = ArrayList<Int>()
-        for (i in 0..100) {
-            try {
-                if (controller.getButton(i)) pressed.add(i)
-            } catch (_: Exception) { }
-        }
-        if (pressed.isNotEmpty()) {
-            println("Buttons Pressed: $pressed")
-        }
-
-        for (i in 0..10) {
-             try {
-                 val axisVal = controller.getAxis(i)
-                 if (abs(axisVal) > 0.5) {
-                     println("Axis $i: $axisVal")
-                 }
-             } catch (_: Exception) { }
+        // Also poll just in case listener doesn't work (which would be weird, but for completeness)
+        for (controller in controllers) {
+             // Scan Axes (polling)
+            for (i in 0..10) {
+                 try {
+                     val axisVal = controller.getAxis(i)
+                     if (abs(axisVal) > 0.2) {
+                         // println("[POLL] ${controller.name} Axis $i: $axisVal") 
+                     }
+                 } catch (_: Exception) { }
+            }
         }
 
         try {

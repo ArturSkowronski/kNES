@@ -40,7 +40,7 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
 sourceSets {
     main {
         kotlin {
-            srcDirs = ['src/main/kotlin']
+            srcDirs = ['src/main/kotlin', 'src/main/java']
         }
         java {
             srcDirs = ['src/main/java']
@@ -56,7 +56,9 @@ dependencies {
     api "com.badlogicgames.gdx:gdx:1.12.1"
     api "com.badlogicgames.gdx:gdx-backend-lwjgl3:1.12.1"
     api "com.badlogicgames.gdx:gdx-platform:1.12.1:natives-desktop"
-    api "com.badlogicgames.gdx-controllers:gdx-controllers-desktop:2.2.3"
+    api "com.badlogicgames.gdx-controllers:gdx-controllers-desktop:2.2.4"
+    implementation 'org.hid4java:hid4java:0.8.0'
+    implementation 'net.java.dev.jna:jna:5.14.0'
 }
 
 java {
@@ -65,9 +67,4 @@ java {
     }
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
-}
-
-task runSwitchControllerTest(type: JavaExec) {
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'knes.controllers.SwitchControllerKt'
 }
