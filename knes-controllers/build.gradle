@@ -18,6 +18,7 @@ plugins {
 
 repositories {
     mavenCentral()
+    maven { url 'https://jitpack.io' }
 }
 
 dependencies {
@@ -52,6 +53,10 @@ sourceSets {
 
 dependencies {
     implementation project(':knes-emulator')
+    api "com.badlogicgames.gdx:gdx:1.12.1"
+    api "com.badlogicgames.gdx:gdx-backend-lwjgl3:1.12.1"
+    api "com.badlogicgames.gdx:gdx-platform:1.12.1:natives-desktop"
+    api "com.badlogicgames.gdx-controllers:gdx-controllers-desktop:2.2.3"
 }
 
 java {
@@ -60,4 +65,9 @@ java {
     }
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
+}
+
+task runSwitchControllerTest(type: JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'knes.controllers.SwitchControllerKt'
 }
