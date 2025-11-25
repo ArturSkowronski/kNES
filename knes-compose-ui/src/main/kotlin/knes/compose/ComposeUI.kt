@@ -44,7 +44,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import knes.emulator.NES
 
-class ComposeUI(val nes: NES, val screenView: ComposeScreenView, val inputHandler: ComposeKeyboardInputHandler)  {
+class ComposeUI(val nes: NES, val screenView: ComposeScreenView)  {
 
     fun startEmulator() {
         nes.startEmulation()

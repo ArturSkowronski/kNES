@@ -16,7 +16,7 @@ package knes.compose
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
-import knes.controllers.KeyboardController
+import knes.controllers.ControllerProvider
 import knes.emulator.input.InputHandler
 
 /**
@@ -25,7 +25,7 @@ import knes.emulator.input.InputHandler
  * Note: This is a temporary implementation using Swing instead of Compose
  * until the Compose UI dependencies are properly configured.
  */
-class ComposeKeyboardInputHandler(val keyboardController: KeyboardController) : InputHandler {
+class ComposeInputHandler(val controllerProvider: ControllerProvider) : InputHandler {
 
     fun keyEventHandler(
         event: androidx.compose.ui.input.key.KeyEvent
@@ -33,16 +33,16 @@ class ComposeKeyboardInputHandler(val keyboardController: KeyboardController) : 
         val keyCode = event.key.keyCode.toInt()
 
         return if (keyCode != 0) {
-            println("Key event: ${event.type} ${event.key} keyCode: $keyCode (${KeyboardController.getKeyName(keyCode)})")
+            println("Key event: ${event.type} ${event.key} keyCode: $keyCode")
 
             when (event.type) {
                 KeyEventType.KeyDown -> {
-                    keyboardController.setKeyState(keyCode, true)
+                    controllerProvider.setKeyState(keyCode, true)
                     true
                 }
 
                 KeyEventType.KeyUp -> {
-                    keyboardController.setKeyState(keyCode, false)
+                    controllerProvider.setKeyState(keyCode, false)
                     true
                 }
                 else -> true
@@ -53,7 +53,7 @@ class ComposeKeyboardInputHandler(val keyboardController: KeyboardController) : 
     }
 
     override fun getKeyState(padKey: Int): Short {
-        return keyboardController.getKeyState(padKey)
+        return controllerProvider.getKeyState(padKey)
     }
 
 }

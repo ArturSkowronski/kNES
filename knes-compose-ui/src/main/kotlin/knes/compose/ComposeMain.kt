@@ -48,7 +48,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import knes.controllers.KeyboardController
+import com.badlogic.gdx.Gdx
+import com.badlogic.gdx.backends.lwjgl3.Lwjgl3NativesLoader
+import knes.controllers.DummyApplication
+import knes.controllers.GamepadController
 import knes.emulator.NES
 import knes.emulator.ui.GUIAdapter
 import kotlinx.coroutines.delay
@@ -56,15 +59,22 @@ import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
 
 @OptIn(ExperimentalComposeUiApi::class)
-fun main() = application {
-    val windowState = rememberWindowState(width = 800.dp, height = 700.dp)
+fun main() {
+    Lwjgl3NativesLoader.load()
+    if (Gdx.app == null) {
+        Gdx.app = DummyApplication()
+    }
+
+    application {
+        val windowState = rememberWindowState(width = 800.dp, height = 700.dp)
     var isEmulatorRunning by remember { mutableStateOf(false) }
 
-    val inputHandler = ComposeKeyboardInputHandler(KeyboardController())
+    val gamepadController = remember { GamepadController() }
+    val inputHandler = remember { ComposeInputHandler(gamepadController) }
 
     val screenView = remember { ComposeScreenView(1) }
     val nes = remember { NES(GUIAdapter(inputHandler, screenView)) }
-    val composeUI = remember { ComposeUI(nes, screenView, inputHandler) }
+    val composeUI = remember { ComposeUI(nes, screenView) }
     val focusRequester = remember { FocusRequester() }
 
     Window(
@@ -125,6 +135,11 @@ fun main() = application {
                             Text("Load ROM")
                         }
                     }
+                    Text(
+                        text = gamepadController.statusMessage,
+                        style = MaterialTheme.typography.caption,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly
@@ -161,5 +176,4 @@ fun main() = application {
         }
     }
 }
-
-
+}
