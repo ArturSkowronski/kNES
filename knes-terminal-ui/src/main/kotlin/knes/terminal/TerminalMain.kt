@@ -13,6 +13,7 @@
 
 package knes.terminal
 
+import knes.controllers.GamepadController
 import knes.emulator.NES
 import knes.emulator.input.InputHandler
 import knes.emulator.ui.GUIAdapter
@@ -30,7 +31,6 @@ import javax.swing.filechooser.FileNameExtensionFilter
 fun main(args: Array<String>) {
     // Check for --disable-ppu-logging flag
     val enablePpuLogging = !args.contains("--disable-ppu-logging")
-
     // Remove the flag from args if present
     val filteredArgs = args.filter { it != "--disable-ppu-logging" }.toTypedArray()
 
@@ -41,7 +41,8 @@ fun main(args: Array<String>) {
  * Main class for the Terminal UI implementation.
  */
 class TerminalMain(enablePpuLogging: Boolean = true) {
-    val inputHandler: InputHandler = TerminalInputHandler()
+    val gamepadController = GamepadController()
+    val inputHandler: InputHandler = TerminalInputHandler(gamepadController)
     val screenView = TerminalScreenView(1)
 
     private val nes = NES(GUIAdapter(inputHandler, screenView))

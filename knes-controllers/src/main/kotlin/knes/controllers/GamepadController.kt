@@ -204,9 +204,6 @@ class GDXApplication : Application {
 
     override fun postRunnable(runnable: Runnable?) {
         postRunnableCount++
-        if (postRunnableCount % 60 == 0) { // Log once every ~1 second (assuming 60fps)
-             println("GDXApplication: Heartbeat (polling active)")
-        }
         runnable?.let {
             executor.schedule(it, 16, TimeUnit.MILLISECONDS)
         }
