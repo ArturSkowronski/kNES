@@ -148,7 +148,7 @@ class GamepadController : ControllerProvider {
                 val mapping = controller.mapping
                 when (padKey) {
                     InputHandler.KEY_A -> controller.getButton(mapping.buttonB)
-                    InputHandler.KEY_B -> controller.getButton(mapping.buttonA)
+                    InputHandler.KEY_B -> controller.getButton(mapping.buttonY)
                     InputHandler.KEY_START -> controller.getButton(mapping.buttonStart)
                     InputHandler.KEY_SELECT -> controller.getButton(mapping.buttonBack)
                     InputHandler.KEY_UP -> controller.getButton(mapping.buttonDpadUp) || controller.getAxis(mapping.axisLeftY) < -0.5f
