@@ -30,7 +30,7 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import java.awt.event.KeyEvent
+import knes.controllers.GamepadController
 import knes.emulator.input.InputHandler
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -42,11 +42,15 @@ import java.util.concurrent.TimeUnit
  * 
  * This implementation uses a simple command-line interface for input.
  */
-class TerminalInputHandler() : InputHandler {
+class TerminalInputHandler(val gamepadController: GamepadController) : InputHandler {
     private val keyStates = ShortArray(InputHandler.Companion.NUM_KEYS) { 0 }
     private val keyMapping = IntArray(InputHandler.Companion.NUM_KEYS) { 0 }
     private val executor = Executors.newSingleThreadExecutor()
     private var running = true
+
+    init {
+        startCommandReader()
+    }
 
 
     /**
@@ -146,7 +150,9 @@ class TerminalInputHandler() : InputHandler {
      * @return 0x41 if the key is pressed, 0x40 otherwise
      */
     override fun getKeyState(padKey: Int): Short {
-        return keyStates[padKey]
+        val gamepadState = gamepadController.getKeyState(padKey)
+        val terminalState = keyStates[padKey]
+        return if (gamepadState == 0x41.toShort() || terminalState == 0x41.toShort()) 0x41 else 0x40
     }
 
     /**
