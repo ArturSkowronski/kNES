@@ -55,6 +55,7 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
     var cyclesToHalt: Int = 0
     var stopRunning: Boolean = false
     var crash: Boolean = false
+    var singleStep: Boolean = false
 
 
     // Initialize:
@@ -1131,6 +1132,9 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
             if (emulateSound) {
                 papuClockFrame.clockFrameCounter(cycleCount)
             }
+            if (singleStep) {
+                stopRunning = true
+            }
         } // End of run loop.
 
 
@@ -1150,6 +1154,13 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
         F_NOTUSED_NEW = F_NOTUSED
         F_OVERFLOW_NEW = F_OVERFLOW
         F_SIGN_NEW = F_SIGN
+    }
+
+    fun step() {
+        singleStep = true
+        stopRunning = false
+        emulate()
+        singleStep = false
     }
 
     private fun load(addr: Int): Int {
@@ -1238,9 +1249,9 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
         REG_PC_NEW--
     }
 
-    private var status: Int
+    internal var status: Int
         get() = (F_CARRY_NEW) or (F_ZERO_NEW shl 1) or (F_INTERRUPT_NEW shl 2) or (F_DECIMAL_NEW shl 3) or (F_BRK_NEW shl 4) or (F_NOTUSED_NEW shl 5) or (F_OVERFLOW_NEW shl 6) or (F_SIGN_NEW shl 7)
-        private set(st) {
+        set(st) {
             F_CARRY_NEW = (st) and 1
             F_ZERO_NEW = (st shr 1) and 1
             F_INTERRUPT_NEW = (st shr 2) and 1
