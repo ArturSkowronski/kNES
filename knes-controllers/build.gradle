@@ -23,6 +23,8 @@ repositories {
 
 dependencies {
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'io.kotest:kotest-runner-junit5:5.9.1'
+    testImplementation 'io.kotest:kotest-assertions-core:5.9.1'
 }
 
 kotlin {
@@ -49,6 +51,11 @@ sourceSets {
             srcDirs = ['src/main/resources']
         }
     }
+    test {
+        kotlin {
+            srcDirs = ['src/test/kotlin']
+        }
+    }
 }
 
 dependencies {
@@ -67,4 +74,8 @@ java {
     }
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
+}
+
+test {
+    useJUnitPlatform()
 }

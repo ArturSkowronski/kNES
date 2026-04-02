@@ -18,7 +18,7 @@ import java.awt.event.KeyEvent
 
 
 class KeyboardController : ControllerProvider {
-    private val keyStates = ShortArray(InputHandler.Companion.NUM_KEYS) { 0 }
+    private val keyStates = ShortArray(InputHandler.Companion.NUM_KEYS) { 0x40 }
     private val keyMapping = IntArray(InputHandler.Companion.NUM_KEYS) { 0 }
 
     init {
