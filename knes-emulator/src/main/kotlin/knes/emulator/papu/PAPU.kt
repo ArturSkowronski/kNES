@@ -357,8 +357,8 @@ class PAPU(nes: NES) : PAPU_Applet_Functionality, PAPUAudioContext, PAPUDMCSampl
     // twice the cpu speed, so the cycles will be
     // divided by 2 for those counters that are
     // clocked at cpu speed.
-    override fun clockFrameCounter(nCycles: Int) {
-        var nCycles = nCycles
+    override fun clockFrameCounter(cycleCount: Int) {
+        var nCycles = cycleCount
         if (initCounter > 0) {
             if (initingHardware) {
                 initCounter -= nCycles
