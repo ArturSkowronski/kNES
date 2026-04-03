@@ -23,7 +23,7 @@ import knes.emulator.rom.ROMData
 import kotlin.math.max
 import kotlin.math.min
 
-class MapperDefault(nes: NES) : MemoryMapper {
+open class MapperDefault(nes: NES) : MemoryMapper {
     var cpuMem: Memory
     var ppuMem: Memory
     var cpuMemArray: ShortArray?
