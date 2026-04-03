@@ -14,8 +14,8 @@
 plugins {
     id 'org.jetbrains.kotlin.jvm'
     id 'application'
-    id 'org.jetbrains.compose' version '1.8.2'
-    id 'org.jetbrains.kotlin.plugin.compose' version '2.2.0'
+    id 'org.jetbrains.compose' version '1.10.3'
+    id 'org.jetbrains.kotlin.plugin.compose' version '2.3.20'
 }
 
 repositories {
@@ -37,13 +37,6 @@ dependencies {
     implementation compose.foundation
     implementation compose.runtime
 
-    // Skiko dependency for hardware-accelerated rendering
-    implementation "org.jetbrains.skiko:skiko:0.7.90"
-
-    // Add platform-specific Skiko dependencies to ensure native libraries are included
-    implementation "org.jetbrains.skiko:skiko-awt-runtime-macos-x64:0.7.90"
-    implementation "org.jetbrains.skiko:skiko-awt-runtime-macos-arm64:0.7.90"
-
     testImplementation 'junit:junit:4.13.2'
 }
 
@@ -54,8 +47,8 @@ kotlin {
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     kotlinOptions {
         jvmTarget = '11'
-        apiVersion = '2.2'
-        languageVersion = '2.2'
+        apiVersion = '2.3'
+        languageVersion = '2.3'
     }
 }
 

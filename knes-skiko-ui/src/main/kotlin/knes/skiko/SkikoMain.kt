@@ -37,7 +37,8 @@ import org.jetbrains.skia.Image
 import org.jetbrains.skia.Paint
 import org.jetbrains.skia.Rect
 import org.jetbrains.skiko.SkiaLayer
-import org.jetbrains.skiko.SkikoView
+import org.jetbrains.skiko.SkiaLayerRenderDelegate
+import org.jetbrains.skiko.SkikoRenderDelegate
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.FlowLayout
@@ -100,8 +101,8 @@ class SkikoMain {
         skiaLayer.attachTo(frame.contentPane)
         skiaLayer.preferredSize = Dimension(512, 480)
 
-        // Create a SkikoView for rendering
-        val skikoView = object : SkikoView {
+        // Create a render delegate for rendering
+        val renderDelegate = object : SkikoRenderDelegate {
             private var frameCount = 0
 
             override fun onRender(canvas: Canvas, width: Int, height: Int, nanoTime: Long) {
@@ -146,8 +147,8 @@ class SkikoMain {
             }
         }
 
-        // Set the view on the layer
-        skiaLayer.skikoView = skikoView
+        // Set the render delegate on the layer
+        skiaLayer.renderDelegate = SkiaLayerRenderDelegate(skiaLayer, renderDelegate)
 
         // Add the Skia layer to the frame
         frame.add(skiaLayer, BorderLayout.CENTER)

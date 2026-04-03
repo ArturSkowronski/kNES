@@ -34,8 +34,8 @@ kotlin {
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     kotlinOptions {
         jvmTarget = '11'
-        apiVersion = '2.2'
-        languageVersion = '2.2'
+        apiVersion = '2.3'
+        languageVersion = '2.3'
     }
 }
 
