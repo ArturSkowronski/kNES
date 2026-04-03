@@ -44,3 +44,4 @@ nbdist/
 *.tmp
 *.swp
 *.nes
+!**/src/test/resources/*.nes
