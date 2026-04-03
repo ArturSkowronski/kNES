@@ -38,6 +38,8 @@ dependencies {
     implementation compose.runtime
 
     testImplementation 'junit:junit:4.13.2'
+    testImplementation compose.desktop.uiTestJUnit4
+    testImplementation compose.desktop.currentOs
 }
 
 kotlin {
@@ -69,7 +71,14 @@ sourceSets {
             srcDirs = ['src/main/resources']
         }
     }
+    test {
+        kotlin {
+            srcDirs = ['src/test/kotlin']
+        }
+    }
 }
+
+// Compose Desktop UI tests use JUnit4 (not JUnit Platform)
 
 application {
     mainClass = 'knes.compose.ComposeMainKt'
