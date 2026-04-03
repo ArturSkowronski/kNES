@@ -134,8 +134,8 @@ class ComposeScreenView(val scale: Int) : ScreenView {
         }
     }
 
-    override fun setFPSEnabled(value: Boolean) {
-        showFPS = value
+    override fun setFPSEnabled(enabled: Boolean) {
+        showFPS = enabled
     }
 
     override fun setBgColor(color: Int) {

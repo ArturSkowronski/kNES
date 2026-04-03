@@ -43,7 +43,8 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
@@ -54,6 +55,14 @@ import knes.emulator.ui.GUIAdapter
 import kotlinx.coroutines.delay
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
+
+@Composable
+private fun classpathPainter(path: String): BitmapPainter {
+    return remember(path) {
+        val bytes = object {}.javaClass.classLoader.getResourceAsStream(path)!!.readAllBytes()
+        BitmapPainter(org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap())
+    }
+}
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
@@ -146,7 +155,7 @@ fun main() {
                                 modifier = Modifier.weight(1f), contentAlignment = Alignment.Center
                             ) {
                                 Image(
-                                    painter = painterResource("frame.png"),
+                                    painter = classpathPainter("frame.png"),
                                     contentDescription = "NES Frame",
                                     modifier = Modifier.size(256.dp, 240.dp)
                                 )
@@ -155,7 +164,7 @@ fun main() {
                                 modifier = Modifier.weight(1f), contentAlignment = Alignment.Center
                             ) {
                                 Image(
-                                    painter = painterResource("logo.png"),
+                                    painter = classpathPainter("logo.png"),
                                     contentDescription = "NES Frame",
                                     modifier = Modifier.size(256.dp, 240.dp)
                                 )

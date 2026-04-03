@@ -1688,7 +1688,7 @@ class PPU : PPUCycles {
              */
             // Sprite data:
             val sprmem = sprMem.mem
-            for (i in sprmem!!.indices) {
+            for (i in sprmem.indices) {
                 spriteRamWriteUpdate(i, sprmem[i])
             }
         }
