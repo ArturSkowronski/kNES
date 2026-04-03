@@ -15,6 +15,7 @@ package knes.emulator.producers
 
 import knes.emulator.NES
 import knes.emulator.mappers.MapperDefault
+import knes.emulator.mappers.MapperMMC1
 import knes.emulator.mappers.MemoryMapper
 import knes.emulator.rom.ROMData
 import java.util.function.Consumer
@@ -38,9 +39,8 @@ class MapperProducer
     fun produce(nes: NES, romData: ROMData): MemoryMapper {
         if (isMapperSupported(romData.mapperType)) {
             when (romData.mapperType) {
-                0 -> {
-                    return MapperDefault(nes)
-                }
+                0 -> return MapperDefault(nes)
+                1 -> return MapperMMC1(nes)
             }
         }
 
@@ -58,6 +58,6 @@ class MapperProducer
      */
     private fun isMapperSupported(mapperType: Int): Boolean {
         // For now, only mapper 0 is supported
-        return mapperType == 0
+        return mapperType in intArrayOf(0, 1)
     }
 }
