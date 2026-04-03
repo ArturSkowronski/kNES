@@ -19,7 +19,7 @@ plugins {
 repositories {
     mavenCentral()
     google()
-    maven { url "https://packages.jetbrains.team/maven/p/skija/maven" }
+    maven { url = "https://packages.jetbrains.team/maven/p/skija/maven" }
 }
 
 dependencies {
