@@ -20,7 +20,7 @@ import knes.emulator.memory.MemoryAccess
 import knes.emulator.papu.PAPUClockFrame
 import knes.emulator.ppu.PPUCycles
 import knes.emulator.utils.Globals
-import kotlin.random.Random
+
 
 class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPUCycles) : Runnable, CPUIIrqRequester {
     var myThread: Thread? = null
@@ -1287,22 +1287,10 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
     }
 
     fun clearCPUMemory() {
-        val random = Random(System.nanoTime())
-
-        for (i in 0..0x1fff) {
-            when (random.nextInt(100)) {
-                in 0 until 33 -> mem[i] = 0x00
-                in 33 until 66 -> mem[i] = 0xFF.toShort()
-                else -> mem[i] = random.nextInt(256).toShort()
-            }
-        }
-
-        for (p in 0..3) {
-            val i = p * 0x800
-            mem[i + 0x008] = 0xF7
-            mem[i + 0x009] = 0xEF
-            mem[i + 0x00A] = 0xDF
-            mem[i + 0x00F] = 0xBF
+        // Zero all RAM. Random or patterned init caused game bugs
+        // (e.g., SMB showing "World 0-1" instead of "World 1-1").
+        for (i in mem.indices) {
+            mem[i] = 0x00
         }
     }
 }
