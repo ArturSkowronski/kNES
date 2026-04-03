@@ -57,8 +57,6 @@ class NESIntegrationTest : FunSpec({
 
         // Read result codes
         val result02 = nes.cpuMemory.load(0x0002).toInt() and 0xFF
-        val result03 = nes.cpuMemory.load(0x0003).toInt() and 0xFF
-
         // $0002 = 0x00 means all official opcode tests passed
         // $0003 = 0x00 means all unofficial opcode tests passed (we may not support these)
         result02 shouldBe 0x00
