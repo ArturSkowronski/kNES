@@ -21,8 +21,8 @@ plugins {
 repositories {
     mavenCentral()
     google()
-    maven { url "https://maven.pkg.jetbrains.space/public/p/compose/dev" }
-    maven { url "https://packages.jetbrains.team/maven/p/skija/maven" }
+    maven { url = "https://maven.pkg.jetbrains.space/public/p/compose/dev" }
+    maven { url = "https://packages.jetbrains.team/maven/p/skija/maven" }
 }
 
 dependencies {

@@ -17,6 +17,9 @@ build/
 *.iws
 out/
 
+# Kotlin
+.kotlin/
+
 # Eclipse
 .project
 .classpath
