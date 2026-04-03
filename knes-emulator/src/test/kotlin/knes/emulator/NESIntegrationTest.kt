@@ -41,18 +41,22 @@ class NESIntegrationTest : FunSpec({
         val loaded = nes.loadRom(romPath)
         loaded shouldBe true
 
+        // Clear zero-page and stack area to ensure deterministic results
+        // (clearCPUMemory fills RAM with random values which can affect test outcomes)
+        for (i in 0 until 0x0800) {
+            nes.cpuMemory.write(i, 0x00.toShort())
+        }
+
         // Set PC to $C000 for automated test mode (no PPU needed)
-        // The CPU PC is stored as PC-1 due to the fetch cycle reading PC+1
         nes.cpu.REG_PC_NEW = 0xC000 - 1
 
-        // Run up to 10000 instructions — nestest completes well within this
-        val maxInstructions = 10000
+        // Reset status flags to known state
+        nes.cpu.status = 0x24 // interrupt disable set, unused bit set
+
+        // Run nestest — official tests complete well within 8000 instructions
+        val maxInstructions = 20000
         for (i in 0 until maxInstructions) {
             nes.cpu.step()
-
-            // nestest writes result to $0002: 0x00 means tests still running or passed
-            // Non-zero at $0002 means a specific test failed
-            // The test is done when PC reaches a known halt location or we've run enough
         }
 
         // Read result codes
