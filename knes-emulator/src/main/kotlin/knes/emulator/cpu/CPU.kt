@@ -274,7 +274,7 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
                 irqRequested = false
             }
 
-            opinf = opdata!![mmap!!.load(REG_PC + 1).toInt()]
+            opinf = opdata!![mmap.load(REG_PC + 1).toInt()]
             cycleCount = (opinf shr 24)
             cycleAdd = 0
 
@@ -376,9 +376,9 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
                     addr = load16bit(opaddr + 2) // Find op
                     if (addr < 0x1FFF) {
                         addr =
-                            mem!![addr] + (mem!![(addr and 0xFF00) or (((addr and 0xFF) + 1) and 0xFF)].toInt() shl 8) // Read from address given in op
+                            mem[addr] + (mem[(addr and 0xFF00) or (((addr and 0xFF) + 1) and 0xFF)].toInt() shl 8) // Read from address given in op
                     } else {
-                        addr = mmap!!.load(addr) + (mmap!!.load((addr and 0xFF00) or (((addr and 0xFF) + 1) and 0xFF))
+                        addr = mmap.load(addr) + (mmap.load((addr and 0xFF00) or (((addr and 0xFF) + 1) and 0xFF))
                             .toInt() shl 8)
                     }
                 }
@@ -1218,7 +1218,7 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
     }
 
     private fun doNonMaskableInterrupt(status: Int) {
-        val temp = mmap!!.load(0x2000).toInt() // Read PPU status.
+        val temp = mmap.load(0x2000).toInt() // Read PPU status.
         if ((temp and 128) != 0) { // Check whether VBlank Interrupts are enabled
 
             REG_PC_NEW++
@@ -1227,13 +1227,13 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
             //F_INTERRUPT_NEW = 1;
             push(status)
 
-            REG_PC_NEW = mmap!!.load(0xFFFA).toInt() or (mmap!!.load(0xFFFB).toInt() shl 8)
+            REG_PC_NEW = mmap.load(0xFFFA).toInt() or (mmap.load(0xFFFB).toInt() shl 8)
             REG_PC_NEW--
         }
     }
 
     private fun doResetInterrupt() {
-        REG_PC_NEW = mmap!!.load(0xFFFC).toInt() or (mmap!!.load(0xFFFD).toInt() shl 8)
+        REG_PC_NEW = mmap.load(0xFFFC).toInt() or (mmap.load(0xFFFD).toInt() shl 8)
         REG_PC_NEW--
     }
 
@@ -1245,7 +1245,7 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
         F_INTERRUPT_NEW = 1
         F_BRK_NEW = 0
 
-        REG_PC_NEW = mmap!!.load(0xFFFE).toInt() or (mmap!!.load(0xFFFF).toInt() shl 8)
+        REG_PC_NEW = mmap.load(0xFFFE).toInt() or (mmap.load(0xFFFF).toInt() shl 8)
         REG_PC_NEW--
     }
 

@@ -181,8 +181,8 @@ class TerminalScreenView(private var scale: Int) : ScreenView {
      * 
      * @param val true to show FPS, false to hide
      */
-    override fun setFPSEnabled(value: Boolean) {
-        showFPS = value
+    override fun setFPSEnabled(enabled: Boolean) {
+        showFPS = enabled
     }
 
     /**

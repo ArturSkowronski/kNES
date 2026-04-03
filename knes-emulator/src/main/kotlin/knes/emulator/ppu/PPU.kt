@@ -379,7 +379,7 @@ class PPU : PPUCycles {
         // Start VBlank period:
         // Do NMI:
 
-        cpu!!.requestIrq(CPU.Companion.IRQ_NMI)
+        cpu.requestIrq(CPU.Companion.IRQ_NMI)
 
         // Make sure everything is rendered:
         if (lastRenderedScanline < 239) {
@@ -708,23 +708,23 @@ class PPU : PPUCycles {
         f_dispType = value and 1
 
         if (f_dispType == 0) {
-            palTable!!.setEmphasis(f_color)
+            palTable.setEmphasis(f_color)
         }
         updatePalettes()
     }
 
     fun setStatusFlag(flag: Int, value: Boolean) {
         val n = 1 shl flag
-        var memValue = cpuMem!!.load(0x2002).toInt()
+        var memValue = cpuMem.load(0x2002).toInt()
         memValue = ((memValue and (255 - n)) or (if (value) n else 0))
-        cpuMem!!.write(0x2002, memValue.toShort())
+        cpuMem.write(0x2002, memValue.toShort())
     }
 
 
     // CPU Register $2002:
     // Read the Status Register.
     fun readStatusRegister(): Short {
-        tmp = cpuMem!!.load(0x2002)
+        tmp = cpuMem.load(0x2002)
 
         // Reset scroll & VRAM Address toggle:
         firstWrite = true
@@ -748,7 +748,7 @@ class PPU : PPUCycles {
     // Read from SPR-RAM (Sprite RAM).
     // The address should be set first.
     fun sramLoad(): Short {
-        val tmp = sprMem!!.load(sramAddress.toInt())/*sramAddress++; // Increment address
+        val tmp = sprMem.load(sramAddress.toInt())/*sramAddress++; // Increment address
         sramAddress%=0x100;*/
         return tmp
     }
@@ -758,7 +758,7 @@ class PPU : PPUCycles {
     // Write to SPR-RAM (Sprite RAM).
     // The address should be set first.
     fun sramWrite(value: Short) {
-        sprMem!!.write(sramAddress.toInt(), value)
+        sprMem.write(sramAddress.toInt(), value)
         spriteRamWriteUpdate(sramAddress.toInt(), value)
         sramAddress++ // Increment address
         sramAddress = (sramAddress % 0x100).toShort()
@@ -830,7 +830,7 @@ class PPU : PPUCycles {
 
             // Update buffered value:
             if (vramAddress < 0x2000) {
-                vramBufferedReadValue = ppuMem!!.load(vramAddress)
+                vramBufferedReadValue = ppuMem.load(vramAddress)
             } else {
                 vramBufferedReadValue = mirroredLoad(vramAddress)
             }
@@ -892,12 +892,12 @@ class PPU : PPUCycles {
         val baseAddress = value * 0x100
         var data: Short
         for (i in sramAddress..255) {
-            data = cpuMem!!.load(baseAddress + i)
-            sprMem!!.write(i, data)
+            data = cpuMem.load(baseAddress + i)
+            sprMem.write(i, data)
             spriteRamWriteUpdate(i, data)
         }
 
-        cpu!!.haltCycles(513)
+        cpu.haltCycles(513)
     }
 
     // Updates the scroll registers from a new VRAM address.
@@ -977,7 +977,7 @@ class PPU : PPUCycles {
     // Reads from memory, taking into account
     // mirroring/mapping of address ranges.
     private fun mirroredLoad(address: Int): Short {
-        return ppuMem!!.load(vramMirrorTable!![address])
+        return ppuMem.load(vramMirrorTable!![address])
     }
 
     // Writes to memory, taking into account
@@ -1009,7 +1009,7 @@ class PPU : PPUCycles {
             } else {
                 if (knes.emulator.utils.Globals.debug) {
                     //System.out.println("Invalid VRAM address: "+Misc.hex16(address));
-                    cpu!!.setCrashed(true)
+                    cpu.setCrashed(true)
                 }
             }
         }
@@ -1426,11 +1426,11 @@ class PPU : PPUCycles {
     // update internally buffered data
     // appropriately.
     private fun writeMem(address: Int, value: Short) {
-        ppuMem!!.write(address, value)
+        ppuMem.write(address, value)
 
         // Update internally buffered data:
         if (address < 0x2000) {
-            ppuMem!!.write(address, value)
+            ppuMem.write(address, value)
             patternWrite(address, value)
         } else if (address >= 0x2000 && address < 0x23c0) {
             nameTableWrite(ntable1[0], address - 0x2000, value)
@@ -1458,16 +1458,16 @@ class PPU : PPUCycles {
     fun updatePalettes() {
         for (i in 0..15) {
             if (f_dispType == 0) {
-                imgPalette[i] = palTable!!.getEntry(ppuMem!!.load(0x3f00 + i).toInt() and 63)
+                imgPalette[i] = palTable.getEntry(ppuMem.load(0x3f00 + i).toInt() and 63)
             } else {
-                imgPalette[i] = palTable!!.getEntry(ppuMem!!.load(0x3f00 + i).toInt() and 32)
+                imgPalette[i] = palTable.getEntry(ppuMem.load(0x3f00 + i).toInt() and 32)
             }
         }
         for (i in 0..15) {
             if (f_dispType == 0) {
-                sprPalette[i] = palTable!!.getEntry(ppuMem!!.load(0x3f10 + i).toInt() and 63)
+                sprPalette[i] = palTable.getEntry(ppuMem.load(0x3f10 + i).toInt() and 63)
             } else {
-                sprPalette[i] = palTable!!.getEntry(ppuMem!!.load(0x3f10 + i).toInt() and 32)
+                sprPalette[i] = palTable.getEntry(ppuMem.load(0x3f10 + i).toInt() and 32)
             }
         }
 
@@ -1481,9 +1481,9 @@ class PPU : PPUCycles {
         val tileIndex = address / 16
         val leftOver = address % 16
         if (leftOver < 8) {
-            ptTile!![tileIndex].setScanline(leftOver, value, ppuMem!!.load(address + 8))
+            ptTile!![tileIndex].setScanline(leftOver, value, ppuMem.load(address + 8))
         } else {
-            ptTile!![tileIndex].setScanline(leftOver - 8, ppuMem!!.load(address - 8), value)
+            ptTile!![tileIndex].setScanline(leftOver - 8, ppuMem.load(address - 8), value)
         }
     }
 
@@ -1496,9 +1496,9 @@ class PPU : PPUCycles {
             leftOver = (address + i) % 16
 
             if (leftOver < 8) {
-                ptTile!![tileIndex].setScanline(leftOver, value[offset + i], ppuMem!!.load(address + 8 + i))
+                ptTile!![tileIndex].setScanline(leftOver, value[offset + i], ppuMem.load(address + 8 + i))
             } else {
-                ptTile!![tileIndex].setScanline(leftOver - 8, ppuMem!!.load(address - 8 + i), value[offset + i])
+                ptTile!![tileIndex].setScanline(leftOver - 8, ppuMem.load(address - 8 + i), value[offset + i])
             }
         }
     }
@@ -1567,7 +1567,7 @@ class PPU : PPUCycles {
 
         setStatusFlag(STATUS_VBLANK, true)
         //nes.getCpu().doNonMaskableInterrupt();
-        cpu!!.requestIrq(knes.emulator.cpu.CPU.Companion.IRQ_NMI)
+        cpu.requestIrq(knes.emulator.cpu.CPU.Companion.IRQ_NMI)
     }
 
     fun statusRegsToInt(): Int {
@@ -1687,7 +1687,7 @@ class PPU : PPUCycles {
             }
              */
             // Sprite data:
-            val sprmem = sprMem!!.mem
+            val sprmem = sprMem.mem
             for (i in sprmem!!.indices) {
                 spriteRamWriteUpdate(i, sprmem[i])
             }
@@ -1778,8 +1778,8 @@ class PPU : PPUCycles {
 
     // Reset PPU:
     fun reset() {
-        ppuMem!!.reset()
-        sprMem!!.reset()
+        ppuMem.reset()
+        sprMem.reset()
 
         vramBufferedReadValue = 0
         sramAddress = 0

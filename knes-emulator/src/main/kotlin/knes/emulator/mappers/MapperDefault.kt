@@ -102,9 +102,9 @@ class MapperDefault(nes: NES) : MemoryMapper {
         if (address < 0x2000) {
             // Mirroring of RAM:
 
-            cpuMem!!.mem[address and 0x7FF] = value
+            cpuMem.mem[address and 0x7FF] = value
         } else if (address > 0x4017) {
-            cpuMem!!.mem[address] = value
+            cpuMem.mem[address] = value
             if (address >= 0x6000 && address < 0x8000) {
                 // Write to SaveRAM. Store in file:
 //                if (rom != null) {
@@ -131,11 +131,10 @@ class MapperDefault(nes: NES) : MemoryMapper {
         }
     }
 
-    override fun load(address_in: Int): Short {
+    override fun load(address: Int): Short {
         // Wrap around:
 
-        var address = address_in
-        address = address and 0xFFFF
+        val address = address and 0xFFFF
 
         // Check address range:
         if (address > 0x4017) {
@@ -475,10 +474,10 @@ class MapperDefault(nes: NES) : MemoryMapper {
     override fun loadBatteryRam() {
         if (rom!!.hasBatteryRam()) {
             val ram = rom!!.saveBatteryRam()
-            if (ram != null && ram.size == 0x2000) {
+            if (ram.size == 0x2000) {
                 // Load Battery RAM into memory:
 
-                System.arraycopy(ram, 0, cpuMem!!.mem, 0x6000, 0x2000)
+                System.arraycopy(ram, 0, cpuMem.mem, 0x6000, 0x2000)
             }
         }
     }
@@ -490,7 +489,7 @@ class MapperDefault(nes: NES) : MemoryMapper {
         bank %= rom!!.getRomBankCount()
         val data = rom!!.getRomBank(bank)
         //cpuMem.write(address,data,data.length);
-        System.arraycopy(rom!!.getRomBank(bank), 0, cpuMem!!.mem, address, 16384)
+        System.arraycopy(rom!!.getRomBank(bank), 0, cpuMem.mem, address, 16384)
     }
 
     protected fun loadVromBank(bank: Int, address: Int) {
@@ -499,7 +498,7 @@ class MapperDefault(nes: NES) : MemoryMapper {
         }
         ppu!!.triggerRendering()
 
-        System.arraycopy(rom!!.getVromBank(bank % rom!!.getVromBankCount()), 0, ppuMem!!.mem, address, 4096)
+        System.arraycopy(rom!!.getVromBank(bank % rom!!.getVromBankCount()), 0, ppuMem.mem, address, 4096)
 
         val vromTile = rom!!.getVromBankTiles(bank % rom!!.getVromBankCount())
         System.arraycopy(vromTile, 0, ppu!!.ptTile, address shr 4, 256)
@@ -528,7 +527,7 @@ class MapperDefault(nes: NES) : MemoryMapper {
 
         val bank4k = (bank1k / 4) % rom!!.getVromBankCount()
         val bankoffset = (bank1k % 4) * 1024
-        System.arraycopy(rom!!.getVromBank(bank4k), 0, ppuMem!!.mem, bankoffset, 1024)
+        System.arraycopy(rom!!.getVromBank(bank4k), 0, ppuMem.mem, bankoffset, 1024)
 
         // Update tiles:
         val vromTile = rom!!.getVromBankTiles(bank4k)
@@ -544,7 +543,7 @@ class MapperDefault(nes: NES) : MemoryMapper {
 
         val bank4k = (bank2k / 2) % rom!!.getVromBankCount()
         val bankoffset = (bank2k % 2) * 2048
-        System.arraycopy(rom!!.getVromBank(bank4k), bankoffset, ppuMem!!.mem, address, 2048)
+        System.arraycopy(rom!!.getVromBank(bank4k), bankoffset, ppuMem.mem, address, 2048)
 
         // Update tiles:
         val vromTile = rom!!.getVromBankTiles(bank4k)

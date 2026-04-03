@@ -28,7 +28,7 @@ interface PAPUAudioContext {
      */
     val PAPUDMCSampler: PAPUDMCSampler
     val sampleRate: Int
-    fun clockFrameCounter(cycles: Int)
+    fun clockFrameCounter(cycleCount: Int)
     fun updateChannelEnable(value: Int)
 
     // Method needed by channels to get length counter values
