@@ -53,8 +53,8 @@ import knes.controllers.GamepadController
 import knes.emulator.NES
 import knes.emulator.ui.GUIAdapter
 import kotlinx.coroutines.delay
-import javax.swing.JFileChooser
-import javax.swing.filechooser.FileNameExtensionFilter
+import java.awt.FileDialog
+import java.awt.Frame
 
 @Composable
 private fun classpathPainter(path: String): BitmapPainter {
@@ -120,11 +120,13 @@ fun main() {
 
                         Button(
                             onClick = {
-                                val fileChooser = JFileChooser()
-                                fileChooser.fileFilter = FileNameExtensionFilter("NES ROMs", "nes")
-                                if (fileChooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-                                    val file = fileChooser.selectedFile
-                                    if (composeUI.loadRom(file.absolutePath)) {
+                                val dialog = FileDialog(null as Frame?, "Load NES ROM", FileDialog.LOAD)
+                                dialog.setFilenameFilter { _, name -> name.endsWith(".nes") }
+                                dialog.isVisible = true
+                                val dir = dialog.directory
+                                val file = dialog.file
+                                if (dir != null && file != null) {
+                                    if (composeUI.loadRom(dir + file)) {
                                         if (!isEmulatorRunning) {
                                             composeUI.startEmulator()
                                             isEmulatorRunning = true
