@@ -60,12 +60,12 @@ sourceSets {
 
 dependencies {
     implementation project(':knes-emulator')
-    api "com.badlogicgames.gdx:gdx:1.12.1"
-    api "com.badlogicgames.gdx:gdx-backend-lwjgl3:1.12.1"
-    api "com.badlogicgames.gdx:gdx-platform:1.12.1:natives-desktop"
+    api "com.badlogicgames.gdx:gdx:1.14.0"
+    api "com.badlogicgames.gdx:gdx-backend-lwjgl3:1.14.0"
+    api "com.badlogicgames.gdx:gdx-platform:1.14.0:natives-desktop"
     api "com.badlogicgames.gdx-controllers:gdx-controllers-desktop:2.2.4"
     implementation 'org.hid4java:hid4java:0.8.0'
-    implementation 'net.java.dev.jna:jna:5.14.0'
+    implementation 'net.java.dev.jna:jna:5.18.1'
 }
 
 java {
