@@ -13,6 +13,7 @@
 
 package knes.compose
 
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
@@ -22,38 +23,43 @@ import knes.emulator.input.InputHandler
 /**
  * Input handler for the Compose UI.
  *
- * Note: This is a temporary implementation using Swing instead of Compose
- * until the Compose UI dependencies are properly configured.
+ * Handles keyboard input using Compose key codes (mapped internally to NES buttons)
+ * and delegates gamepad input to the ControllerProvider.
  */
 class ComposeInputHandler(val controllerProvider: ControllerProvider) : InputHandler {
 
-    fun keyEventHandler(
-        event: androidx.compose.ui.input.key.KeyEvent
-    ): Boolean {
-        val keyCode = event.key.keyCode.toInt()
+    private val keyStates = ShortArray(InputHandler.NUM_KEYS) { 0x40 }
 
-        return if (keyCode != 0) {
-            println("Key event: ${event.type} ${event.key} keyCode: $keyCode")
-
-            when (event.type) {
-                KeyEventType.KeyDown -> {
-                    controllerProvider.setKeyState(keyCode, true)
-                    true
-                }
-
-                KeyEventType.KeyUp -> {
-                    controllerProvider.setKeyState(keyCode, false)
-                    true
-                }
-                else -> true
-            }
-        } else {
-            false
+    /** Map Compose Key to NES button index, or -1 if not mapped. */
+    private fun mapKey(key: Key): Int {
+        return when (key) {
+            Key.Z -> InputHandler.KEY_A
+            Key.X -> InputHandler.KEY_B
+            Key.Enter -> InputHandler.KEY_START
+            Key.Spacebar -> InputHandler.KEY_SELECT
+            Key.DirectionUp -> InputHandler.KEY_UP
+            Key.DirectionDown -> InputHandler.KEY_DOWN
+            Key.DirectionLeft -> InputHandler.KEY_LEFT
+            Key.DirectionRight -> InputHandler.KEY_RIGHT
+            else -> -1
         }
     }
 
-    override fun getKeyState(padKey: Int): Short {
-        return controllerProvider.getKeyState(padKey)
+    fun keyEventHandler(event: androidx.compose.ui.input.key.KeyEvent): Boolean {
+        val nesButton = mapKey(event.key)
+        if (nesButton == -1) return false
+
+        when (event.type) {
+            KeyEventType.KeyDown -> keyStates[nesButton] = 0x41
+            KeyEventType.KeyUp -> keyStates[nesButton] = 0x40
+        }
+        return true
     }
 
+    override fun getKeyState(padKey: Int): Short {
+        // Merge keyboard and gamepad: either one pressed = pressed
+        val keyboard = keyStates[padKey]
+        val gamepad = controllerProvider.getKeyState(padKey)
+        return if (keyboard == 0x41.toShort() || gamepad == 0x41.toShort()) 0x41 else 0x40
+    }
 }
