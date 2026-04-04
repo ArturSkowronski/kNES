@@ -45,6 +45,7 @@ The project is organized into the following modules:
 - **knes-compose-ui**: Jetpack Compose Desktop UI (primary, recommended).
 - **knes-skiko-ui**: Skiko-based hardware-accelerated rendering UI.
 - **knes-terminal-ui**: Terminal-based UI (text-based interface) — slow AF, but freaking fun.
+- **knes-api**: REST API server for AI agents, TAS tools, and automation ([docs](knes-api/README.md)).
 - **knes-applet-ui**: Java Applet-based UI (legacy).
 
 https://github.com/user-attachments/assets/9036ae9a-3be8-43ec-8050-3a47b29d1648
@@ -77,13 +78,8 @@ This will launch the main application, which allows choosing between the differe
 
 ### Running Specific UIs
 
-You can run specific UI implementations directly:
-
 ```bash
-# Applet UI
-./gradlew :knes-applet-ui:run
-
-# Compose UI
+# Compose UI (recommended)
 ./gradlew :knes-compose-ui:run
 
 # Terminal UI
@@ -92,6 +88,32 @@ You can run specific UI implementations directly:
 # Skiko UI
 ./gradlew :knes-skiko-ui:run
 ```
+
+### REST API Server
+
+Run the emulator as a headless REST API for AI agents, TAS tools, and automation:
+
+```bash
+./gradlew :knes-api:run   # starts on port 8080
+```
+
+```bash
+# Load a ROM
+curl -X POST localhost:8080/rom -H 'Content-Type: application/json' \
+  -d '{"path": "/path/to/game.nes"}'
+
+# Step 60 frames holding RIGHT
+curl -X POST localhost:8080/step -H 'Content-Type: application/json' \
+  -d '{"buttons": ["RIGHT"], "frames": 60}'
+
+# Get screenshot
+curl localhost:8080/screen -o frame.png
+
+# Get game state
+curl localhost:8080/state
+```
+
+12 endpoints: `/step`, `/screen`, `/state`, `/watch`, `/press`, `/release`, `/fm2`, and more. Full docs in [knes-api/README.md](knes-api/README.md).
 
 ## Architecture
 
@@ -109,12 +131,14 @@ The core emulator is contained in the `knes-emulator` module and provides the fo
 
 ### Testing
 
-390+ automated tests covering every layer:
+400+ automated tests covering every layer:
 - CPU instruction tests (all opcodes, all addressing modes)
 - PPU register and rendering logic tests
 - PAPU audio channel tests
+- MMC1 mapper unit tests
 - nestest.nes ROM integration test (community-standard CPU validation)
 - Super Mario Bros E2E game tests (headless, input injection, RAM assertions)
+- REST API E2E tests (game session, screenshot, FM2 playback, batch stepping)
 - Compose Desktop UI smoke tests
 
 ```bash
