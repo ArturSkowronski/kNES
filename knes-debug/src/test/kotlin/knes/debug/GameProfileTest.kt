@@ -29,6 +29,24 @@ class GameProfileTest : FunSpec({
         ff1.toWatchMap()["char1_hpLow"] shouldBe 0x610A
     }
 
+    test("FF1 hidden flag marks cheat addresses") {
+        val ff1 = GameProfile.get("ff1")!!
+        ff1.addresses["encounterCounter"]!!.hidden shouldBe true
+        ff1.addresses["enemy1_hpLow"]!!.hidden shouldBe true
+        ff1.addresses["char1_hpLow"]!!.hidden shouldBe false
+        ff1.addresses["goldLow"]!!.hidden shouldBe false
+    }
+
+    test("toFairWatchMap excludes hidden addresses") {
+        val ff1 = GameProfile.get("ff1")!!
+        val fair = ff1.toFairWatchMap()
+        val all = ff1.toWatchMap()
+        all.size shouldBeGreaterThan fair.size
+        fair.containsKey("char1_hpLow") shouldBe true
+        fair.containsKey("encounterCounter") shouldBe false
+        fair.containsKey("enemy1_hpLow") shouldBe false
+    }
+
     test("register custom profile") {
         val custom = GameProfile("Test", "test-game", "test", mapOf("hp" to AddressEntry(0x50, "health")))
         GameProfile.register(custom)
