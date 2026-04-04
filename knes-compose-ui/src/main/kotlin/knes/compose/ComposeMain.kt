@@ -57,6 +57,11 @@ fun main() {
         val nes = remember { NES(GUIAdapter(inputHandler, screenView)) }
         val composeUI = remember { ComposeUI(nes, screenView) }
         val focusRequester = remember { FocusRequester() }
+        var showMonitor by remember { mutableStateOf(false) }
+
+        if (showMonitor) {
+            ProfileMonitorWindow(nes = nes, onClose = { showMonitor = false })
+        }
 
         Window(
             onCloseRequest = ::exitApplication,
@@ -92,6 +97,13 @@ fun main() {
                                 focusRequester.requestFocus()
                             }) {
                                 Text(if (isEmulatorRunning) "Stop Emulator" else "Start Emulator")
+                            }
+
+                            Button(onClick = {
+                                showMonitor = !showMonitor
+                                focusRequester.requestFocus()
+                            }) {
+                                Text(if (showMonitor) "Hide Monitor" else "Monitor")
                             }
 
                             Button(onClick = {
