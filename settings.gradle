@@ -26,3 +26,4 @@ include 'knes-controllers'
  */
 
 include 'knes-compose-ui'
+include 'knes-api'
