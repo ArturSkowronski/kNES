@@ -29,6 +29,7 @@ dependencies {
     implementation project(':knes-emulator')
     implementation project(':knes-controllers')
     implementation project(':knes-debug')
+    implementation project(':knes-api')
     implementation "org.jetbrains.kotlin:kotlin-stdlib"
 
     // Compose Desktop dependencies

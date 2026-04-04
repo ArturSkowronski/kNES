@@ -42,6 +42,7 @@ class ComposeScreenView(val scale: Int) : ScreenView {
     private var sleepTime: Int = 0
 
     var onFrameReady: (() -> Unit)? = null
+    var onApiFrameCallback: ((IntArray) -> Unit)? = null
 
     fun getFrameBitmap(): ImageBitmap {
         // Convert PPU RGB (0x00RRGGBB) directly to BGRA bytes — single pass, no intermediates
@@ -74,6 +75,8 @@ class ComposeScreenView(val scale: Int) : ScreenView {
 
         t1 = timer.currentMicros()
         System.arraycopy(buffer, 0, currentBuffer, 0, pixelCount)
+
+        onApiFrameCallback?.invoke(currentBuffer)
 
         if (!skipFrame) {
             onFrameReady?.invoke()
