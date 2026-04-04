@@ -13,23 +13,6 @@
 
 package knes.compose
 
-/*
-vNES
-Copyright © 2006-2013 Open Emulation Project
-
-This program is free software: you can redistribute it and/or modify it under
-the terms of the GNU General Public License as published by the Free Software
-Foundation, either version 3 of the License, or (at your option) any later
-version.
-
-This program is distributed in the hope that it will be useful, but WITHOUT ANY
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License along with
-this program.  If not, see <http://www.gnu.org/licenses/>.
- */
-
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
@@ -39,7 +22,6 @@ import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -52,7 +34,6 @@ import androidx.compose.ui.window.rememberWindowState
 import knes.controllers.GamepadController
 import knes.emulator.NES
 import knes.emulator.ui.GUIAdapter
-import kotlinx.coroutines.delay
 import java.awt.FileDialog
 import java.awt.Frame
 
@@ -64,62 +45,56 @@ private fun classpathPainter(path: String): BitmapPainter {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 fun main() {
     application {
         val windowState = rememberWindowState(width = 800.dp, height = 700.dp)
-    var isEmulatorRunning by remember { mutableStateOf(false) }
+        var isEmulatorRunning by remember { mutableStateOf(false) }
 
-    val gamepadController = remember { GamepadController() }
-    val inputHandler = remember { ComposeInputHandler(gamepadController) }
+        val gamepadController = remember { GamepadController() }
+        val inputHandler = remember { ComposeInputHandler(gamepadController) }
 
-    val screenView = remember { ComposeScreenView(1) }
-    val nes = remember { NES(GUIAdapter(inputHandler, screenView)) }
-    val composeUI = remember { ComposeUI(nes, screenView) }
-    val focusRequester = remember { FocusRequester() }
+        val screenView = remember { ComposeScreenView(1) }
+        val nes = remember { NES(GUIAdapter(inputHandler, screenView)) }
+        val composeUI = remember { ComposeUI(nes, screenView) }
+        val focusRequester = remember { FocusRequester() }
 
-    Window(
-        onCloseRequest = ::exitApplication,
-        title = "kNES Emulator",
-        state = windowState,
-        onKeyEvent = inputHandler::keyEventHandler,
-        focusable = true
-    ) {
-        LaunchedEffect(Unit) {
-            focusRequester.requestFocus()
-        }
-
-        LaunchedEffect(Unit) {
-            while (true) {
-                delay(1000)
+        Window(
+            onCloseRequest = ::exitApplication,
+            title = "kNES Emulator",
+            state = windowState,
+            onKeyEvent = inputHandler::keyEventHandler,
+            focusable = true
+        ) {
+            LaunchedEffect(Unit) {
                 focusRequester.requestFocus()
             }
-        }
 
-        MaterialTheme {
-            Surface(
-                modifier = Modifier.fillMaxSize().focusRequester(focusRequester).focusable()
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally
+            MaterialTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize().focusRequester(focusRequester).focusable()
                 ) {
-                    Text(
-                        text = "kNES Emulator 🎮",
-                        style = MaterialTheme.typography.h4,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Button(onClick = {
-                            if (isEmulatorRunning) composeUI.stopEmulator() else composeUI.startEmulator()
-                            isEmulatorRunning = !isEmulatorRunning
-                            focusRequester.requestFocus()
-                        }) { Text(if (isEmulatorRunning) "Stop Emulator" else "Start Emulator") }
+                        Text(
+                            text = "kNES Emulator",
+                            style = MaterialTheme.typography.h4,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            Button(onClick = {
+                                if (isEmulatorRunning) composeUI.stopEmulator() else composeUI.startEmulator()
+                                isEmulatorRunning = !isEmulatorRunning
+                                focusRequester.requestFocus()
+                            }) {
+                                Text(if (isEmulatorRunning) "Stop Emulator" else "Start Emulator")
+                            }
 
-                        Button(
-                            onClick = {
+                            Button(onClick = {
                                 val dialog = FileDialog(null as Frame?, "Load NES ROM", FileDialog.LOAD)
                                 dialog.setFilenameFilter { _, name -> name.endsWith(".nes") }
                                 dialog.isVisible = true
@@ -135,48 +110,46 @@ fun main() {
                                 }
                                 focusRequester.requestFocus()
                             }) {
-                            Text("Load ROM")
-                        }
-                    }
-                    Text(
-                        text = gamepadController.statusMessage,
-                        style = MaterialTheme.typography.caption,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        Box(
-                            modifier = Modifier.weight(1f), contentAlignment = Alignment.Center
-                        ) {
-                            composeUI.nesScreenRenderer()
-                        }
-                        Column {
-                            Box(
-                                modifier = Modifier.weight(1f), contentAlignment = Alignment.Center
-                            ) {
-                                Image(
-                                    painter = classpathPainter("frame.png"),
-                                    contentDescription = "NES Frame",
-                                    modifier = Modifier.size(256.dp, 240.dp)
-                                )
-                            }
-                            Box(
-                                modifier = Modifier.weight(1f), contentAlignment = Alignment.Center
-                            ) {
-                                Image(
-                                    painter = classpathPainter("logo.png"),
-                                    contentDescription = "NES Frame",
-                                    modifier = Modifier.size(256.dp, 240.dp)
-                                )
+                                Text("Load ROM")
                             }
                         }
 
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            Box(
+                                modifier = Modifier.weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                composeUI.nesScreenRenderer()
+                            }
+                            Column {
+                                Box(
+                                    modifier = Modifier.weight(1f),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Image(
+                                        painter = classpathPainter("frame.png"),
+                                        contentDescription = "NES Frame",
+                                        modifier = Modifier.size(256.dp, 240.dp)
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier.weight(1f),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Image(
+                                        painter = classpathPainter("logo.png"),
+                                        contentDescription = "kNES Logo",
+                                        modifier = Modifier.size(256.dp, 240.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
     }
-}
 }

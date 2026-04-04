@@ -13,23 +13,6 @@
 
 package knes.compose
 
-/*
-vNES
-Copyright © 2006-2013 Open Emulation Project
-
-This program is free software: you can redistribute it and/or modify it under
-the terms of the GNU General Public License as published by the Free Software
-Foundation, either version 3 of the License, or (at your option) any later
-version.
-
-This program is distributed in the hope that it will be useful, but WITHOUT ANY
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License along with
-this program.  If not, see <http://www.gnu.org/licenses/>.
- */
-
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
@@ -44,7 +27,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import knes.emulator.NES
 
-class ComposeUI(val nes: NES, val screenView: ComposeScreenView)  {
+class ComposeUI(val nes: NES, val screenView: ComposeScreenView) {
 
     fun startEmulator() {
         nes.startEmulation()
@@ -55,19 +38,13 @@ class ComposeUI(val nes: NES, val screenView: ComposeScreenView)  {
     }
 
     fun loadRom(path: String): Boolean {
-        return nes.loadRom(path) == true
+        return nes.loadRom(path)
     }
 
     @Composable
     fun nesScreenRenderer() {
         var frameCount by remember { mutableStateOf(0) }
         var currentBitmap by remember { mutableStateOf(screenView.getFrameBitmap()) }
-        val baseScale = screenView.scale
-        val isMacOS = System.getProperty("os.name").lowercase().contains("mac")
-        val scale = if (isMacOS) baseScale * 1 else baseScale
-
-        val scaledWidth = 512 * scale
-        val scaledHeight = 480 * scale
 
         DisposableEffect(Unit) {
             screenView.onFrameReady = {
@@ -82,12 +59,12 @@ class ComposeUI(val nes: NES, val screenView: ComposeScreenView)  {
 
         Canvas(
             modifier = Modifier
-                .width(scaledWidth.dp)
-                .height(scaledHeight.dp)
+                .width(512.dp)
+                .height(480.dp)
         ) {
             drawImage(
                 image = currentBitmap,
-                dstSize = IntSize(scaledWidth, scaledHeight)
+                dstSize = IntSize(512, 480)
             )
         }
     }
