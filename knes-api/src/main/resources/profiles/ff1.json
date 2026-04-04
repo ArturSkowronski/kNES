@@ -1,0 +1,55 @@
+{
+  "name": "Final Fantasy",
+  "id": "ff1",
+  "description": "Final Fantasy (1987) memory map",
+  "addresses": {
+    "goldLow": {"address": "0x601C", "description": "Gold (low byte)"},
+    "goldMid": {"address": "0x601D", "description": "Gold (middle byte)"},
+    "goldHigh": {"address": "0x601E", "description": "Gold (high byte)"},
+    "worldX": {"address": "0x0027", "description": "World map X position (tiles)"},
+    "worldY": {"address": "0x0028", "description": "World map Y position (tiles)"},
+    "localX": {"address": "0x0029", "description": "Non-world map X position"},
+    "localY": {"address": "0x002A", "description": "Non-world map Y position"},
+    "locationType": {"address": "0x000D", "description": "Location type (0=outside, 0xD1=inside)"},
+    "encounterCounter": {"address": "0x00F5", "description": "Steps until next encounter (decrements)"},
+
+    "char1_hpLow": {"address": "0x610A", "description": "Character 1 HP (low byte)"},
+    "char1_hpHigh": {"address": "0x610B", "description": "Character 1 HP (high byte)"},
+    "char1_maxHpLow": {"address": "0x610C", "description": "Character 1 max HP (low byte)"},
+    "char1_maxHpHigh": {"address": "0x610D", "description": "Character 1 max HP (high byte)"},
+    "char1_level": {"address": "0x6126", "description": "Character 1 level (stored as level-1)"},
+    "char1_str": {"address": "0x6110", "description": "Character 1 strength"},
+    "char1_agi": {"address": "0x6111", "description": "Character 1 agility"},
+    "char1_int": {"address": "0x6112", "description": "Character 1 intelligence"},
+    "char1_vit": {"address": "0x6113", "description": "Character 1 vitality"},
+    "char1_luck": {"address": "0x6114", "description": "Character 1 luck"},
+    "char1_status": {"address": "0x6101", "description": "Character 1 status flags (dead, poison, etc)"},
+    "char1_xpLow": {"address": "0x6107", "description": "Character 1 XP (low byte)"},
+    "char1_xpHigh": {"address": "0x6108", "description": "Character 1 XP (high byte)"},
+
+    "char2_hpLow": {"address": "0x614A", "description": "Character 2 HP (low byte)"},
+    "char2_hpHigh": {"address": "0x614B", "description": "Character 2 HP (high byte)"},
+    "char2_maxHpLow": {"address": "0x614C", "description": "Character 2 max HP (low byte)"},
+    "char2_maxHpHigh": {"address": "0x614D", "description": "Character 2 max HP (high byte)"},
+    "char2_level": {"address": "0x6166", "description": "Character 2 level (stored as level-1)"},
+    "char2_status": {"address": "0x6141", "description": "Character 2 status flags"},
+
+    "char3_hpLow": {"address": "0x618A", "description": "Character 3 HP (low byte)"},
+    "char3_hpHigh": {"address": "0x618B", "description": "Character 3 HP (high byte)"},
+    "char3_maxHpLow": {"address": "0x618C", "description": "Character 3 max HP (low byte)"},
+    "char3_maxHpHigh": {"address": "0x618D", "description": "Character 3 max HP (high byte)"},
+    "char3_level": {"address": "0x61A6", "description": "Character 3 level (stored as level-1)"},
+    "char3_status": {"address": "0x6181", "description": "Character 3 status flags"},
+
+    "char4_hpLow": {"address": "0x61CA", "description": "Character 4 HP (low byte)"},
+    "char4_hpHigh": {"address": "0x61CB", "description": "Character 4 HP (high byte)"},
+    "char4_maxHpLow": {"address": "0x61CC", "description": "Character 4 max HP (low byte)"},
+    "char4_maxHpHigh": {"address": "0x61CD", "description": "Character 4 max HP (high byte)"},
+    "char4_level": {"address": "0x61E6", "description": "Character 4 level (stored as level-1)"},
+    "char4_status": {"address": "0x61C1", "description": "Character 4 status flags"},
+
+    "battleTurn": {"address": "0x6830", "description": "Battle turn indicator (0x55=player turn)"},
+    "enemyCount": {"address": "0x6C93", "description": "Total enemy count in battle"},
+    "responseRate": {"address": "0x00FA", "description": "Response rate setting (1-8)"}
+  }
+}
