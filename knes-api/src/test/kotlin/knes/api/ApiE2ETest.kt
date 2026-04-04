@@ -24,7 +24,7 @@ class ApiE2ETest : FunSpec({
 
     val romPath = findRom()
 
-    beforeEach {
+    fun skipIfNoRom() {
         if (romPath == null) {
             throw io.kotest.engine.TestAbortedException(
                 "SMB ROM not found. Set KNES_TEST_ROM_SMB env var or place ROM at roms/smb.nes"
@@ -33,6 +33,7 @@ class ApiE2ETest : FunSpec({
     }
 
     test("full game session through REST API: load ROM, start game, walk right") {
+        skipIfNoRom()
         testApplication {
             val session = EmulatorSession()
             application { configureRoutes(session) }
@@ -93,6 +94,7 @@ class ApiE2ETest : FunSpec({
     }
 
     test("screenshot endpoint returns valid PNG after loading ROM") {
+        skipIfNoRom()
         testApplication {
             val session = EmulatorSession()
             application { configureRoutes(session) }
@@ -121,6 +123,7 @@ class ApiE2ETest : FunSpec({
     }
 
     test("FM2 input playback works through API") {
+        skipIfNoRom()
         testApplication {
             val session = EmulatorSession()
             application { configureRoutes(session) }
@@ -142,6 +145,7 @@ class ApiE2ETest : FunSpec({
     }
 
     test("batch step sequence executes atomically") {
+        skipIfNoRom()
         testApplication {
             val session = EmulatorSession()
             application { configureRoutes(session) }
