@@ -95,28 +95,110 @@ curl -X POST localhost:6502/step \
 **Response** includes the current frame count and values of any [watched RAM addresses](#post-watch).
 
 #### `POST /watch`
-Configure RAM addresses to include in `/step` and `/state` responses. Use game-specific memory maps to observe game variables directly.
+Configure RAM addresses to include in `/step` and `/state` responses manually. For common games, use [Game Profiles](#game-profiles) instead.
 
 ```bash
 curl -X POST localhost:6502/watch \
   -H 'Content-Type: application/json' \
-  -d '{
-    "addresses": {
-      "playerX": "0x0086",
-      "playerY": "0x00CE",
-      "lives": "0x075A",
-      "world": "0x075F",
-      "level": "0x0760",
-      "gameState": "0x0770",
-      "score": "0x07DD"
-    }
-  }'
+  -d '{"addresses": {"playerX": "0x0086", "lives": "0x075A"}}'
 ```
 
 After configuring, `/step` and `/state` responses include named values:
 ```json
-{"frame": 200, "ram": {"playerX": 120, "playerY": 192, "lives": 2, "world": 0, "level": 0}}
+{"frame": 200, "ram": {"playerX": 120, "lives": 2}}
 ```
+
+---
+
+### Game Profiles
+
+Pre-built memory maps for specific games. Instead of manually specifying hex addresses, load a profile and all relevant game variables are watched automatically.
+
+#### `GET /profiles`
+List available profiles.
+
+```bash
+curl localhost:6502/profiles
+```
+```json
+[
+  {"id": "smb", "name": "Super Mario Bros", "addressCount": "17"},
+  {"id": "ff1", "name": "Final Fantasy", "addressCount": "30"}
+]
+```
+
+#### `GET /profiles/{id}`
+Get full profile details with all RAM addresses and descriptions.
+
+```bash
+curl localhost:6502/profiles/smb
+```
+```json
+{
+  "name": "Super Mario Bros",
+  "id": "smb",
+  "addresses": {
+    "playerX": {"address": "0x0086", "description": "Mario X position on screen"},
+    "lives": {"address": "0x075A", "description": "Lives remaining"},
+    ...
+  }
+}
+```
+
+#### `POST /profiles/{id}/apply`
+Apply a profile — sets all its addresses as the active watch list.
+
+```bash
+# Apply SMB profile
+curl -X POST localhost:6502/profiles/smb/apply
+
+# Now every /step and /state response includes all SMB variables
+curl -X POST localhost:6502/step -d '{"buttons":["RIGHT"],"frames":60}'
+# → {"frame":60,"ram":{"playerX":45,"lives":2,"world":0,"coins":0,"timer1":3,...}}
+```
+
+#### `POST /profiles`
+Register a custom game profile at runtime (no restart needed).
+
+```bash
+curl -X POST localhost:6502/profiles \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "id": "zelda",
+    "name": "The Legend of Zelda",
+    "addresses": {
+      "health": {"address": "0x0670", "description": "Link health"},
+      "rupees": {"address": "0x066D", "description": "Rupee count"}
+    }
+  }'
+```
+
+#### Built-in Profiles
+
+**`smb`** — Super Mario Bros (17 addresses)
+| Variable | Address | Description |
+|----------|---------|-------------|
+| playerX | 0x0086 | Mario X position |
+| playerY | 0x00CE | Mario Y position |
+| lives | 0x075A | Lives remaining |
+| world | 0x075F | Current world (0-indexed) |
+| level | 0x0760 | Current level (0-indexed) |
+| coins | 0x075E | Coin count |
+| gameState | 0x0770 | Game engine state |
+| + 10 more | | Score, timer, speed, screen page, enemies |
+
+**`ff1`** — Final Fantasy (30 addresses)
+| Variable | Address | Description |
+|----------|---------|-------------|
+| char1_hpLow/High | 0x610A/B | Character 1 HP |
+| char1_level | 0x6126 | Character 1 level |
+| char1_str/agi/int/vit/luck | 0x6110-14 | Character 1 stats |
+| goldLow/Mid/High | 0x601C-1E | Gold (3-byte little-endian) |
+| worldX/Y | 0x0027/28 | World map position |
+| encounterCounter | 0x00F5 | Steps until next random encounter |
+| + 15 more | | Characters 2-4, battle state, location |
+
+Adding a new game profile: create a JSON file in `knes-api/src/main/resources/profiles/` following the same schema, or register at runtime via `POST /profiles`.
 
 ---
 
