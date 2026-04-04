@@ -25,5 +25,6 @@ include 'knes-controllers'
  *
  */
 
+include 'knes-debug'
 include 'knes-compose-ui'
 include 'knes-api'

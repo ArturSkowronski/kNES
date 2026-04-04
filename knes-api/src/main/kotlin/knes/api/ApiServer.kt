@@ -119,7 +119,7 @@ fun Application.configureRoutes(session: EmulatorSession) {
         }
 
         get("/profiles") {
-            val profiles = GameProfile.list().map { mapOf(
+            val profiles = knes.debug.GameProfile.list().map { mapOf(
                 "id" to it.id,
                 "name" to it.name,
                 "description" to it.description,
@@ -132,17 +132,17 @@ fun Application.configureRoutes(session: EmulatorSession) {
             val id = call.parameters["id"] ?: return@get call.respond(
                 HttpStatusCode.BadRequest, StatusResponse("missing profile id")
             )
-            val profile = GameProfile.get(id) ?: return@get call.respond(
+            val profile = knes.debug.GameProfile.get(id) ?: return@get call.respond(
                 HttpStatusCode.NotFound, StatusResponse("profile not found: $id")
             )
-            call.respond(profile)
+            call.respond(ApiGameProfile.fromDebugProfile(profile))
         }
 
         post("/profiles/{id}/apply") {
             val id = call.parameters["id"] ?: return@post call.respond(
                 HttpStatusCode.BadRequest, StatusResponse("missing profile id")
             )
-            val profile = GameProfile.get(id) ?: return@post call.respond(
+            val profile = knes.debug.GameProfile.get(id) ?: return@post call.respond(
                 HttpStatusCode.NotFound, StatusResponse("profile not found: $id")
             )
             session.setWatchedAddresses(profile.toWatchMap())
@@ -150,8 +150,8 @@ fun Application.configureRoutes(session: EmulatorSession) {
         }
 
         post("/profiles") {
-            val profile = call.receive<GameProfile>()
-            GameProfile.register(profile)
+            val apiProfile = call.receive<ApiGameProfile>()
+            knes.debug.GameProfile.register(apiProfile.toDebugProfile())
             call.respond(StatusResponse("ok", session.romLoaded, session.frameCount))
         }
 
