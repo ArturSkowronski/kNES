@@ -5,7 +5,7 @@ import io.ktor.server.netty.*
 
 fun main() {
     val session = EmulatorSession()
-    val port = System.getenv("KNES_PORT")?.toIntOrNull() ?: 8080
+    val port = System.getenv("KNES_PORT")?.toIntOrNull() ?: 6502
     println("kNES API Server starting on port $port")
     embeddedServer(Netty, port = port) {
         configureRoutes(session)

@@ -94,23 +94,23 @@ This will launch the main application, which allows choosing between the differe
 Run the emulator as a headless REST API for AI agents, TAS tools, and automation:
 
 ```bash
-./gradlew :knes-api:run   # starts on port 8080
+./gradlew :knes-api:run   # starts on port 6502
 ```
 
 ```bash
 # Load a ROM
-curl -X POST localhost:8080/rom -H 'Content-Type: application/json' \
+curl -X POST localhost:6502/rom -H 'Content-Type: application/json' \
   -d '{"path": "/path/to/game.nes"}'
 
 # Step 60 frames holding RIGHT
-curl -X POST localhost:8080/step -H 'Content-Type: application/json' \
+curl -X POST localhost:6502/step -H 'Content-Type: application/json' \
   -d '{"buttons": ["RIGHT"], "frames": 60}'
 
 # Get screenshot
-curl localhost:8080/screen -o frame.png
+curl localhost:6502/screen -o frame.png
 
 # Get game state
-curl localhost:8080/state
+curl localhost:6502/state
 ```
 
 12 endpoints: `/step`, `/screen`, `/state`, `/watch`, `/press`, `/release`, `/fm2`, and more. Full docs in [knes-api/README.md](knes-api/README.md).

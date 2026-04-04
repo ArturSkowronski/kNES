@@ -9,20 +9,20 @@ REST API for controlling the kNES emulator programmatically — built for AI age
 ./gradlew :knes-api:run
 
 # Load a ROM
-curl -X POST localhost:8080/rom \
+curl -X POST localhost:6502/rom \
   -H 'Content-Type: application/json' \
   -d '{"path": "/path/to/game.nes"}'
 
 # Walk Mario right for 2 seconds
-curl -X POST localhost:8080/step \
+curl -X POST localhost:6502/step \
   -H 'Content-Type: application/json' \
   -d '{"buttons": ["RIGHT"], "frames": 120}'
 
 # Get a screenshot
-curl localhost:8080/screen -o frame.png
+curl localhost:6502/screen -o frame.png
 ```
 
-The server starts on port 8080 by default. Override with `KNES_PORT` environment variable.
+The server starts on port 6502 by default (a nod to the [MOS 6502](https://en.wikipedia.org/wiki/MOS_Technology_6502) CPU that powers the NES). Override with `KNES_PORT` environment variable.
 
 ## API Reference
 
@@ -32,7 +32,7 @@ The server starts on port 8080 by default. Override with `KNES_PORT` environment
 Health check and emulator status.
 
 ```bash
-curl localhost:8080/health
+curl localhost:6502/health
 ```
 ```json
 {"status": "ok", "romLoaded": true, "frames": 5400}
@@ -42,7 +42,7 @@ curl localhost:8080/health
 Load a NES ROM file.
 
 ```bash
-curl -X POST localhost:8080/rom \
+curl -X POST localhost:6502/rom \
   -H 'Content-Type: application/json' \
   -d '{"path": "/absolute/path/to/game.nes"}'
 ```
@@ -54,7 +54,7 @@ curl -X POST localhost:8080/rom \
 Reset the emulator to power-on state.
 
 ```bash
-curl -X POST localhost:8080/reset
+curl -X POST localhost:6502/reset
 ```
 
 ---
@@ -66,7 +66,7 @@ curl -X POST localhost:8080/reset
 
 ```bash
 # Hold RIGHT + A for 10 frames
-curl -X POST localhost:8080/step \
+curl -X POST localhost:6502/step \
   -H 'Content-Type: application/json' \
   -d '{"buttons": ["RIGHT", "A"], "frames": 10}'
 ```
@@ -77,7 +77,7 @@ curl -X POST localhost:8080/step \
 **Batch variant** — execute a sequence of input changes atomically:
 
 ```bash
-curl -X POST localhost:8080/step \
+curl -X POST localhost:6502/step \
   -H 'Content-Type: application/json' \
   -d '{
     "sequence": [
@@ -98,7 +98,7 @@ curl -X POST localhost:8080/step \
 Configure RAM addresses to include in `/step` and `/state` responses. Use game-specific memory maps to observe game variables directly.
 
 ```bash
-curl -X POST localhost:8080/watch \
+curl -X POST localhost:6502/watch \
   -H 'Content-Type: application/json' \
   -d '{
     "addresses": {
@@ -126,14 +126,14 @@ After configuring, `/step` and `/state` responses include named values:
 Current frame as PNG image (256x240 pixels, native NES resolution).
 
 ```bash
-curl localhost:8080/screen -o frame.png
+curl localhost:6502/screen -o frame.png
 ```
 
 #### `GET /screen/base64`
 Current frame as base64-encoded PNG in JSON — useful for API clients that can't handle binary.
 
 ```bash
-curl localhost:8080/screen/base64
+curl localhost:6502/screen/base64
 ```
 ```json
 {"frame": 200, "image": "iVBORw0KGgo..."}
@@ -143,7 +143,7 @@ curl localhost:8080/screen/base64
 Full emulator state snapshot: CPU registers, watched RAM, held buttons.
 
 ```bash
-curl localhost:8080/state
+curl localhost:6502/state
 ```
 ```json
 {
@@ -162,7 +162,7 @@ For real-time agents that manage their own timing — press/release buttons inde
 
 #### `POST /press`
 ```bash
-curl -X POST localhost:8080/press \
+curl -X POST localhost:6502/press \
   -H 'Content-Type: application/json' \
   -d '{"buttons": ["RIGHT", "A"]}'
 ```
@@ -172,7 +172,7 @@ curl -X POST localhost:8080/press \
 
 #### `POST /release`
 ```bash
-curl -X POST localhost:8080/release \
+curl -X POST localhost:6502/release \
   -H 'Content-Type: application/json' \
   -d '{"buttons": ["RIGHT"]}'
 ```
@@ -182,7 +182,7 @@ curl -X POST localhost:8080/release \
 
 #### `POST /release-all`
 ```bash
-curl -X POST localhost:8080/release-all
+curl -X POST localhost:6502/release-all
 ```
 ```json
 {"status": "ok", "held": []}
@@ -196,7 +196,7 @@ curl -X POST localhost:8080/release-all
 Execute input from [FM2 format](https://fceux.com/web/FM2.html) — the standard TAS movie format used by the FCEUX emulator. Each line represents one frame of input.
 
 ```bash
-curl -X POST localhost:8080/fm2 \
+curl -X POST localhost:6502/fm2 \
   -H 'Content-Type: text/plain' \
   -d '|0|R......A|........|
 |0|R.......|........|
@@ -233,38 +233,38 @@ A complete session controlling Super Mario Bros:
 
 ```bash
 # 1. Load the ROM
-curl -X POST localhost:8080/rom \
+curl -X POST localhost:6502/rom \
   -H 'Content-Type: application/json' \
   -d '{"path": "/games/smb.nes"}'
 
 # 2. Configure RAM watches for game variables
-curl -X POST localhost:8080/watch \
+curl -X POST localhost:6502/watch \
   -H 'Content-Type: application/json' \
   -d '{"addresses": {"x": "0x0086", "y": "0x00CE", "lives": "0x075A", "state": "0x0770"}}'
 
 # 3. Wait for title screen (2 seconds)
-curl -X POST localhost:8080/step \
+curl -X POST localhost:6502/step \
   -H 'Content-Type: application/json' \
   -d '{"buttons": [], "frames": 120}'
 
 # 4. Press Start to begin
-curl -X POST localhost:8080/step \
+curl -X POST localhost:6502/step \
   -H 'Content-Type: application/json' \
   -d '{"buttons": ["START"], "frames": 5}'
 
 # 5. Wait for gameplay to start
-curl -X POST localhost:8080/step \
+curl -X POST localhost:6502/step \
   -H 'Content-Type: application/json' \
   -d '{"buttons": [], "frames": 180}'
 
 # 6. Agent loop: observe → decide → act
-curl -X POST localhost:8080/step \
+curl -X POST localhost:6502/step \
   -H 'Content-Type: application/json' \
   -d '{"buttons": ["RIGHT"], "frames": 1}'
 # → {"frame": 306, "ram": {"x": 41, "y": 192, "lives": 2, "state": 1}}
 
 # 7. Get a screenshot for vision-based agents
-curl localhost:8080/screen -o frame.png
+curl localhost:6502/screen -o frame.png
 ```
 
 ---
