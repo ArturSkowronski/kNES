@@ -59,6 +59,11 @@
     "char3_hpHigh": {"address": "0x618B", "description": "Char 3 current HP (high byte)"},
     "char3_maxHpLow": {"address": "0x618C", "description": "Char 3 max HP (low byte)"},
     "char3_maxHpHigh": {"address": "0x618D", "description": "Char 3 max HP (high byte)"},
+    "char3_str": {"address": "0x6190", "description": "Char 3 strength"},
+    "char3_agi": {"address": "0x6191", "description": "Char 3 agility"},
+    "char3_int": {"address": "0x6192", "description": "Char 3 intelligence"},
+    "char3_vit": {"address": "0x6193", "description": "Char 3 vitality"},
+    "char3_luck": {"address": "0x6194", "description": "Char 3 luck"},
     "char3_level": {"address": "0x61A6", "description": "Char 3 level (stored as level-1)"},
 
     "char4_status": {"address": "0x61C1", "description": "Char 4 status flags"},
@@ -68,6 +73,11 @@
     "char4_hpHigh": {"address": "0x61CB", "description": "Char 4 current HP (high byte)"},
     "char4_maxHpLow": {"address": "0x61CC", "description": "Char 4 max HP (low byte)"},
     "char4_maxHpHigh": {"address": "0x61CD", "description": "Char 4 max HP (high byte)"},
+    "char4_str": {"address": "0x61D0", "description": "Char 4 strength"},
+    "char4_agi": {"address": "0x61D1", "description": "Char 4 agility"},
+    "char4_int": {"address": "0x61D2", "description": "Char 4 intelligence"},
+    "char4_vit": {"address": "0x61D3", "description": "Char 4 vitality"},
+    "char4_luck": {"address": "0x61D4", "description": "Char 4 luck"},
     "char4_level": {"address": "0x61E6", "description": "Char 4 level (stored as level-1)"},
 
     "battleTurn": {"address": "0x6830", "description": "Battle turn indicator (0x55=player turn)"},
