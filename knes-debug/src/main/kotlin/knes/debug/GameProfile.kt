@@ -10,7 +10,8 @@ package knes.debug
  */
 data class AddressEntry(
     val address: Int,
-    val description: String = ""
+    val description: String = "",
+    val hidden: Boolean = false
 )
 
 data class GameProfile(
@@ -19,7 +20,13 @@ data class GameProfile(
     val description: String = "",
     val addresses: Map<String, AddressEntry>
 ) {
+    /** All addresses including hidden (debug/cheat) ones */
     fun toWatchMap(): Map<String, Int> = addresses.mapValues { it.value.address }
+
+    /** Only addresses a human player could see on screen — excludes hidden/cheat data */
+    fun toFairWatchMap(): Map<String, Int> = addresses
+        .filter { !it.value.hidden }
+        .mapValues { it.value.address }
 
     companion object {
         private val profiles = mutableMapOf<String, GameProfile>()
@@ -62,8 +69,9 @@ data class GameProfile(
                 val entryBody = match.groupValues[2]
                 val addr = extractString(entryBody, "address") ?: continue
                 val desc = extractString(entryBody, "description") ?: ""
+                val hidden = entryBody.contains("\"hidden\"") && entryBody.contains("true")
                 val addrInt = addr.removePrefix("0x").removePrefix("0X").toIntOrNull(16) ?: continue
-                addresses[varName] = AddressEntry(addrInt, desc)
+                addresses[varName] = AddressEntry(addrInt, desc, hidden)
             }
 
             return GameProfile(name, id, description, addresses)
