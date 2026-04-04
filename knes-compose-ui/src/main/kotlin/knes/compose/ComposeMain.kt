@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import knes.api.EmbeddedApiServer
 import knes.controllers.GamepadController
 import knes.emulator.NES
 import knes.emulator.ui.GUIAdapter
@@ -58,6 +59,27 @@ fun main() {
         val composeUI = remember { ComposeUI(nes, screenView) }
         val focusRequester = remember { FocusRequester() }
         var showMonitor by remember { mutableStateOf(false) }
+
+        val apiServer = remember { EmbeddedApiServer(nes) }
+        var apiRunning by remember { mutableStateOf(false) }
+
+        // Feed frame buffer to the shared API session so /screen works
+        LaunchedEffect(apiRunning) {
+            if (apiRunning) {
+                screenView.onApiFrameCallback = { buffer ->
+                    apiServer.session.updateFrameBuffer(buffer)
+                }
+            } else {
+                screenView.onApiFrameCallback = null
+            }
+        }
+
+        // Clean up API server on exit
+        DisposableEffect(Unit) {
+            onDispose {
+                if (apiServer.isRunning) apiServer.stop()
+            }
+        }
 
         if (showMonitor) {
             ProfileMonitorWindow(nes = nes, onClose = { showMonitor = false })
@@ -104,6 +126,19 @@ fun main() {
                                 focusRequester.requestFocus()
                             }) {
                                 Text(if (showMonitor) "Hide Monitor" else "Monitor")
+                            }
+
+                            Button(onClick = {
+                                if (apiRunning) {
+                                    apiServer.stop()
+                                    apiRunning = false
+                                } else {
+                                    apiServer.start()
+                                    apiRunning = true
+                                }
+                                focusRequester.requestFocus()
+                            }) {
+                                Text(if (apiRunning) "API :6502 ON" else "API Server")
                             }
 
                             Button(onClick = {
