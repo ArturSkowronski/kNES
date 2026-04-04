@@ -118,6 +118,43 @@ fun Application.configureRoutes(session: EmulatorSession) {
             call.respond(StatusResponse("ok", session.romLoaded, session.frameCount))
         }
 
+        get("/profiles") {
+            val profiles = GameProfile.list().map { mapOf(
+                "id" to it.id,
+                "name" to it.name,
+                "description" to it.description,
+                "addressCount" to it.addresses.size.toString()
+            )}
+            call.respond(profiles)
+        }
+
+        get("/profiles/{id}") {
+            val id = call.parameters["id"] ?: return@get call.respond(
+                HttpStatusCode.BadRequest, StatusResponse("missing profile id")
+            )
+            val profile = GameProfile.get(id) ?: return@get call.respond(
+                HttpStatusCode.NotFound, StatusResponse("profile not found: $id")
+            )
+            call.respond(profile)
+        }
+
+        post("/profiles/{id}/apply") {
+            val id = call.parameters["id"] ?: return@post call.respond(
+                HttpStatusCode.BadRequest, StatusResponse("missing profile id")
+            )
+            val profile = GameProfile.get(id) ?: return@post call.respond(
+                HttpStatusCode.NotFound, StatusResponse("profile not found: $id")
+            )
+            session.setWatchedAddresses(profile.toWatchMap())
+            call.respond(StatusResponse("ok", session.romLoaded, session.frameCount))
+        }
+
+        post("/profiles") {
+            val profile = call.receive<GameProfile>()
+            GameProfile.register(profile)
+            call.respond(StatusResponse("ok", session.romLoaded, session.frameCount))
+        }
+
         post("/press") {
             val req = call.receive<ButtonsRequest>()
             for (name in req.buttons) {

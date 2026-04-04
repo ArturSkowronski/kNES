@@ -1,0 +1,24 @@
+{
+  "name": "Super Mario Bros",
+  "id": "smb",
+  "description": "Super Mario Bros (1985) memory map",
+  "addresses": {
+    "gameState": {"address": "0x0770", "description": "Game engine state (0=title/demo)"},
+    "playerX": {"address": "0x0086", "description": "Mario X position on screen"},
+    "playerY": {"address": "0x00CE", "description": "Mario Y position on screen"},
+    "playerState": {"address": "0x000E", "description": "Player state (0=small, 1=big, 2=fire)"},
+    "playerMoving": {"address": "0x0057", "description": "Horizontal speed"},
+    "world": {"address": "0x075F", "description": "Current world (0-indexed)"},
+    "level": {"address": "0x0760", "description": "Current level (0-indexed)"},
+    "lives": {"address": "0x075A", "description": "Lives remaining"},
+    "coins": {"address": "0x075E", "description": "Coin count"},
+    "score1": {"address": "0x07DD", "description": "Score digit 1 (ten-thousands)"},
+    "score2": {"address": "0x07DE", "description": "Score digit 2 (thousands)"},
+    "score3": {"address": "0x07DF", "description": "Score digit 3 (hundreds)"},
+    "timer1": {"address": "0x07F8", "description": "Timer digit 1 (hundreds)"},
+    "timer2": {"address": "0x07F9", "description": "Timer digit 2 (tens)"},
+    "timer3": {"address": "0x07FA", "description": "Timer digit 3 (ones)"},
+    "screenPage": {"address": "0x006D", "description": "Current screen page (horizontal scroll)"},
+    "enemyActive": {"address": "0x000F", "description": "Number of active enemies on screen"}
+  }
+}
