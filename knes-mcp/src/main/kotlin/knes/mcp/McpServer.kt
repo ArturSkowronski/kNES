@@ -230,5 +230,8 @@ fun runMcpServer(server: Server) {
     )
     kotlinx.coroutines.runBlocking {
         server.createSession(transport)
+        val done = kotlinx.coroutines.Job()
+        server.onClose { done.complete() }
+        done.join()
     }
 }

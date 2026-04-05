@@ -82,20 +82,29 @@ class EmulatorSession(externalNes: NES? = null) {
     }
 
     fun reset() {
-        if (shared) return
         nes.reset()
         frameCount = 0
         controller.releaseAll()
     }
 
     fun advanceFrames(n: Int) {
-        if (shared) return
         val target = frameCount + n
-        val maxSteps = n * 300_000
-        var steps = 0
-        while (frameCount < target) {
-            nes.cpu.step()
-            if (++steps > maxSteps) throw IllegalStateException("advanceFrames($n) timed out")
+        if (shared) {
+            // In shared mode, UI drives the CPU — wait for it to produce frames
+            val deadlineMs = System.currentTimeMillis() + n * 50L + 5000L
+            while (frameCount < target) {
+                Thread.sleep(1)
+                if (System.currentTimeMillis() > deadlineMs) {
+                    throw IllegalStateException("advanceFrames($n) timed out waiting for UI (got ${frameCount - target + n}/$n frames)")
+                }
+            }
+        } else {
+            val maxSteps = n * 300_000
+            var steps = 0
+            while (frameCount < target) {
+                nes.cpu.step()
+                if (++steps > maxSteps) throw IllegalStateException("advanceFrames($n) timed out")
+            }
         }
     }
 
