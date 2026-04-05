@@ -18,8 +18,16 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 
+/**
+ * MCP server that bridges to the kNES REST API.
+ *
+ * Connects to the Compose UI's embedded API server (localhost:6502) so the LLM
+ * can control the emulator while the user watches on screen.
+ *
+ * Start the Compose UI first, click "API Server", then launch this MCP server.
+ */
 fun createMcpServer(): Server {
-    val session = NesEmulatorSession()
+    val api = RestApiClient()
 
     val server = Server(
         serverInfo = Implementation(
@@ -36,7 +44,7 @@ fun createMcpServer(): Server {
     // 1. load_rom
     server.addTool(
         name = "load_rom",
-        description = "Load a NES ROM from the given file path",
+        description = "Load a NES ROM from the given file path. Requires the Compose UI with embedded API server running on port 6502.",
         inputSchema = ToolSchema(
             properties = buildJsonObject {
                 putJsonObject("path") {
@@ -49,45 +57,44 @@ fun createMcpServer(): Server {
     ) { request ->
         val path = request.arguments?.get("path")?.jsonPrimitive?.content
             ?: return@addTool CallToolResult(content = listOf(TextContent("Missing required parameter: path")), isError = true)
-        val loaded = session.loadRom(path)
-        if (loaded) {
-            CallToolResult(content = listOf(TextContent("ROM loaded successfully: $path")))
+        if (!api.isAvailable()) {
+            return@addTool CallToolResult(content = listOf(TextContent("Cannot connect to kNES API on port 6502. Start the Compose UI and click 'API Server' first.")), isError = true)
+        }
+        val resp = api.postJson("/rom", """{"path":"$path"}""")
+        if (resp.ok) {
+            CallToolResult(content = listOf(TextContent("ROM loaded: $path")))
         } else {
-            CallToolResult(content = listOf(TextContent("Failed to load ROM: $path")), isError = true)
+            CallToolResult(content = listOf(TextContent("Failed to load ROM: ${resp.body}")), isError = true)
         }
     }
 
     // 2. step
     server.addTool(
         name = "step",
-        description = "Advance emulation by the given number of frames while holding the specified buttons. Returns frame count and watched RAM values.",
+        description = "Advance emulation by N frames while holding specified buttons. Returns frame count and watched RAM values. The game runs visually in the Compose UI while stepping.",
         inputSchema = ToolSchema(
             properties = buildJsonObject {
                 putJsonObject("buttons") {
                     put("type", "array")
                     putJsonObject("items") { put("type", "string") }
-                    put("description", "Buttons to hold during step: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT")
+                    put("description", "Buttons to hold: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT. Empty array = no buttons.")
                 }
                 putJsonObject("frames") {
                     put("type", "integer")
-                    put("description", "Number of frames to advance (default: 1)")
+                    put("description", "Number of frames to advance (default: 1, 60 frames = 1 second)")
                 }
             },
             required = listOf()
         )
     ) { request ->
-        if (!session.romLoaded) {
-            return@addTool CallToolResult(content = listOf(TextContent("No ROM loaded. Use load_rom first.")), isError = true)
-        }
         val buttons = request.arguments?.get("buttons")?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
         val frames = request.arguments?.get("frames")?.jsonPrimitive?.content?.toIntOrNull() ?: 1
-        try {
-            session.step(buttons, frames)
-            val ram = session.getWatchedState()
-            val ramStr = if (ram.isEmpty()) "none" else ram.entries.joinToString(", ") { "${it.key}=${it.value}" }
-            CallToolResult(content = listOf(TextContent("frame=${session.frameCount} ram={$ramStr}")))
-        } catch (e: Exception) {
-            CallToolResult(content = listOf(TextContent("step failed: ${e.message}")), isError = true)
+        val buttonsJson = buttons.joinToString(",") { "\"$it\"" }
+        val resp = api.postJson("/step", """{"buttons":[$buttonsJson],"frames":$frames}""")
+        if (resp.ok) {
+            CallToolResult(content = listOf(TextContent(resp.body)))
+        } else {
+            CallToolResult(content = listOf(TextContent("step failed: ${resp.body}")), isError = true)
         }
     }
 
@@ -96,20 +103,12 @@ fun createMcpServer(): Server {
         name = "get_state",
         description = "Get current emulator state: frame count, watched RAM values, CPU registers, and held buttons"
     ) { _ ->
-        if (!session.romLoaded) {
-            return@addTool CallToolResult(content = listOf(TextContent("No ROM loaded. Use load_rom first.")), isError = true)
+        val resp = api.get("/state")
+        if (resp.ok) {
+            CallToolResult(content = listOf(TextContent(resp.body)))
+        } else {
+            CallToolResult(content = listOf(TextContent("get_state failed: ${resp.body}")), isError = true)
         }
-        val ram = session.getWatchedState()
-        val ramStr = if (ram.isEmpty()) "none" else ram.entries.joinToString(", ") { "${it.key}=${it.value}" }
-        val buttons = session.getHeldButtons()
-        val cpu = session.nes.cpu
-        val state = buildString {
-            appendLine("frame=${session.frameCount}")
-            appendLine("ram={$ramStr}")
-            appendLine("buttons=${buttons}")
-            appendLine("cpu: PC=${cpu.REG_PC_NEW} A=${cpu.REG_ACC_NEW} X=${cpu.REG_X_NEW} Y=${cpu.REG_Y_NEW} SP=${cpu.REG_SP}")
-        }
-        CallToolResult(content = listOf(TextContent(state)))
     }
 
     // 4. get_screen
@@ -117,35 +116,41 @@ fun createMcpServer(): Server {
         name = "get_screen",
         description = "Capture a screenshot of the current NES frame as a base64-encoded PNG image"
     ) { _ ->
-        if (!session.romLoaded) {
-            return@addTool CallToolResult(content = listOf(TextContent("No ROM loaded. Use load_rom first.")), isError = true)
+        val resp = api.get("/screen/base64")
+        if (resp.ok) {
+            // Extract base64 image from JSON response {"frame":N,"image":"..."}
+            val imageMatch = Regex(""""image"\s*:\s*"([^"]+)"""").find(resp.body)
+            if (imageMatch != null) {
+                CallToolResult(content = listOf(ImageContent(data = imageMatch.groupValues[1], mimeType = "image/png")))
+            } else {
+                CallToolResult(content = listOf(TextContent(resp.body)))
+            }
+        } else {
+            CallToolResult(content = listOf(TextContent("get_screen failed: ${resp.body}")), isError = true)
         }
-        val base64 = session.getScreenBase64()
-        CallToolResult(content = listOf(ImageContent(data = base64, mimeType = "image/png")))
     }
 
     // 5. apply_profile
     server.addTool(
         name = "apply_profile",
-        description = "Apply a game profile to enable RAM watching for known addresses (e.g. score, lives, level)",
+        description = "Apply a game profile (e.g. 'smb' for Super Mario Bros, 'ff1' for Final Fantasy) to enable RAM watching for game-specific variables like HP, gold, position",
         inputSchema = ToolSchema(
             properties = buildJsonObject {
                 putJsonObject("profile_id") {
                     put("type", "string")
-                    put("description", "Profile ID to apply (use list_profiles to see available ones)")
+                    put("description", "Profile ID: 'smb' (Super Mario Bros) or 'ff1' (Final Fantasy)")
                 }
             },
             required = listOf("profile_id")
         )
     ) { request ->
         val id = request.arguments?.get("profile_id")?.jsonPrimitive?.content
-            ?: return@addTool CallToolResult(content = listOf(TextContent("Missing required parameter: profile_id")), isError = true)
-        val applied = session.applyProfile(id)
-        if (applied) {
-            val watched = session.getWatchedState()
-            CallToolResult(content = listOf(TextContent("Profile '$id' applied. Watching ${watched.size} addresses: ${watched.keys.joinToString(", ")}")))
+            ?: return@addTool CallToolResult(content = listOf(TextContent("Missing: profile_id")), isError = true)
+        val resp = api.postJson("/profiles/$id/apply", "")
+        if (resp.ok) {
+            CallToolResult(content = listOf(TextContent("Profile '$id' applied. RAM values will appear in step and get_state responses.")))
         } else {
-            CallToolResult(content = listOf(TextContent("Profile not found: $id")), isError = true)
+            CallToolResult(content = listOf(TextContent("Failed to apply profile: ${resp.body}")), isError = true)
         }
     }
 
@@ -154,38 +159,34 @@ fun createMcpServer(): Server {
         name = "list_profiles",
         description = "List all available game profiles for RAM watching"
     ) { _ ->
-        val profiles = knes.debug.GameProfile.list()
-        if (profiles.isEmpty()) {
-            CallToolResult(content = listOf(TextContent("No profiles available")))
+        val resp = api.get("/profiles")
+        if (resp.ok) {
+            CallToolResult(content = listOf(TextContent(resp.body)))
         } else {
-            val list = profiles.joinToString("\n") { p -> "- ${p.id}: ${p.name} (${p.addresses.size} addresses) - ${p.description}" }
-            CallToolResult(content = listOf(TextContent("Available profiles:\n$list")))
+            CallToolResult(content = listOf(TextContent("list_profiles failed: ${resp.body}")), isError = true)
         }
     }
 
     // 7. press
     server.addTool(
         name = "press",
-        description = "Press and hold one or more buttons",
+        description = "Press and hold one or more buttons (they stay held until released)",
         inputSchema = ToolSchema(
             properties = buildJsonObject {
                 putJsonObject("buttons") {
                     put("type", "array")
                     putJsonObject("items") { put("type", "string") }
-                    put("description", "Buttons to press: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT")
+                    put("description", "Buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT")
                 }
             },
             required = listOf("buttons")
         )
     ) { request ->
         val buttons = request.arguments?.get("buttons")?.jsonArray?.map { it.jsonPrimitive.content }
-            ?: return@addTool CallToolResult(content = listOf(TextContent("Missing required parameter: buttons")), isError = true)
-        try {
-            for (b in buttons) session.pressButton(b)
-            CallToolResult(content = listOf(TextContent("Holding: ${session.getHeldButtons()}")))
-        } catch (e: IllegalArgumentException) {
-            CallToolResult(content = listOf(TextContent(e.message ?: "Unknown button")), isError = true)
-        }
+            ?: return@addTool CallToolResult(content = listOf(TextContent("Missing: buttons")), isError = true)
+        val json = buttons.joinToString(",") { "\"$it\"" }
+        val resp = api.postJson("/press", """{"buttons":[$json]}""")
+        CallToolResult(content = listOf(TextContent(resp.body)))
     }
 
     // 8. release
@@ -197,20 +198,17 @@ fun createMcpServer(): Server {
                 putJsonObject("buttons") {
                     put("type", "array")
                     putJsonObject("items") { put("type", "string") }
-                    put("description", "Buttons to release: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT")
+                    put("description", "Buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT")
                 }
             },
             required = listOf("buttons")
         )
     ) { request ->
         val buttons = request.arguments?.get("buttons")?.jsonArray?.map { it.jsonPrimitive.content }
-            ?: return@addTool CallToolResult(content = listOf(TextContent("Missing required parameter: buttons")), isError = true)
-        try {
-            for (b in buttons) session.releaseButton(b)
-            CallToolResult(content = listOf(TextContent("Holding: ${session.getHeldButtons()}")))
-        } catch (e: IllegalArgumentException) {
-            CallToolResult(content = listOf(TextContent(e.message ?: "Unknown button")), isError = true)
-        }
+            ?: return@addTool CallToolResult(content = listOf(TextContent("Missing: buttons")), isError = true)
+        val json = buttons.joinToString(",") { "\"$it\"" }
+        val resp = api.postJson("/release", """{"buttons":[$json]}""")
+        CallToolResult(content = listOf(TextContent(resp.body)))
     }
 
     // 9. reset
@@ -218,8 +216,8 @@ fun createMcpServer(): Server {
         name = "reset",
         description = "Reset the NES emulator to its initial state"
     ) { _ ->
-        session.reset()
-        CallToolResult(content = listOf(TextContent("Emulator reset. frame=${session.frameCount}")))
+        val resp = api.postJson("/reset", "")
+        CallToolResult(content = listOf(TextContent(resp.body)))
     }
 
     return server
