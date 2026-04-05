@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "knes": {
+      "command": "/Users/askowronski/Priv/kNES/knes-mcp/build/install/knes-mcp/bin/knes-mcp"
+    }
+  }
+}

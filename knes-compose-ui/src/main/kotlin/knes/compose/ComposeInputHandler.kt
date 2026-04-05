@@ -30,6 +30,9 @@ class ComposeInputHandler(val controllerProvider: ControllerProvider) : InputHan
 
     private val keyStates = ShortArray(InputHandler.NUM_KEYS) { 0x40 }
 
+    /** Additional input source (e.g. API controller) merged into getKeyState */
+    var additionalInput: ControllerProvider? = null
+
     /** Map Compose Key to NES button index, or -1 if not mapped. */
     private fun mapKey(key: Key): Int {
         return when (key) {
@@ -57,9 +60,10 @@ class ComposeInputHandler(val controllerProvider: ControllerProvider) : InputHan
     }
 
     override fun getKeyState(padKey: Int): Short {
-        // Merge keyboard and gamepad: either one pressed = pressed
+        // Merge keyboard, gamepad, and API: any one pressed = pressed
         val keyboard = keyStates[padKey]
         val gamepad = controllerProvider.getKeyState(padKey)
-        return if (keyboard == 0x41.toShort() || gamepad == 0x41.toShort()) 0x41 else 0x40
+        val api = additionalInput?.getKeyState(padKey) ?: 0x40
+        return if (keyboard == 0x41.toShort() || gamepad == 0x41.toShort() || api == 0x41.toShort()) 0x41 else 0x40
     }
 }

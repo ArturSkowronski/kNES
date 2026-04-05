@@ -10,7 +10,8 @@ import knes.emulator.NES
  * In shared mode:
  * - /state, /screen, /watch, /profiles, /health work normally
  * - /press, /release work (input merges with keyboard/gamepad)
- * - /step, /rom, /reset return 400 (UI drives emulation)
+ * - /step, /reset work (MCP can advance frames and reset)
+ * - /rom returns 400 (UI loads ROMs)
  */
 class EmbeddedApiServer(
     nes: NES,

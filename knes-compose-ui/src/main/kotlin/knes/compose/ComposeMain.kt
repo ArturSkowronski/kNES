@@ -63,14 +63,16 @@ fun main() {
         val apiServer = remember { EmbeddedApiServer(nes) }
         var apiRunning by remember { mutableStateOf(false) }
 
-        // Feed frame buffer to the shared API session so /screen works
+        // Wire API server to UI: frame buffer for /screen, input for /press and /step
         LaunchedEffect(apiRunning) {
             if (apiRunning) {
                 screenView.onApiFrameCallback = { buffer ->
                     apiServer.session.updateFrameBuffer(buffer)
                 }
+                inputHandler.additionalInput = apiServer.session.controller
             } else {
                 screenView.onApiFrameCallback = null
+                inputHandler.additionalInput = null
             }
         }
 

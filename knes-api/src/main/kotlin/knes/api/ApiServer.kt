@@ -49,19 +49,11 @@ fun Application.configureRoutes(session: EmulatorSession) {
         }
 
         post("/reset") {
-            if (session.shared) {
-                call.respond(HttpStatusCode.BadRequest, StatusResponse("shared mode: use UI to reset"))
-                return@post
-            }
             session.reset()
             call.respond(StatusResponse("reset", session.romLoaded, session.frameCount))
         }
 
         post("/step") {
-            if (session.shared) {
-                call.respond(HttpStatusCode.BadRequest, StatusResponse("shared mode: emulation driven by UI"))
-                return@post
-            }
             if (!session.romLoaded) {
                 call.respond(HttpStatusCode.BadRequest, StatusResponse("no ROM loaded"))
                 return@post
