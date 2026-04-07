@@ -67,6 +67,7 @@ fun main() {
         LaunchedEffect(apiRunning) {
             if (apiRunning) {
                 screenView.onApiFrameCallback = { buffer ->
+                    apiServer.session.controller.onFrameBoundary()
                     apiServer.session.updateFrameBuffer(buffer)
                 }
                 inputHandler.additionalInput = apiServer.session.controller
