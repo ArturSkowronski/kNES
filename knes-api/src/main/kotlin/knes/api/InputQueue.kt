@@ -5,6 +5,12 @@ import java.util.concurrent.CountDownLatch
 
 data class FrameInput(val buttons: Set<Int>)
 
+/**
+ * Frame-synchronized input queue for delivering button state to the NES one frame at a time.
+ *
+ * Thread safety: [enqueue] must be called from a single thread (or serialized externally).
+ * [advanceFrame] must be called from a single thread. These two threads may differ.
+ */
 class InputQueue {
     private val queue = ConcurrentLinkedQueue<FrameInput>()
     private val latches = ConcurrentLinkedQueue<LatchEntry>()
@@ -47,5 +53,5 @@ class InputQueue {
         }
     }
 
-    private data class LatchEntry(val latch: CountDownLatch, var remaining: Int)
+    private class LatchEntry(val latch: CountDownLatch, var remaining: Int)
 }
