@@ -60,20 +60,33 @@ fun Application.configureRoutes(session: EmulatorSession) {
             }
             val text = call.receiveText()
             try {
-                val seq = Json.decodeFromString<StepSequence>(text)
-                for (step in seq.sequence) {
-                    session.controller.setButtons(step.buttons)
-                    session.advanceFrames(step.frames)
+                val steps: List<StepRequest> = try {
+                    val seq = Json.decodeFromString<StepSequence>(text)
+                    seq.sequence
+                } catch (e: Exception) {
+                    listOf(Json.decodeFromString<StepRequest>(text))
+                }
+
+                if (session.shared) {
+                    val latch = session.controller.enqueueSteps(steps)
+                    val totalFrames = steps.sumOf { it.frames }
+                    val timeoutMs = totalFrames * 50L + 5000L
+                    if (!latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                        call.respond(
+                            HttpStatusCode.InternalServerError,
+                            StatusResponse("step timed out waiting for $totalFrames frames")
+                        )
+                        return@post
+                    }
+                } else {
+                    for (step in steps) {
+                        session.controller.setButtons(step.buttons)
+                        session.advanceFrames(step.frames)
+                    }
                 }
             } catch (e: Exception) {
-                try {
-                    val req = Json.decodeFromString<StepRequest>(text)
-                    session.controller.setButtons(req.buttons)
-                    session.advanceFrames(req.frames)
-                } catch (e2: Exception) {
-                    call.respond(HttpStatusCode.BadRequest, StatusResponse("invalid request: ${e2.message}"))
-                    return@post
-                }
+                call.respond(HttpStatusCode.BadRequest, StatusResponse("invalid request: ${e.message}"))
+                return@post
             }
             call.respond(StepResponse(session.frameCount, session.getWatchedState()))
         }

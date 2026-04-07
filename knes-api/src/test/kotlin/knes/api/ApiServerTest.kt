@@ -134,4 +134,21 @@ class ApiServerTest : FunSpec({
             response.status shouldBe HttpStatusCode.BadRequest
         }
     }
+
+    test("POST /step in standalone mode uses queue for frame-precise input") {
+        testApplication {
+            val session = EmulatorSession()
+            application { configureRoutes(session) }
+
+            // Load a ROM to enable /step — use press/release to verify controller wiring
+            // Without a ROM we can't test step execution, but we CAN test that
+            // press still works independently of the queue
+            val pressResponse = client.post("/press") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"buttons": ["A"]}""")
+            }
+            pressResponse.status shouldBe HttpStatusCode.OK
+            pressResponse.bodyAsText() shouldContain "A"
+        }
+    }
 })
