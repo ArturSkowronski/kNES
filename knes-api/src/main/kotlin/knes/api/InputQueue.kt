@@ -2,16 +2,18 @@ package knes.api
 
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicInteger
 
 data class FrameInput(val buttons: Set<Int>)
 
 /**
  * Frame-synchronized input queue for delivering button state to the NES one frame at a time.
  *
- * Thread safety: [enqueue] must be called from a single thread (or serialized externally).
- * [advanceFrame] must be called from a single thread. These two threads may differ.
+ * Thread safety: [enqueue] and [advanceFrame] are synchronized internally via [lock].
+ * They may be called from different threads (API thread and UI thread respectively).
  */
 class InputQueue {
+    private val lock = Any()
     private val queue = ConcurrentLinkedQueue<FrameInput>()
     private val latches = ConcurrentLinkedQueue<LatchEntry>()
 
@@ -24,22 +26,25 @@ class InputQueue {
     fun enqueue(inputs: List<FrameInput>): CountDownLatch {
         require(inputs.isNotEmpty()) { "inputs must not be empty" }
         val latch = CountDownLatch(inputs.size)
-        latches.add(LatchEntry(latch, inputs.size))
 
-        val isFirstEntry = currentFrame == null
-        queue.addAll(inputs)
+        synchronized(lock) {
+            latches.add(LatchEntry(latch, AtomicInteger(inputs.size)))
+            queue.addAll(inputs)
 
-        if (isFirstEntry) {
-            currentFrame = queue.poll()
+            if (currentFrame == null) {
+                currentFrame = queue.poll()
+            }
         }
 
         return latch
     }
 
     fun advanceFrame() {
-        if (currentFrame == null) return
-        countDownOldest()
-        currentFrame = queue.poll()
+        synchronized(lock) {
+            if (currentFrame == null) return
+            countDownOldest()
+            currentFrame = queue.poll()
+        }
     }
 
     fun isPressed(padKey: Int): Boolean = currentFrame?.buttons?.contains(padKey) == true
@@ -47,11 +52,10 @@ class InputQueue {
     private fun countDownOldest() {
         val entry = latches.peek() ?: return
         entry.latch.countDown()
-        entry.remaining--
-        if (entry.remaining <= 0) {
+        if (entry.remaining.decrementAndGet() <= 0) {
             latches.poll()
         }
     }
 
-    private class LatchEntry(val latch: CountDownLatch, var remaining: Int)
+    private class LatchEntry(val latch: CountDownLatch, val remaining: AtomicInteger)
 }

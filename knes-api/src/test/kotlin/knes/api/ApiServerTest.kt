@@ -135,7 +135,7 @@ class ApiServerTest : FunSpec({
         }
     }
 
-    test("POST /step in standalone mode uses queue for frame-precise input") {
+    test("POST /press works independently of queue") {
         testApplication {
             val session = EmulatorSession()
             application { configureRoutes(session) }
