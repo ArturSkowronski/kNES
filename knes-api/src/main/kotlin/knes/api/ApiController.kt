@@ -2,9 +2,12 @@ package knes.api
 
 import knes.controllers.ControllerProvider
 import knes.emulator.input.InputHandler
+import java.util.concurrent.CountDownLatch
 
 class ApiController : ControllerProvider {
     private val keyStates = ShortArray(InputHandler.NUM_KEYS) { 0x40 }
+
+    val inputQueue = InputQueue()
 
     private val buttonNames = mapOf(
         "A" to InputHandler.KEY_A,
@@ -39,6 +42,23 @@ class ApiController : ControllerProvider {
             ?: throw IllegalArgumentException("Unknown button: $name. Valid: ${buttonNames.keys}")
     }
 
+    fun enqueueSteps(steps: List<StepRequest>): CountDownLatch {
+        val frameInputs = steps.flatMap { step ->
+            val buttons = step.buttons.map { resolveButton(it) }.toSet()
+            List(step.frames) { FrameInput(buttons) }
+        }
+        return inputQueue.enqueue(frameInputs)
+    }
+
+    fun onFrameBoundary() {
+        inputQueue.advanceFrame()
+    }
+
     override fun setKeyState(keyCode: Int, isPressed: Boolean) {}
-    override fun getKeyState(padKey: Int): Short = keyStates[padKey]
+
+    override fun getKeyState(padKey: Int): Short {
+        val persistent = keyStates[padKey]
+        val queued = if (inputQueue.isPressed(padKey)) 0x41.toShort() else 0x40.toShort()
+        return if (persistent == 0x41.toShort() || queued == 0x41.toShort()) 0x41 else 0x40
+    }
 }
