@@ -151,4 +151,26 @@ class ApiServerTest : FunSpec({
             pressResponse.bodyAsText() shouldContain "A"
         }
     }
+
+    test("POST /tap without ROM returns 400") {
+        testApplication {
+            application { configureRoutes(EmulatorSession()) }
+            val response = client.post("/tap") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"button": "A", "count": 3}""")
+            }
+            response.status shouldBe HttpStatusCode.BadRequest
+        }
+    }
+
+    test("POST /tap validates button name") {
+        testApplication {
+            application { configureRoutes(EmulatorSession()) }
+            val response = client.post("/tap") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"button": "TURBO"}""")
+            }
+            response.status shouldBe HttpStatusCode.BadRequest
+        }
+    }
 })

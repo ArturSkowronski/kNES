@@ -12,12 +12,13 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 @Serializable data class RomRequest(val path: String)
-@Serializable data class StepRequest(val buttons: List<String> = emptyList(), val frames: Int = 1)
-@Serializable data class StepSequence(val sequence: List<StepRequest>)
+@Serializable data class StepRequest(val buttons: List<String> = emptyList(), val frames: Int = 1, val screenshot: Boolean = false)
+@Serializable data class StepSequence(val sequence: List<StepRequest>, val screenshot: Boolean = false)
+@Serializable data class TapRequest(val button: String, val count: Int = 1, val pressFrames: Int = 5, val gapFrames: Int = 15, val screenshot: Boolean = false)
 @Serializable data class ButtonsRequest(val buttons: List<String>)
 @Serializable data class WatchRequest(val addresses: Map<String, String>)
 @Serializable data class StatusResponse(val status: String, val romLoaded: Boolean = false, val frames: Int = 0)
-@Serializable data class StepResponse(val frame: Int, val ram: Map<String, Int> = emptyMap())
+@Serializable data class StepResponse(val frame: Int, val ram: Map<String, Int> = emptyMap(), val screenshot: String? = null)
 @Serializable data class ScreenBase64Response(val frame: Int, val image: String)
 @Serializable data class StateResponse(val frame: Int, val ram: Map<String, Int>, val buttons: List<String>, val cpu: CpuState)
 @Serializable data class CpuState(val pc: Int, val a: Int, val x: Int, val y: Int, val sp: Int)
@@ -59,14 +60,21 @@ fun Application.configureRoutes(session: EmulatorSession) {
                 return@post
             }
             val text = call.receiveText()
+            val parsed: Pair<List<StepRequest>, Boolean>
             try {
-                val steps: List<StepRequest> = try {
+                parsed = try {
                     val seq = Json.decodeFromString<StepSequence>(text)
-                    seq.sequence
+                    Pair(seq.sequence, seq.screenshot)
                 } catch (e: Exception) {
-                    listOf(Json.decodeFromString<StepRequest>(text))
+                    val req = Json.decodeFromString<StepRequest>(text)
+                    Pair(listOf(req), req.screenshot)
                 }
-
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, StatusResponse("invalid request: ${e.message}"))
+                return@post
+            }
+            val (steps, wantScreenshot) = parsed
+            try {
                 if (session.shared) {
                     val latch = session.controller.enqueueSteps(steps)
                     val totalFrames = steps.sumOf { it.frames }
@@ -88,7 +96,50 @@ fun Application.configureRoutes(session: EmulatorSession) {
                 call.respond(HttpStatusCode.BadRequest, StatusResponse("invalid request: ${e.message}"))
                 return@post
             }
-            call.respond(StepResponse(session.frameCount, session.getWatchedState()))
+            val screenshotBase64 = if (wantScreenshot) session.getScreenBase64() else null
+            call.respond(StepResponse(session.frameCount, session.getWatchedState(), screenshotBase64))
+        }
+
+        post("/tap") {
+            if (!session.romLoaded) {
+                call.respond(HttpStatusCode.BadRequest, StatusResponse("no ROM loaded"))
+                return@post
+            }
+            val req: TapRequest
+            try {
+                req = call.receive<TapRequest>()
+                session.controller.resolveButton(req.button) // validate button name
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, StatusResponse("invalid request: ${e.message}"))
+                return@post
+            }
+
+            val steps = (1..req.count).flatMap {
+                listOf(
+                    StepRequest(listOf(req.button), req.pressFrames),
+                    StepRequest(emptyList(), req.gapFrames)
+                )
+            }
+
+            if (session.shared) {
+                val latch = session.controller.enqueueSteps(steps)
+                val totalFrames = steps.sumOf { it.frames }
+                val timeoutMs = totalFrames * 50L + 5000L
+                if (!latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                    call.respond(
+                        HttpStatusCode.InternalServerError,
+                        StatusResponse("tap timed out waiting for frames")
+                    )
+                    return@post
+                }
+            } else {
+                for (step in steps) {
+                    session.controller.setButtons(step.buttons)
+                    session.advanceFrames(step.frames)
+                }
+            }
+            val screenshotBase64 = if (req.screenshot) session.getScreenBase64() else null
+            call.respond(StepResponse(session.frameCount, session.getWatchedState(), screenshotBase64))
         }
 
         get("/screen") {
