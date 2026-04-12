@@ -25,6 +25,32 @@ import kotlinx.serialization.json.Json
 @Serializable data class Fm2Response(val framesExecuted: Int, val frame: Int)
 @Serializable data class ButtonStateResponse(val status: String, val held: List<String>)
 
+@Serializable
+data class ActionInfo(
+    val id: String,
+    val description: String,
+    val canExecute: Boolean
+)
+
+@Serializable
+data class ActionListResponse(
+    val profileId: String,
+    val actions: List<ActionInfo>
+)
+
+@Serializable
+data class ActionExecuteRequest(
+    val screenshot: Boolean = true
+)
+
+@Serializable
+data class ActionExecuteResponse(
+    val success: Boolean,
+    val message: String,
+    val state: Map<String, Int> = emptyMap(),
+    val screenshot: String? = null
+)
+
 fun Application.configureRoutes(session: EmulatorSession) {
     install(ContentNegotiation) {
         json(Json { prettyPrint = true })
@@ -214,7 +240,53 @@ fun Application.configureRoutes(session: EmulatorSession) {
                 HttpStatusCode.NotFound, StatusResponse("profile not found: $id")
             )
             session.setWatchedAddresses(profile.toWatchMap())
+            knes.debug.actions.ActionRegistry.ensureLoaded(id)
             call.respond(StatusResponse("ok", session.romLoaded, session.frameCount))
+        }
+
+        get("/profiles/{id}/actions") {
+            val id = call.parameters["id"]
+                ?: return@get call.respond(HttpStatusCode.BadRequest, StatusResponse("missing profile id"))
+
+            knes.debug.actions.ActionRegistry.ensureLoaded(id)
+            val actions = knes.debug.GameAction.listForProfile(id)
+            val state = if (session.romLoaded) session.getWatchedState() else emptyMap()
+
+            call.respond(ActionListResponse(
+                profileId = id,
+                actions = actions.map { ActionInfo(it.id, it.description, it.canExecute(state)) }
+            ))
+        }
+
+        post("/profiles/{id}/actions/{actionId}") {
+            val profileId = call.parameters["id"]
+                ?: return@post call.respond(HttpStatusCode.BadRequest, StatusResponse("missing profile id"))
+            val actionId = call.parameters["actionId"]
+                ?: return@post call.respond(HttpStatusCode.BadRequest, StatusResponse("missing action id"))
+
+            if (!session.romLoaded) {
+                return@post call.respond(HttpStatusCode.BadRequest, StatusResponse("no ROM loaded"))
+            }
+
+            knes.debug.actions.ActionRegistry.ensureLoaded(profileId)
+            val action = knes.debug.GameAction.get(profileId, actionId)
+                ?: return@post call.respond(HttpStatusCode.NotFound, StatusResponse("action '$actionId' not found for profile '$profileId'"))
+
+            val state = session.getWatchedState()
+            if (!action.canExecute(state)) {
+                return@post call.respond(HttpStatusCode.BadRequest,
+                    StatusResponse("action '$actionId' cannot execute in current state"))
+            }
+
+            val controller = SessionActionController(session)
+            val result = action.execute(controller)
+
+            call.respond(ActionExecuteResponse(
+                success = result.success,
+                message = result.message,
+                state = result.state,
+                screenshot = result.screenshot
+            ))
         }
 
         post("/profiles") {

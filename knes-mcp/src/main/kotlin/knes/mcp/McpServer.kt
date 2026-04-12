@@ -274,6 +274,87 @@ fun createMcpServer(): Server {
         }
     }
 
+    // 5b. list_actions
+    server.addTool(
+        name = "list_actions",
+        description = "List available game actions for a profile. Actions are game-specific automation scripts that play like a real NES player — they read the screen and press buttons.",
+        inputSchema = ToolSchema(
+            properties = buildJsonObject {
+                putJsonObject("profile_id") {
+                    put("type", "string")
+                    put("description", "Profile ID (e.g. 'ff1')")
+                }
+            },
+            required = listOf("profile_id")
+        )
+    ) { request ->
+        val profileId = request.arguments?.get("profile_id")?.jsonPrimitive?.content
+            ?: return@addTool CallToolResult(
+                content = listOf(TextContent("Missing profile_id")), isError = true
+            )
+
+        val resp = api.get("/profiles/$profileId/actions")
+        if (resp.ok) {
+            CallToolResult(content = listOf(TextContent(resp.body)))
+        } else {
+            CallToolResult(
+                content = listOf(TextContent("list_actions failed: ${resp.body}")), isError = true
+            )
+        }
+    }
+
+    // 5c. execute_action
+    server.addTool(
+        name = "execute_action",
+        description = "Execute a game action. Actions play like a real NES player: they read RAM state and press buttons. No memory writes, no cheats. Example: execute_action('ff1', 'battle_fight_all') auto-fights an FF1 battle.",
+        inputSchema = ToolSchema(
+            properties = buildJsonObject {
+                putJsonObject("profile_id") {
+                    put("type", "string")
+                    put("description", "Profile ID (e.g. 'ff1')")
+                }
+                putJsonObject("action_id") {
+                    put("type", "string")
+                    put("description", "Action ID (e.g. 'battle_fight_all')")
+                }
+                putJsonObject("screenshot") {
+                    put("type", "boolean")
+                    put("description", "Include screenshot in result (default: true)")
+                }
+            },
+            required = listOf("profile_id", "action_id")
+        )
+    ) { request ->
+        val profileId = request.arguments?.get("profile_id")?.jsonPrimitive?.content
+            ?: return@addTool CallToolResult(
+                content = listOf(TextContent("Missing profile_id")), isError = true
+            )
+        val actionId = request.arguments?.get("action_id")?.jsonPrimitive?.content
+            ?: return@addTool CallToolResult(
+                content = listOf(TextContent("Missing action_id")), isError = true
+            )
+        val screenshot = request.arguments?.get("screenshot")?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: true
+
+        val resp = api.postJson(
+            "/profiles/$profileId/actions/$actionId",
+            """{"screenshot":$screenshot}"""
+        )
+        if (resp.ok) {
+            val content = mutableListOf<ContentBlock>(TextContent(resp.body))
+            if (screenshot) {
+                val imageMatch = Regex(""""screenshot"\s*:\s*"([^"]+)"""").find(resp.body)
+                if (imageMatch != null) {
+                    content.add(ImageContent(data = imageMatch.groupValues[1], mimeType = "image/png"))
+                }
+            }
+            CallToolResult(content = content)
+        } else {
+            CallToolResult(
+                content = listOf(TextContent("execute_action failed: ${resp.body}")), isError = true
+            )
+        }
+    }
+
     // 6. list_profiles
     server.addTool(
         name = "list_profiles",
