@@ -1,6 +1,7 @@
 package knes.debug.actions
 
 import knes.debug.actions.ff1.BattleFightAll
+import knes.debug.actions.ff1.WalkUntilEncounter
 
 object ActionRegistry {
     private val loaded = mutableSetOf<String>()
@@ -16,5 +17,6 @@ object ActionRegistry {
 
     private fun loadFF1Actions() {
         BattleFightAll.init()
+        WalkUntilEncounter.init()
     }
 }
