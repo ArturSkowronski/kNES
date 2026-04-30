@@ -134,4 +134,43 @@ class ApiServerTest : FunSpec({
             response.status shouldBe HttpStatusCode.BadRequest
         }
     }
+
+    test("POST /press works independently of queue") {
+        testApplication {
+            val session = EmulatorSession()
+            application { configureRoutes(session) }
+
+            // Load a ROM to enable /step — use press/release to verify controller wiring
+            // Without a ROM we can't test step execution, but we CAN test that
+            // press still works independently of the queue
+            val pressResponse = client.post("/press") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"buttons": ["A"]}""")
+            }
+            pressResponse.status shouldBe HttpStatusCode.OK
+            pressResponse.bodyAsText() shouldContain "A"
+        }
+    }
+
+    test("POST /tap without ROM returns 400") {
+        testApplication {
+            application { configureRoutes(EmulatorSession()) }
+            val response = client.post("/tap") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"button": "A", "count": 3}""")
+            }
+            response.status shouldBe HttpStatusCode.BadRequest
+        }
+    }
+
+    test("POST /tap validates button name") {
+        testApplication {
+            application { configureRoutes(EmulatorSession()) }
+            val response = client.post("/tap") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"button": "TURBO"}""")
+            }
+            response.status shouldBe HttpStatusCode.BadRequest
+        }
+    }
 })

@@ -1,5 +1,8 @@
 package knes.mcp
 
+import knes.api.FrameInput
+import knes.api.InputQueue
+import knes.api.StepRequest
 import knes.debug.GameProfile
 import knes.emulator.NES
 import knes.emulator.input.InputHandler
@@ -9,6 +12,7 @@ import knes.emulator.utils.HiResTimer
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.util.Base64
+import java.util.concurrent.CountDownLatch
 import javax.imageio.ImageIO
 
 class NesEmulatorSession {
@@ -25,8 +29,14 @@ class NesEmulatorSession {
         "RIGHT" to InputHandler.KEY_RIGHT,
     )
 
+    val inputQueue = InputQueue()
+
     private val inputHandler = object : InputHandler {
-        override fun getKeyState(padKey: Int): Short = keyStates[padKey]
+        override fun getKeyState(padKey: Int): Short {
+            val persistent = keyStates[padKey]
+            val queued = if (inputQueue.isPressed(padKey)) 0x41.toShort() else 0x40.toShort()
+            return if (persistent == 0x41.toShort() || queued == 0x41.toShort()) 0x41 else 0x40
+        }
     }
 
     var frameCount: Int = 0; private set
@@ -73,8 +83,13 @@ class NesEmulatorSession {
         val target = frameCount + frames
         val maxSteps = frames * 300_000
         var steps = 0
+        var lastFrame = frameCount
         while (frameCount < target) {
             nes.cpu.step()
+            if (frameCount != lastFrame) {
+                inputQueue.advanceFrame()
+                lastFrame = frameCount
+            }
             if (++steps > maxSteps) throw IllegalStateException("step timed out")
         }
     }
@@ -98,6 +113,16 @@ class NesEmulatorSession {
     }
 
     fun releaseAll() { keyStates.fill(0x40) }
+
+    fun enqueueSteps(steps: List<StepRequest>): CountDownLatch {
+        val frameInputs = steps.flatMap { step ->
+            val buttons = step.buttons.map { name ->
+                buttonNames[name.uppercase()] ?: throw IllegalArgumentException("Unknown button: $name")
+            }.toSet()
+            List(step.frames) { FrameInput(buttons) }
+        }
+        return inputQueue.enqueue(frameInputs)
+    }
 
     fun getHeldButtons(): List<String> = buttonNames.entries.filter { keyStates[it.value] == 0x41.toShort() }.map { it.key }
 

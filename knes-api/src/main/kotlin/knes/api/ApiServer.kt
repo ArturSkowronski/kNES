@@ -12,17 +12,44 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 @Serializable data class RomRequest(val path: String)
-@Serializable data class StepRequest(val buttons: List<String> = emptyList(), val frames: Int = 1)
-@Serializable data class StepSequence(val sequence: List<StepRequest>)
+@Serializable data class StepRequest(val buttons: List<String> = emptyList(), val frames: Int = 1, val screenshot: Boolean = false)
+@Serializable data class StepSequence(val sequence: List<StepRequest>, val screenshot: Boolean = false)
+@Serializable data class TapRequest(val button: String, val count: Int = 1, val pressFrames: Int = 5, val gapFrames: Int = 15, val screenshot: Boolean = false)
 @Serializable data class ButtonsRequest(val buttons: List<String>)
 @Serializable data class WatchRequest(val addresses: Map<String, String>)
 @Serializable data class StatusResponse(val status: String, val romLoaded: Boolean = false, val frames: Int = 0)
-@Serializable data class StepResponse(val frame: Int, val ram: Map<String, Int> = emptyMap())
+@Serializable data class StepResponse(val frame: Int, val ram: Map<String, Int> = emptyMap(), val screenshot: String? = null)
 @Serializable data class ScreenBase64Response(val frame: Int, val image: String)
 @Serializable data class StateResponse(val frame: Int, val ram: Map<String, Int>, val buttons: List<String>, val cpu: CpuState)
 @Serializable data class CpuState(val pc: Int, val a: Int, val x: Int, val y: Int, val sp: Int)
 @Serializable data class Fm2Response(val framesExecuted: Int, val frame: Int)
 @Serializable data class ButtonStateResponse(val status: String, val held: List<String>)
+
+@Serializable
+data class ActionInfo(
+    val id: String,
+    val description: String,
+    val canExecute: Boolean
+)
+
+@Serializable
+data class ActionListResponse(
+    val profileId: String,
+    val actions: List<ActionInfo>
+)
+
+@Serializable
+data class ActionExecuteRequest(
+    val screenshot: Boolean = true
+)
+
+@Serializable
+data class ActionExecuteResponse(
+    val success: Boolean,
+    val message: String,
+    val state: Map<String, Int> = emptyMap(),
+    val screenshot: String? = null
+)
 
 fun Application.configureRoutes(session: EmulatorSession) {
     install(ContentNegotiation) {
@@ -59,23 +86,86 @@ fun Application.configureRoutes(session: EmulatorSession) {
                 return@post
             }
             val text = call.receiveText()
+            val parsed: Pair<List<StepRequest>, Boolean>
             try {
-                val seq = Json.decodeFromString<StepSequence>(text)
-                for (step in seq.sequence) {
+                parsed = try {
+                    val seq = Json.decodeFromString<StepSequence>(text)
+                    Pair(seq.sequence, seq.screenshot)
+                } catch (e: Exception) {
+                    val req = Json.decodeFromString<StepRequest>(text)
+                    Pair(listOf(req), req.screenshot)
+                }
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, StatusResponse("invalid request: ${e.message}"))
+                return@post
+            }
+            val (steps, wantScreenshot) = parsed
+            try {
+                if (session.shared) {
+                    val latch = session.controller.enqueueSteps(steps)
+                    val totalFrames = steps.sumOf { it.frames }
+                    val timeoutMs = totalFrames * 50L + 5000L
+                    if (!latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                        call.respond(
+                            HttpStatusCode.InternalServerError,
+                            StatusResponse("step timed out waiting for $totalFrames frames")
+                        )
+                        return@post
+                    }
+                } else {
+                    for (step in steps) {
+                        session.controller.setButtons(step.buttons)
+                        session.advanceFrames(step.frames)
+                    }
+                }
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, StatusResponse("invalid request: ${e.message}"))
+                return@post
+            }
+            val screenshotBase64 = if (wantScreenshot) session.getScreenBase64() else null
+            call.respond(StepResponse(session.frameCount, session.getWatchedState(), screenshotBase64))
+        }
+
+        post("/tap") {
+            if (!session.romLoaded) {
+                call.respond(HttpStatusCode.BadRequest, StatusResponse("no ROM loaded"))
+                return@post
+            }
+            val req: TapRequest
+            try {
+                req = call.receive<TapRequest>()
+                session.controller.resolveButton(req.button) // validate button name
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, StatusResponse("invalid request: ${e.message}"))
+                return@post
+            }
+
+            val steps = (1..req.count).flatMap {
+                listOf(
+                    StepRequest(listOf(req.button), req.pressFrames),
+                    StepRequest(emptyList(), req.gapFrames)
+                )
+            }
+
+            if (session.shared) {
+                val latch = session.controller.enqueueSteps(steps)
+                val totalFrames = steps.sumOf { it.frames }
+                val timeoutMs = totalFrames * 50L + 5000L
+                if (!latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                    call.respond(
+                        HttpStatusCode.InternalServerError,
+                        StatusResponse("tap timed out waiting for frames")
+                    )
+                    return@post
+                }
+            } else {
+                for (step in steps) {
                     session.controller.setButtons(step.buttons)
                     session.advanceFrames(step.frames)
                 }
-            } catch (e: Exception) {
-                try {
-                    val req = Json.decodeFromString<StepRequest>(text)
-                    session.controller.setButtons(req.buttons)
-                    session.advanceFrames(req.frames)
-                } catch (e2: Exception) {
-                    call.respond(HttpStatusCode.BadRequest, StatusResponse("invalid request: ${e2.message}"))
-                    return@post
-                }
             }
-            call.respond(StepResponse(session.frameCount, session.getWatchedState()))
+            val screenshotBase64 = if (req.screenshot) session.getScreenBase64() else null
+            call.respond(StepResponse(session.frameCount, session.getWatchedState(), screenshotBase64))
         }
 
         get("/screen") {
@@ -150,7 +240,53 @@ fun Application.configureRoutes(session: EmulatorSession) {
                 HttpStatusCode.NotFound, StatusResponse("profile not found: $id")
             )
             session.setWatchedAddresses(profile.toWatchMap())
+            knes.debug.actions.ActionRegistry.ensureLoaded(id)
             call.respond(StatusResponse("ok", session.romLoaded, session.frameCount))
+        }
+
+        get("/profiles/{id}/actions") {
+            val id = call.parameters["id"]
+                ?: return@get call.respond(HttpStatusCode.BadRequest, StatusResponse("missing profile id"))
+
+            knes.debug.actions.ActionRegistry.ensureLoaded(id)
+            val actions = knes.debug.GameAction.listForProfile(id)
+            val state = if (session.romLoaded) session.getWatchedState() else emptyMap()
+
+            call.respond(ActionListResponse(
+                profileId = id,
+                actions = actions.map { ActionInfo(it.id, it.description, it.canExecute(state)) }
+            ))
+        }
+
+        post("/profiles/{id}/actions/{actionId}") {
+            val profileId = call.parameters["id"]
+                ?: return@post call.respond(HttpStatusCode.BadRequest, StatusResponse("missing profile id"))
+            val actionId = call.parameters["actionId"]
+                ?: return@post call.respond(HttpStatusCode.BadRequest, StatusResponse("missing action id"))
+
+            if (!session.romLoaded) {
+                return@post call.respond(HttpStatusCode.BadRequest, StatusResponse("no ROM loaded"))
+            }
+
+            knes.debug.actions.ActionRegistry.ensureLoaded(profileId)
+            val action = knes.debug.GameAction.get(profileId, actionId)
+                ?: return@post call.respond(HttpStatusCode.NotFound, StatusResponse("action '$actionId' not found for profile '$profileId'"))
+
+            val state = session.getWatchedState()
+            if (!action.canExecute(state)) {
+                return@post call.respond(HttpStatusCode.BadRequest,
+                    StatusResponse("action '$actionId' cannot execute in current state"))
+            }
+
+            val controller = SessionActionController(session)
+            val result = action.execute(controller)
+
+            call.respond(ActionExecuteResponse(
+                success = result.success,
+                message = result.message,
+                state = result.state,
+                screenshot = result.screenshot
+            ))
         }
 
         post("/profiles") {

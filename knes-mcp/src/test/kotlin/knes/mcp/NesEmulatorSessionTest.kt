@@ -102,4 +102,25 @@ class NesEmulatorSessionTest : FunSpec({
         session.getHeldButtons() shouldBe emptyList()
         session.frameCount shouldBe 0
     }
+
+    test("enqueueSteps creates frame inputs from step requests") {
+        val session = NesEmulatorSession()
+        val latch = session.enqueueSteps(listOf(
+            knes.api.StepRequest(listOf("A"), 2),
+            knes.api.StepRequest(emptyList(), 1)
+        ))
+        // 3 frames total — first entry set as currentFrame
+        session.inputQueue.isActive shouldBe true
+        session.inputQueue.isPressed(knes.emulator.input.InputHandler.KEY_A) shouldBe true
+
+        session.inputQueue.advanceFrame()
+        session.inputQueue.isPressed(knes.emulator.input.InputHandler.KEY_A) shouldBe true
+
+        session.inputQueue.advanceFrame()
+        session.inputQueue.isPressed(knes.emulator.input.InputHandler.KEY_A) shouldBe false
+
+        session.inputQueue.advanceFrame()
+        latch.await(100, java.util.concurrent.TimeUnit.MILLISECONDS) shouldBe true
+        session.inputQueue.isActive shouldBe false
+    }
 })

@@ -4,6 +4,7 @@ import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
 import io.modelcontextprotocol.kotlin.sdk.server.StdioServerTransport
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
+import io.modelcontextprotocol.kotlin.sdk.types.ContentBlock
 import io.modelcontextprotocol.kotlin.sdk.types.ImageContent
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
@@ -14,6 +15,7 @@ import kotlinx.io.asSource
 import kotlinx.io.buffered
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
@@ -71,7 +73,7 @@ fun createMcpServer(): Server {
     // 2. step
     server.addTool(
         name = "step",
-        description = "Advance emulation by N frames while holding specified buttons. Returns frame count and watched RAM values. The game runs visually in the Compose UI while stepping.",
+        description = "Advance emulation by N frames while holding specified buttons. Returns frame count, watched RAM values, and optionally a screenshot.",
         inputSchema = ToolSchema(
             properties = buildJsonObject {
                 putJsonObject("buttons") {
@@ -83,18 +85,136 @@ fun createMcpServer(): Server {
                     put("type", "integer")
                     put("description", "Number of frames to advance (default: 1, 60 frames = 1 second)")
                 }
+                putJsonObject("screenshot") {
+                    put("type", "boolean")
+                    put("description", "If true, include a screenshot of the final frame in the response (default: false)")
+                }
             },
             required = listOf()
         )
     ) { request ->
         val buttons = request.arguments?.get("buttons")?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
         val frames = request.arguments?.get("frames")?.jsonPrimitive?.content?.toIntOrNull() ?: 1
+        val screenshot = request.arguments?.get("screenshot")?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
         val buttonsJson = buttons.joinToString(",") { "\"$it\"" }
-        val resp = api.postJson("/step", """{"buttons":[$buttonsJson],"frames":$frames}""")
+        val resp = api.postJson("/step", """{"buttons":[$buttonsJson],"frames":$frames,"screenshot":$screenshot}""")
         if (resp.ok) {
-            CallToolResult(content = listOf(TextContent(resp.body)))
+            val content = mutableListOf<ContentBlock>(TextContent(resp.body))
+            if (screenshot) {
+                val imageMatch = Regex(""""screenshot"\s*:\s*"([^"]+)"""").find(resp.body)
+                if (imageMatch != null) {
+                    content.add(ImageContent(data = imageMatch.groupValues[1], mimeType = "image/png"))
+                }
+            }
+            CallToolResult(content = content)
         } else {
             CallToolResult(content = listOf(TextContent("step failed: ${resp.body}")), isError = true)
+        }
+    }
+
+    // 2b. tap
+    server.addTool(
+        name = "tap",
+        description = "Press a button N times with configurable timing. Equivalent to repeated step(button, press_frames) + step([], gap_frames) cycles. Returns frame count, RAM, and optionally a screenshot.",
+        inputSchema = ToolSchema(
+            properties = buildJsonObject {
+                putJsonObject("button") {
+                    put("type", "string")
+                    put("description", "Button to press: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT")
+                }
+                putJsonObject("count") {
+                    put("type", "integer")
+                    put("description", "Number of times to press (default: 1)")
+                }
+                putJsonObject("press_frames") {
+                    put("type", "integer")
+                    put("description", "Frames to hold each press (default: 5)")
+                }
+                putJsonObject("gap_frames") {
+                    put("type", "integer")
+                    put("description", "Frames to wait between presses (default: 15)")
+                }
+                putJsonObject("screenshot") {
+                    put("type", "boolean")
+                    put("description", "If true, include a screenshot after all presses complete (default: false)")
+                }
+            },
+            required = listOf("button")
+        )
+    ) { request ->
+        val button = request.arguments?.get("button")?.jsonPrimitive?.content
+            ?: return@addTool CallToolResult(content = listOf(TextContent("Missing: button")), isError = true)
+        val count = request.arguments?.get("count")?.jsonPrimitive?.content?.toIntOrNull() ?: 1
+        val pressFrames = request.arguments?.get("press_frames")?.jsonPrimitive?.content?.toIntOrNull() ?: 5
+        val gapFrames = request.arguments?.get("gap_frames")?.jsonPrimitive?.content?.toIntOrNull() ?: 15
+        val screenshot = request.arguments?.get("screenshot")?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+        val resp = api.postJson("/tap", """{"button":"$button","count":$count,"pressFrames":$pressFrames,"gapFrames":$gapFrames,"screenshot":$screenshot}""")
+        if (resp.ok) {
+            val content = mutableListOf<ContentBlock>(TextContent(resp.body))
+            if (screenshot) {
+                val imageMatch = Regex(""""screenshot"\s*:\s*"([^"]+)"""").find(resp.body)
+                if (imageMatch != null) {
+                    content.add(ImageContent(data = imageMatch.groupValues[1], mimeType = "image/png"))
+                }
+            }
+            CallToolResult(content = content)
+        } else {
+            CallToolResult(content = listOf(TextContent("tap failed: ${resp.body}")), isError = true)
+        }
+    }
+
+    // 2c. sequence
+    server.addTool(
+        name = "sequence",
+        description = "Execute a sequence of button inputs in one call. Each step holds specified buttons for N frames. Returns frame count, RAM, and optionally a screenshot after all steps complete.",
+        inputSchema = ToolSchema(
+            properties = buildJsonObject {
+                putJsonObject("steps") {
+                    put("type", "array")
+                    putJsonObject("items") {
+                        put("type", "object")
+                        putJsonObject("properties") {
+                            putJsonObject("buttons") {
+                                put("type", "array")
+                                putJsonObject("items") { put("type", "string") }
+                            }
+                            putJsonObject("frames") {
+                                put("type", "integer")
+                            }
+                        }
+                    }
+                    put("description", "Array of {buttons, frames} steps to execute in order")
+                }
+                putJsonObject("screenshot") {
+                    put("type", "boolean")
+                    put("description", "If true, include a screenshot after all steps complete (default: false)")
+                }
+            },
+            required = listOf("steps")
+        )
+    ) { request ->
+        val stepsArray = request.arguments?.get("steps")?.jsonArray
+            ?: return@addTool CallToolResult(content = listOf(TextContent("Missing: steps")), isError = true)
+        val screenshot = request.arguments?.get("screenshot")?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+
+        val stepsJson = stepsArray.joinToString(",") { step ->
+            val obj = step.jsonObject
+            val buttons = obj["buttons"]?.jsonArray?.joinToString(",") { "\"${it.jsonPrimitive.content}\"" } ?: ""
+            val frames = obj["frames"]?.jsonPrimitive?.content ?: "1"
+            """{"buttons":[$buttons],"frames":$frames}"""
+        }
+        val resp = api.postJson("/step", """{"sequence":[$stepsJson],"screenshot":$screenshot}""")
+        if (resp.ok) {
+            val content = mutableListOf<ContentBlock>(TextContent(resp.body))
+            if (screenshot) {
+                val imageMatch = Regex(""""screenshot"\s*:\s*"([^"]+)"""").find(resp.body)
+                if (imageMatch != null) {
+                    content.add(ImageContent(data = imageMatch.groupValues[1], mimeType = "image/png"))
+                }
+            }
+            CallToolResult(content = content)
+        } else {
+            CallToolResult(content = listOf(TextContent("sequence failed: ${resp.body}")), isError = true)
         }
     }
 
@@ -151,6 +271,87 @@ fun createMcpServer(): Server {
             CallToolResult(content = listOf(TextContent("Profile '$id' applied. RAM values will appear in step and get_state responses.")))
         } else {
             CallToolResult(content = listOf(TextContent("Failed to apply profile: ${resp.body}")), isError = true)
+        }
+    }
+
+    // 5b. list_actions
+    server.addTool(
+        name = "list_actions",
+        description = "List available game actions for a profile. Actions are game-specific automation scripts that play like a real NES player — they read the screen and press buttons.",
+        inputSchema = ToolSchema(
+            properties = buildJsonObject {
+                putJsonObject("profile_id") {
+                    put("type", "string")
+                    put("description", "Profile ID (e.g. 'ff1')")
+                }
+            },
+            required = listOf("profile_id")
+        )
+    ) { request ->
+        val profileId = request.arguments?.get("profile_id")?.jsonPrimitive?.content
+            ?: return@addTool CallToolResult(
+                content = listOf(TextContent("Missing profile_id")), isError = true
+            )
+
+        val resp = api.get("/profiles/$profileId/actions")
+        if (resp.ok) {
+            CallToolResult(content = listOf(TextContent(resp.body)))
+        } else {
+            CallToolResult(
+                content = listOf(TextContent("list_actions failed: ${resp.body}")), isError = true
+            )
+        }
+    }
+
+    // 5c. execute_action
+    server.addTool(
+        name = "execute_action",
+        description = "Execute a game action. Actions play like a real NES player: they read RAM state and press buttons. No memory writes, no cheats. Example: execute_action('ff1', 'battle_fight_all') auto-fights an FF1 battle.",
+        inputSchema = ToolSchema(
+            properties = buildJsonObject {
+                putJsonObject("profile_id") {
+                    put("type", "string")
+                    put("description", "Profile ID (e.g. 'ff1')")
+                }
+                putJsonObject("action_id") {
+                    put("type", "string")
+                    put("description", "Action ID (e.g. 'battle_fight_all')")
+                }
+                putJsonObject("screenshot") {
+                    put("type", "boolean")
+                    put("description", "Include screenshot in result (default: true)")
+                }
+            },
+            required = listOf("profile_id", "action_id")
+        )
+    ) { request ->
+        val profileId = request.arguments?.get("profile_id")?.jsonPrimitive?.content
+            ?: return@addTool CallToolResult(
+                content = listOf(TextContent("Missing profile_id")), isError = true
+            )
+        val actionId = request.arguments?.get("action_id")?.jsonPrimitive?.content
+            ?: return@addTool CallToolResult(
+                content = listOf(TextContent("Missing action_id")), isError = true
+            )
+        val screenshot = request.arguments?.get("screenshot")?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: true
+
+        val resp = api.postJson(
+            "/profiles/$profileId/actions/$actionId",
+            """{"screenshot":$screenshot}"""
+        )
+        if (resp.ok) {
+            val content = mutableListOf<ContentBlock>(TextContent(resp.body))
+            if (screenshot) {
+                val imageMatch = Regex(""""screenshot"\s*:\s*"([^"]+)"""").find(resp.body)
+                if (imageMatch != null) {
+                    content.add(ImageContent(data = imageMatch.groupValues[1], mimeType = "image/png"))
+                }
+            }
+            CallToolResult(content = content)
+        } else {
+            CallToolResult(
+                content = listOf(TextContent("execute_action failed: ${resp.body}")), isError = true
+            )
         }
     }
 

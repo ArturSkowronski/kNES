@@ -67,6 +67,7 @@ fun main() {
         LaunchedEffect(apiRunning) {
             if (apiRunning) {
                 screenView.onApiFrameCallback = { buffer ->
+                    apiServer.session.controller.onFrameBoundary()
                     apiServer.session.updateFrameBuffer(buffer)
                 }
                 inputHandler.additionalInput = apiServer.session.controller
@@ -180,7 +181,7 @@ fun main() {
                                 ) {
                                     Image(
                                         painter = classpathPainter("frame.png"),
-                                        contentDescription = "NES Frame",
+                                        contentDescription = "NES QR Code",
                                         modifier = Modifier.size(256.dp, 240.dp)
                                     )
                                 }

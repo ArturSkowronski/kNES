@@ -63,4 +63,48 @@ class ApiControllerTest : FunSpec({
         c.setButtons(listOf("a", "Right", "START"))
         c.getHeldButtons() shouldContainExactlyInAnyOrder listOf("A", "RIGHT", "START")
     }
+
+    test("getKeyState merges queue input with persistent holds") {
+        val c = ApiController()
+        c.pressButton(InputHandler.KEY_A) // persistent hold
+
+        val latch = c.enqueueSteps(listOf(StepRequest(listOf("B"), 1)))
+        c.getKeyState(InputHandler.KEY_A) shouldBe 0x41.toShort()  // persistent
+        c.getKeyState(InputHandler.KEY_B) shouldBe 0x41.toShort()  // from queue
+
+        c.onFrameBoundary() // consume queue entry
+        latch.await(100, java.util.concurrent.TimeUnit.MILLISECONDS) shouldBe true
+        c.getKeyState(InputHandler.KEY_A) shouldBe 0x41.toShort()  // still persistent
+        c.getKeyState(InputHandler.KEY_B) shouldBe 0x40.toShort()  // queue empty
+    }
+
+    test("enqueueSteps converts StepRequest to FrameInput") {
+        val c = ApiController()
+        val latch = c.enqueueSteps(listOf(
+            StepRequest(listOf("A"), 2),
+            StepRequest(emptyList(), 1),
+            StepRequest(listOf("B"), 1)
+        ))
+        // 2 + 1 + 1 = 4 frames total
+        c.getKeyState(InputHandler.KEY_A) shouldBe 0x41.toShort()
+
+        c.onFrameBoundary() // frame 2 of A
+        c.getKeyState(InputHandler.KEY_A) shouldBe 0x41.toShort()
+
+        c.onFrameBoundary() // empty frame
+        c.getKeyState(InputHandler.KEY_A) shouldBe 0x40.toShort()
+        c.getKeyState(InputHandler.KEY_B) shouldBe 0x40.toShort()
+
+        c.onFrameBoundary() // B frame
+        c.getKeyState(InputHandler.KEY_B) shouldBe 0x41.toShort()
+
+        c.onFrameBoundary() // done
+        latch.await(100, java.util.concurrent.TimeUnit.MILLISECONDS) shouldBe true
+        c.getKeyState(InputHandler.KEY_B) shouldBe 0x40.toShort()
+    }
+
+    test("onFrameBoundary is safe when no queue active") {
+        val c = ApiController()
+        c.onFrameBoundary() // should not throw
+    }
 })

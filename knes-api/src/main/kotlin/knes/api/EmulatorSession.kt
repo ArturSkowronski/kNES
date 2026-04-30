@@ -101,8 +101,13 @@ class EmulatorSession(externalNes: NES? = null) {
         } else {
             val maxSteps = n * 300_000
             var steps = 0
+            var lastFrame = frameCount
             while (frameCount < target) {
                 nes.cpu.step()
+                if (frameCount != lastFrame) {
+                    controller.onFrameBoundary()
+                    lastFrame = frameCount
+                }
                 if (++steps > maxSteps) throw IllegalStateException("advanceFrames($n) timed out")
             }
         }
