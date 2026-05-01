@@ -132,6 +132,26 @@ class EmulatorSession(externalNes: NES? = null) {
 
     fun getScreenBase64(): String = java.util.Base64.getEncoder().encodeToString(getScreenPng())
 
+    /** Alias for toolset surface: returns watched RAM as name→value map. */
+    fun readWatchedRam(): Map<String, Int> = getWatchedState()
+
+    /** Returns CPU register snapshot as name→value map. */
+    fun readCpuRegs(): Map<String, Int> = mapOf(
+        "pc" to nes.cpu.REG_PC_NEW,
+        "a"  to nes.cpu.REG_ACC_NEW,
+        "x"  to nes.cpu.REG_X_NEW,
+        "y"  to nes.cpu.REG_Y_NEW,
+        "sp" to nes.cpu.REG_SP,
+    )
+
+    /** Alias for toolset surface: returns base64-encoded PNG of the current frame. */
+    fun screenshotBase64Png(): String = getScreenBase64()
+
+    /** Applies a [knes.debug.GameProfile]: sets watched addresses. */
+    fun applyProfile(profile: knes.debug.GameProfile) {
+        setWatchedAddresses(profile.toWatchMap())
+    }
+
     /** Allow external frame buffer updates (used by Compose UI to feed frames to shared session) */
     fun updateFrameBuffer(buffer: IntArray) {
         System.arraycopy(buffer, 0, writeBuffer, 0, buffer.size)
