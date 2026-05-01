@@ -1,6 +1,7 @@
 package knes.agent.executor
 
 import ai.koog.agents.core.agent.AIAgent
+import ai.koog.agents.core.agent.exception.AIAgentMaxNumberOfIterationsReachedException
 import ai.koog.agents.core.tools.ToolRegistry
 import ai.koog.agents.core.tools.reflect.tools
 import ai.koog.agents.ext.agent.reActStrategy
@@ -34,7 +35,13 @@ class ExecutorAgent(
         systemPrompt = ff1ExecutorSystemPrompt,
     )
 
-    suspend fun run(input: String): String = agent.run(input)
+    suspend fun run(input: String): String = try {
+        agent.run(input)
+    } catch (e: AIAgentMaxNumberOfIterationsReachedException) {
+        // Koog's reActStrategy hit its internal iteration cap (default 50).
+        // The outer AgentSession will observe RAM and decide what to do next.
+        "ITERATION_CAP: ${e.message?.take(120)}"
+    }
 
     companion object {
         // Source of truth for the Claude Code MCP setup is docs/ff1-system-prompt.md.

@@ -64,14 +64,18 @@ class AgentSession(
                         }
                         append("Reason: ${if (phaseChanged) "phase change" else "watchdog stuck"}")
                     }
+                    println("[advisor #$advisorCalls] phase=$phase reason=${if (phaseChanged) "phase change" else "watchdog stuck"}")
                     currentPlan = advisor.plan(obs)
+                    println("[advisor plan] ${currentPlan.lineSequence().take(3).joinToString(" | ").take(200)}")
                     trace.record(TraceEvent(0, "advisor", phase.toString(), note = currentPlan.take(500)))
                     idleTurns = 0
                 }
 
                 val executorInput = "Plan:\n$currentPlan\n\nCurrent phase: $phase\nRAM: $ram"
+                println("[executor turn=$toolCalls] phase=$phase idle=$idleTurns")
                 val result = executor.run(executorInput)
                 toolCalls += 1
+                println("[executor result] ${result.lineSequence().take(2).joinToString(" | ").take(160)}")
                 trace.record(TraceEvent(0, "executor", phase.toString(), note = result.take(500)))
 
                 val newRam = observer.ramSnapshot()
