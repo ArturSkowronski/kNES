@@ -27,7 +27,8 @@ class AdvisorAgent(
     private val readOnlyTools = ReadOnlyToolset(toolset)
     private val registry = ToolRegistry { tools(readOnlyTools) }
 
-    private val agent: AIAgent<String, String> = AIAgent(
+    // Koog's AIAgent is single-use; build a fresh instance per plan call.
+    private fun newAgent(): AIAgent<String, String> = AIAgent(
         promptExecutor = executor,
         llmModel = model,
         toolRegistry = registry,
@@ -41,7 +42,5 @@ class AdvisorAgent(
         """.trimIndent(),
     )
 
-    suspend fun plan(observation: String): String = agent.run(observation)
-
-    fun underlying(): AIAgent<String, String> = agent
+    suspend fun plan(observation: String): String = newAgent().run(observation)
 }

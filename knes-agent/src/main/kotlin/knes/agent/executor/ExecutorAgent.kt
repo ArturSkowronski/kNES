@@ -26,7 +26,8 @@ class ExecutorAgent(
         tools(advisorTool)
     }
 
-    private val agent: AIAgent<String, String> = AIAgent(
+    // Koog's AIAgent is single-use (StatefulSingleUseAIAgent). Build a fresh one per call.
+    private fun newAgent(): AIAgent<String, String> = AIAgent(
         promptExecutor = executor,
         llmModel = model,
         toolRegistry = registry,
@@ -35,7 +36,7 @@ class ExecutorAgent(
     )
 
     suspend fun run(input: String): String = try {
-        agent.run(input)
+        newAgent().run(input)
     } catch (e: Exception) {
         // Koog's reActStrategy hits an internal iteration cap (default 50) and throws
         // AIAgentMaxNumberOfIterationsReachedException — but that class is `internal`.
