@@ -21,8 +21,10 @@ dependencies {
 
     // Koog — pin to a specific release at first compile; update if breaking.
     implementation 'ai.koog:agents-core:0.5.1'
+    implementation 'ai.koog:agents-ext:0.5.1'
     implementation 'ai.koog:agents-mcp:0.5.1'
     implementation 'ai.koog:prompt-executor-anthropic-client:0.5.1'
+    implementation 'ai.koog:prompt-executor-llms-all:0.5.1'
 
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3'
