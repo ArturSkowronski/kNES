@@ -1,7 +1,7 @@
 # FF1 Koog Agent — Design Spec
 
-**Date:** 2026-04-30
-**Status:** Draft, pending review
+**Date:** 2026-04-30 (updated 2026-05-01 with post-implementation reality)
+**Status:** Implemented through Phase 5 (acceptance run = Task 6.1 still pending)
 **Modules:** new `knes-agent` and `knes-agent-tools` (refactor extracting shared `EmulatorToolset`)
 
 ## 1. Goal
@@ -61,12 +61,30 @@ knes-agent/                              ← NEW module
     └── Main.kt                          ← CLI entry: load ROM, apply profile, run session
 ```
 
-Module dependencies:
+Module dependencies (as actually implemented):
 
-- `knes-agent-tools` depends on `:knes-emulator`, `:knes-controllers`. (Pure logic; no Ktor, no MCP SDK.)
-- `knes-api` depends on `:knes-agent-tools`. Loses any direct emulator manipulation that lives inside route handlers.
-- `knes-mcp` depends on `:knes-agent-tools`. Drops `RestApiClient` from default in-process mode.
-- `knes-agent` depends on `:knes-agent-tools`, `:knes-emulator`, `:knes-controllers`, plus Koog: `ai.koog:agents-core`, `ai.koog:prompt-executor-anthropic-client`. **No** dependency on `:knes-api` or `:knes-mcp`.
+- **`knes-emulator-session`** — extracted during Task 1.4 to break a `knes-api` ↔ `knes-agent-tools` cycle. Holds `EmulatorSession`, `ApiController`, `InputQueue`, `StepRequest`, `SessionActionController`. Plain JVM, no Ktor.
+- `knes-agent-tools` depends on `:knes-emulator`, `:knes-controllers`, `:knes-debug`, `:knes-emulator-session`, plus `ai.koog:agents-core` + `ai.koog:agents-tools` (the `ToolSet` interface lives in `agents-tools`, not `agents-core`).
+- `knes-api` depends on `:knes-agent-tools` and `:knes-emulator-session`. Routes delegate to `EmulatorToolset` (323 LOC vs ~350 baseline).
+- `knes-mcp` depends on `:knes-agent-tools`. Default `createMcpServer()` constructs an in-process `EmulatorSession` + `EmulatorToolset` and registers tools by hand-mapping MCP args to typed methods. `--remote` flag preserves the legacy REST-bridge (`createRemoteMcpServer()` in `RemoteRestBridge.kt`).
+- `knes-agent` depends on `:knes-emulator`, `:knes-controllers`, `:knes-debug`, `:knes-agent-tools`, `:knes-emulator-session`, plus Koog: `agents-core:0.5.1`, `agents-mcp:0.5.1`, `agents-ext:0.5.1`, `prompt-executor-anthropic-client:0.5.1`, `prompt-executor-llms-all:0.5.1`. **No** dep on `:knes-api` or `:knes-mcp`.
+- All modules bumped to JDK toolchain **17** (Koog 0.5.1 jars are class file v61).
+
+Resolved Koog 0.5.1 API surface (canonical for this codebase):
+
+| Construct | Path |
+|---|---|
+| Strategy factory | `ai.koog.agents.ext.agent.reActStrategy(reasoningInterval: Int, name: String)` |
+| Executor factory | `ai.koog.prompt.executor.llms.all.simpleAnthropicExecutor(key) → SingleLLMPromptExecutor` |
+| Agent | `AIAgent(promptExecutor, llmModel, strategy, toolRegistry, systemPrompt)` (Companion.invoke; `llmModel: LLModel`) |
+| ToolSet registration | `ToolRegistry { tools(toolset) }` via `ai.koog.agents.core.tools.reflect.tools` |
+| Models | `AnthropicModels.{Sonnet_4_5, Opus_4, Opus_4_1, Haiku_3_5, ...}` |
+
+**Koog 0.5.1 reflection limitation**: methods with `Map<String, String>` parameters are rejected by the reflect-based `tools(toolset)` registration. We dropped the unused `args` parameter from `EmulatorToolset.executeAction` (Task 4.0) — it was never forwarded to `SessionActionController` anyway.
+
+**Defaults at session boot**: advisor = `Opus_4`, executor = `Sonnet_4_5`. Both bumpable per-instance.
+
+KoogToolToMcpSchema (reflection-based MCP schema generator) was not implemented — `McpServer.kt` retains hand-written tool schemas for parity with the existing FF1 system prompt. It's a future cleanup, not blocking the agent.
 
 ## 4. `EmulatorToolset` (shared)
 
