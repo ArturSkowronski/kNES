@@ -27,12 +27,14 @@ class ExecutorAgent(
     }
 
     // Koog's AIAgent is single-use (StatefulSingleUseAIAgent). Build a fresh one per call.
+    // maxIterations limits Koog's internal ReAct loop per outer turn (default 50 is too expensive).
     private fun newAgent(): AIAgent<String, String> = AIAgent(
         promptExecutor = executor,
         llmModel = model,
         toolRegistry = registry,
         strategy = reActStrategy(reasoningInterval = reasoningInterval, name = "ff1_executor"),
         systemPrompt = ff1ExecutorSystemPrompt,
+        maxIterations = 10,
     )
 
     suspend fun run(input: String): String = try {
