@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-30
 **Status:** Draft, pending review
-**Module:** new `knes-agent` (+ refactor extracting shared `EmulatorToolset`)
+**Modules:** new `knes-agent` and `knes-agent-tools` (refactor extracting shared `EmulatorToolset`)
 
 ## 1. Goal
 
@@ -36,8 +36,8 @@ Two coordinated changes:
 **(b) New module — `knes-agent`.** Embeds a Koog Advisor/Executor agent loop, perception layer, and runtime that owns the outer success/escalation logic.
 
 ```
-knes-tools/                              ← NEW shared module (extracted)
-└── src/main/kotlin/knes/tools/
+knes-agent-tools/                              ← NEW shared module (extracted)
+└── src/main/kotlin/knes/agent/tools/
     ├── EmulatorToolset.kt               ← @Tool / @LLMDescription, typed params/results
     ├── results/                         ← StepResult, TapResult, StateSnapshot, ScreenPng…
     └── KoogToolToMcpSchema.kt           ← reflection adapter: @Tool methods → MCP ToolSchema
@@ -63,10 +63,10 @@ knes-agent/                              ← NEW module
 
 Module dependencies:
 
-- `knes-tools` depends on `:knes-emulator`, `:knes-controllers`. (Pure logic; no Ktor, no MCP SDK.)
-- `knes-api` depends on `:knes-tools`. Loses any direct emulator manipulation that lives inside route handlers.
-- `knes-mcp` depends on `:knes-tools`. Drops `RestApiClient` from default in-process mode.
-- `knes-agent` depends on `:knes-tools`, `:knes-emulator`, `:knes-controllers`, plus Koog: `ai.koog:agents-core`, `ai.koog:prompt-executor-anthropic-client`. **No** dependency on `:knes-api` or `:knes-mcp`.
+- `knes-agent-tools` depends on `:knes-emulator`, `:knes-controllers`. (Pure logic; no Ktor, no MCP SDK.)
+- `knes-api` depends on `:knes-agent-tools`. Loses any direct emulator manipulation that lives inside route handlers.
+- `knes-mcp` depends on `:knes-agent-tools`. Drops `RestApiClient` from default in-process mode.
+- `knes-agent` depends on `:knes-agent-tools`, `:knes-emulator`, `:knes-controllers`, plus Koog: `ai.koog:agents-core`, `ai.koog:prompt-executor-anthropic-client`. **No** dependency on `:knes-api` or `:knes-mcp`.
 
 ## 4. `EmulatorToolset` (shared)
 
