@@ -22,14 +22,12 @@ class AdvisorAgent(
     private val toolset: EmulatorToolset,
     private val model: LLModel = AnthropicModels.Opus_4,   // confirmed: Opus_4 = claude-opus-4-0
 ) {
-    private val executor = SingleLLMPromptExecutor(AnthropicLLMClient(apiKey))
-
     private val readOnlyTools = ReadOnlyToolset(toolset)
     private val registry = ToolRegistry { tools(readOnlyTools) }
 
-    // Koog's AIAgent is single-use; build a fresh instance per plan call.
+    // Koog's AIAgent is single-use; build a fresh instance + executor per plan call.
     private fun newAgent(): AIAgent<String, String> = AIAgent(
-        promptExecutor = executor,
+        promptExecutor = SingleLLMPromptExecutor(AnthropicLLMClient(apiKey)),
         llmModel = model,
         toolRegistry = registry,
         strategy = reActStrategy(reasoningInterval = 1, name = "ff1_advisor"),

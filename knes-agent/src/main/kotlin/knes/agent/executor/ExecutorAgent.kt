@@ -18,8 +18,6 @@ class ExecutorAgent(
     private val model: LLModel = AnthropicModels.Sonnet_4_5,
     private val reasoningInterval: Int = 1,
 ) {
-    private val executor = SingleLLMPromptExecutor(AnthropicLLMClient(apiKey))
-
     private val advisorTool = AdvisorToolset(advisor)
     private val registry = ToolRegistry {
         tools(toolset)
@@ -27,9 +25,11 @@ class ExecutorAgent(
     }
 
     // Koog's AIAgent is single-use (StatefulSingleUseAIAgent). Build a fresh one per call.
-    // maxIterations limits Koog's internal ReAct loop per outer turn (default 50 is too expensive).
+    // Also fresh prompt executor + LLM client — Koog 0.5.1 retains conversation state inside
+    // the executor that triggers Anthropic 400 errors after iteration-cap on subsequent runs.
+    // maxIterations caps Koog's internal ReAct loop per outer turn (default 50 is too expensive).
     private fun newAgent(): AIAgent<String, String> = AIAgent(
-        promptExecutor = executor,
+        promptExecutor = SingleLLMPromptExecutor(AnthropicLLMClient(apiKey)),
         llmModel = model,
         toolRegistry = registry,
         strategy = reActStrategy(reasoningInterval = reasoningInterval, name = "ff1_executor"),
@@ -44,7 +44,7 @@ class ExecutorAgent(
         // AIAgentMaxNumberOfIterationsReachedException — but that class is `internal`.
         // Match by class name; let anything else propagate.
         if (e::class.simpleName == "AIAgentMaxNumberOfIterationsReachedException") {
-            "ITERATION_CAP: ${e.message?.take(120)}"
+            "ITERATION_CAP: ${e.message?.take(120)?.trim()}"
         } else throw e
     }
 
