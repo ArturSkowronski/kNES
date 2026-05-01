@@ -86,55 +86,40 @@ fun Application.configureRoutes(session: EmulatorSession) {
             call.respond(StatusResponse("reset", session.romLoaded, session.frameCount))
         }
 
-        // Step — NOT delegated: toolset.step() uses enqueueSteps().await() which requires
-        // advanceFrames() to drive the CPU in standalone mode; route-level mode branching preserved.
+        // Step — delegated: toolset.sequence / toolset.step handle both standalone and shared mode.
         post("/step") {
             if (!session.romLoaded) {
                 call.respond(HttpStatusCode.BadRequest, StatusResponse("no ROM loaded"))
                 return@post
             }
             val text = call.receiveText()
-            val parsed: Pair<List<StepRequest>, Boolean>
+            val parsed: Pair<List<knes.agent.tools.results.StepEntry>, Boolean>
             try {
                 parsed = try {
                     val seq = Json.decodeFromString<StepSequence>(text)
-                    Pair(seq.sequence, seq.screenshot)
+                    Pair(seq.sequence.map { knes.agent.tools.results.StepEntry(it.buttons, it.frames) }, seq.screenshot)
                 } catch (e: Exception) {
                     val req = Json.decodeFromString<StepRequest>(text)
-                    Pair(listOf(req), req.screenshot)
+                    Pair(listOf(knes.agent.tools.results.StepEntry(req.buttons, req.frames)), req.screenshot)
                 }
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.BadRequest, StatusResponse("invalid request: ${e.message}"))
                 return@post
             }
-            val (steps, wantScreenshot) = parsed
+            val (entries, wantScreenshot) = parsed
             try {
-                if (session.shared) {
-                    val latch = session.controller.enqueueSteps(steps)
-                    val totalFrames = steps.sumOf { it.frames }
-                    val timeoutMs = totalFrames * 50L + 5000L
-                    if (!latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)) {
-                        call.respond(
-                            HttpStatusCode.InternalServerError,
-                            StatusResponse("step timed out waiting for $totalFrames frames")
-                        )
-                        return@post
-                    }
+                val result = if (entries.size == 1) {
+                    toolset.step(entries[0].buttons, entries[0].frames, wantScreenshot)
                 } else {
-                    for (step in steps) {
-                        session.controller.setButtons(step.buttons)
-                        session.advanceFrames(step.frames)
-                    }
+                    toolset.sequence(entries, wantScreenshot)
                 }
+                call.respond(StepResponse(result.frame, result.ram, result.screenshot))
             } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, StatusResponse("invalid request: ${e.message}"))
-                return@post
+                call.respond(HttpStatusCode.InternalServerError, StatusResponse("step failed: ${e.message}"))
             }
-            val screenshotBase64 = if (wantScreenshot) session.getScreenBase64() else null
-            call.respond(StepResponse(session.frameCount, session.getWatchedState(), screenshotBase64))
         }
 
-        // Tap — NOT delegated: same standalone-mode concern as /step
+        // Tap — delegated: toolset.tap handles both standalone and shared mode.
         post("/tap") {
             if (!session.romLoaded) {
                 call.respond(HttpStatusCode.BadRequest, StatusResponse("no ROM loaded"))
@@ -148,33 +133,12 @@ fun Application.configureRoutes(session: EmulatorSession) {
                 call.respond(HttpStatusCode.BadRequest, StatusResponse("invalid request: ${e.message}"))
                 return@post
             }
-
-            val steps = (1..req.count).flatMap {
-                listOf(
-                    StepRequest(listOf(req.button), req.pressFrames),
-                    StepRequest(emptyList(), req.gapFrames)
-                )
+            try {
+                val result = toolset.tap(req.button, req.count, req.pressFrames, req.gapFrames, req.screenshot)
+                call.respond(StepResponse(result.frame, result.ram, result.screenshot))
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.InternalServerError, StatusResponse("tap failed: ${e.message}"))
             }
-
-            if (session.shared) {
-                val latch = session.controller.enqueueSteps(steps)
-                val totalFrames = steps.sumOf { it.frames }
-                val timeoutMs = totalFrames * 50L + 5000L
-                if (!latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)) {
-                    call.respond(
-                        HttpStatusCode.InternalServerError,
-                        StatusResponse("tap timed out waiting for frames")
-                    )
-                    return@post
-                }
-            } else {
-                for (step in steps) {
-                    session.controller.setButtons(step.buttons)
-                    session.advanceFrames(step.frames)
-                }
-            }
-            val screenshotBase64 = if (req.screenshot) session.getScreenBase64() else null
-            call.respond(StepResponse(session.frameCount, session.getWatchedState(), screenshotBase64))
         }
 
         // Screen (binary PNG) — delegated; base64-decode toolset result

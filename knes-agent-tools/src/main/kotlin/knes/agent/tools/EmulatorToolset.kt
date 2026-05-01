@@ -8,6 +8,8 @@ import knes.api.StepRequest
 import knes.debug.GameAction
 import knes.debug.GameProfile
 import knes.debug.actions.ActionRegistry
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 /**
  * Single source of truth for kNES tool surface.
@@ -32,8 +34,7 @@ class EmulatorToolset(
 
     fun step(buttons: List<String>, frames: Int = 1, screenshot: Boolean = false): StepResult {
         require(frames in 1..600) { "frames must be 1..600, got $frames" }
-        val request = StepRequest(buttons = buttons, frames = frames)
-        controller.enqueueSteps(listOf(request)).await()
+        runSteps(listOf(StepRequest(buttons = buttons, frames = frames)))
         return readStepResult(screenshot)
     }
 
@@ -51,14 +52,39 @@ class EmulatorToolset(
                 StepRequest(buttons = emptyList(), frames = gapFrames),
             )
         }
-        controller.enqueueSteps(steps).await()
+        runSteps(steps)
         return readStepResult(screenshot)
     }
 
     fun sequence(steps: List<StepEntry>, screenshot: Boolean = false): StepResult {
         require(steps.isNotEmpty()) { "sequence requires at least one entry" }
-        controller.enqueueSteps(steps.map { StepRequest(it.buttons, it.frames) }).await()
+        runSteps(steps.map { StepRequest(it.buttons, it.frames) })
         return readStepResult(screenshot)
+    }
+
+    /**
+     * Drives a list of steps in both standalone and shared mode.
+     *
+     * Standalone: sets buttons then advances frames synchronously in-thread.
+     * Shared: enqueues steps into the InputQueue and waits for the UI frame-loop to drain them,
+     *         with a timeout of (totalFrames * 50ms + 5000ms slack).
+     */
+    private fun runSteps(steps: List<StepRequest>) {
+        if (session.shared) {
+            val latch = controller.enqueueSteps(steps)
+            val totalFrames = steps.sumOf { it.frames }
+            val timeoutMs = totalFrames * 50L + 5000L
+            if (!latch.await(timeoutMs, TimeUnit.MILLISECONDS)) {
+                throw TimeoutException(
+                    "runSteps timed out waiting for $totalFrames frames (timeout ${timeoutMs}ms)"
+                )
+            }
+        } else {
+            for (step in steps) {
+                controller.setButtons(step.buttons)
+                session.advanceFrames(step.frames)
+            }
+        }
     }
 
     fun getState(): StateSnapshot = StateSnapshot(
