@@ -1,5 +1,8 @@
 package knes.agent.tools
 
+import ai.koog.agents.core.tools.annotations.LLMDescription
+import ai.koog.agents.core.tools.annotations.Tool
+import ai.koog.agents.core.tools.reflect.ToolSet
 import knes.agent.tools.results.*
 import knes.api.ApiController
 import knes.api.EmulatorSession
@@ -18,26 +21,35 @@ import java.util.concurrent.TimeoutException
  *   - `knes-mcp` (MCP server delegates here, no HTTP)
  *   - `knes-agent` (Koog ToolRegistry registers this directly)
  */
+@LLMDescription("Tools for controlling the kNES emulator: input, screenshots, RAM state, profiles, and registered game actions.")
 class EmulatorToolset(
     private val session: EmulatorSession,
     private val controller: ApiController = session.controller,
-) {
+) : ToolSet {
+    @Tool
+    @LLMDescription("Load a NES ROM from the given file path. Requires the Compose UI with embedded API server running on port 6502.")
     fun loadRom(path: String): StatusResult {
         val ok = session.loadRom(path)
         return StatusResult(ok, if (ok) "ROM loaded: $path" else "Failed to load ROM: $path")
     }
 
+    @Tool
+    @LLMDescription("Reset the NES emulator to its initial state")
     fun reset(): StatusResult {
         session.reset()
         return StatusResult(true, "reset")
     }
 
+    @Tool
+    @LLMDescription("Advance emulation by N frames while holding specified buttons. Returns frame count, watched RAM values, and optionally a screenshot.")
     fun step(buttons: List<String>, frames: Int = 1, screenshot: Boolean = false): StepResult {
         require(frames in 1..600) { "frames must be 1..600, got $frames" }
         runSteps(listOf(StepRequest(buttons = buttons, frames = frames)))
         return readStepResult(screenshot)
     }
 
+    @Tool
+    @LLMDescription("Press a button N times with configurable timing. Equivalent to repeated step(button, press_frames) + step([], gap_frames) cycles. Returns frame count, RAM, and optionally a screenshot.")
     fun tap(
         button: String,
         count: Int = 1,
@@ -56,6 +68,8 @@ class EmulatorToolset(
         return readStepResult(screenshot)
     }
 
+    @Tool
+    @LLMDescription("Execute a sequence of button inputs in one call. Each step holds specified buttons for N frames. Returns frame count, RAM, and optionally a screenshot after all steps complete.")
     fun sequence(steps: List<StepEntry>, screenshot: Boolean = false): StepResult {
         require(steps.isNotEmpty()) { "sequence requires at least one entry" }
         runSteps(steps.map { StepRequest(it.buttons, it.frames) })
@@ -87,6 +101,8 @@ class EmulatorToolset(
         }
     }
 
+    @Tool
+    @LLMDescription("Get current emulator state: frame count, watched RAM values, CPU registers, and held buttons")
     fun getState(): StateSnapshot = StateSnapshot(
         frame = session.frameCount,
         ram = session.readWatchedRam(),
@@ -94,8 +110,12 @@ class EmulatorToolset(
         heldButtons = controller.getHeldButtons(),
     )
 
+    @Tool
+    @LLMDescription("Capture a screenshot of the current NES frame as a base64-encoded PNG image")
     fun getScreen(): ScreenPng = ScreenPng(base64 = session.screenshotBase64Png())
 
+    @Tool
+    @LLMDescription("Apply a game profile (e.g. 'smb' for Super Mario Bros, 'ff1' for Final Fantasy) to enable RAM watching for game-specific variables like HP, gold, position")
     fun applyProfile(id: String): StatusResult {
         val profile = GameProfile.get(id) ?: return StatusResult(false, "Unknown profile: $id")
         session.applyProfile(profile)
@@ -103,9 +123,13 @@ class EmulatorToolset(
         return StatusResult(true, "applied: $id")
     }
 
+    @Tool
+    @LLMDescription("List all available game profiles for RAM watching")
     fun listProfiles(): List<ProfileSummary> =
         GameProfile.list().map { ProfileSummary(it.id, it.name, it.description) }
 
+    @Tool
+    @LLMDescription("List available game actions for a profile. Actions are game-specific automation scripts that play like a real NES player — they read the screen and press buttons.")
     fun listActions(profileId: String? = null): List<ActionDescriptor> {
         val map = if (profileId != null) {
             ActionRegistry.ensureLoaded(profileId)
@@ -116,6 +140,8 @@ class EmulatorToolset(
         }
     }
 
+    @Tool
+    @LLMDescription("Execute a game action. Actions play like a real NES player: they read RAM state and press buttons. No memory writes, no cheats. Example: execute_action('ff1', 'battle_fight_all') auto-fights an FF1 battle.")
     fun executeAction(profileId: String, actionId: String, args: Map<String, String> = emptyMap()): ActionToolResult {
         ActionRegistry.ensureLoaded(profileId)
         val action = GameAction.get(profileId, actionId)
@@ -125,11 +151,15 @@ class EmulatorToolset(
         return ActionToolResult(result.success, result.message, result.state.mapValues { it.value.toString() })
     }
 
+    @Tool
+    @LLMDescription("Press and hold one or more buttons (they stay held until released)")
     fun press(buttons: List<String>): StatusResult {
         controller.setButtons(buttons)
         return StatusResult(true, "held: ${controller.getHeldButtons()}")
     }
 
+    @Tool
+    @LLMDescription("Release one or more held buttons")
     fun release(buttons: List<String>): StatusResult {
         if (buttons.isEmpty()) controller.releaseAll()
         else buttons.forEach { controller.releaseButton(controller.resolveButton(it)) }

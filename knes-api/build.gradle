@@ -16,6 +16,7 @@ dependencies {
     implementation project(':knes-controllers')
     implementation project(':knes-debug')
     implementation project(':knes-agent-tools')
+    implementation 'ai.koog:agents-tools:0.5.1'
 
     implementation "io.ktor:ktor-server-core:$ktorVersion"
     implementation "io.ktor:ktor-server-netty:$ktorVersion"
@@ -29,12 +30,12 @@ dependencies {
 }
 
 kotlin {
-    jvmToolchain(11)
+    jvmToolchain(17)
 }
 
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     kotlinOptions {
-        jvmTarget = '11'
+        jvmTarget = '17'
         apiVersion = '2.3'
         languageVersion = '2.3'
     }
@@ -42,7 +43,7 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(11)
+        languageVersion = JavaLanguageVersion.of(17)
     }
 }
 
