@@ -142,7 +142,7 @@ class EmulatorToolset(
 
     @Tool
     @LLMDescription("Execute a game action. Actions play like a real NES player: they read RAM state and press buttons. No memory writes, no cheats. Example: execute_action('ff1', 'battle_fight_all') auto-fights an FF1 battle.")
-    fun executeAction(profileId: String, actionId: String, args: Map<String, String> = emptyMap()): ActionToolResult {
+    fun executeAction(profileId: String, actionId: String): ActionToolResult {
         ActionRegistry.ensureLoaded(profileId)
         val action = GameAction.get(profileId, actionId)
             ?: return ActionToolResult(false, "Action not found: $profileId/$actionId")

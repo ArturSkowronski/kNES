@@ -2,10 +2,7 @@ package knes.agent
 
 import ai.koog.agents.core.agent.AIAgent
 import ai.koog.agents.core.tools.ToolRegistry
-import ai.koog.agents.core.tools.reflect.ToolSet
 import ai.koog.agents.core.tools.reflect.tools
-import ai.koog.agents.core.tools.annotations.LLMDescription
-import ai.koog.agents.core.tools.annotations.Tool
 import ai.koog.agents.ext.agent.reActStrategy
 import ai.koog.prompt.executor.clients.anthropic.AnthropicModels
 import ai.koog.prompt.executor.llms.all.simpleAnthropicExecutor
@@ -13,16 +10,6 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldNotBe
 import knes.agent.tools.EmulatorToolset
 import knes.api.EmulatorSession
-
-/**
- * Minimal ToolSet used by the smoke test. Wraps only get_state to avoid
- * Koog 0.5.1 reflection limitation with Map<String,String> parameters.
- */
-private class GetStateToolset(private val delegate: EmulatorToolset) : ToolSet {
-    @Tool
-    @LLMDescription("Get current emulator state: frame count, watched RAM values, CPU registers, and held buttons")
-    fun get_state() = delegate.getState()
-}
 
 class ReactSmokeTest : FunSpec({
 
@@ -34,7 +21,7 @@ class ReactSmokeTest : FunSpec({
         }
 
         val session = EmulatorSession()
-        val toolset = GetStateToolset(EmulatorToolset(session))
+        val toolset = EmulatorToolset(session)
         val registry = ToolRegistry { tools(toolset) }
 
         val agent = AIAgent(
