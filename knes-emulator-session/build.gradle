@@ -1,0 +1,37 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm'
+    id 'org.jetbrains.kotlin.plugin.serialization' version '2.3.20'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(':knes-emulator')
+    implementation project(':knes-controllers')
+    implementation project(':knes-debug')
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3'
+}
+
+kotlin {
+    jvmToolchain(11)
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    kotlinOptions {
+        jvmTarget = '11'
+        apiVersion = '2.3'
+        languageVersion = '2.3'
+    }
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(11)
+    }
+}
+
+test {
+    useJUnitPlatform()
+}

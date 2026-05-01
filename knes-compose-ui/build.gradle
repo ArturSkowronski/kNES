@@ -29,6 +29,7 @@ dependencies {
     implementation project(':knes-emulator')
     implementation project(':knes-controllers')
     implementation project(':knes-debug')
+    implementation project(':knes-emulator-session')
     implementation project(':knes-api')
     implementation "org.jetbrains.kotlin:kotlin-stdlib"
 
@@ -45,12 +46,12 @@ dependencies {
 }
 
 kotlin {
-    jvmToolchain(11)
+    jvmToolchain(17)
 }
 
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     kotlinOptions {
-        jvmTarget = '11'
+        jvmTarget = '17'
         apiVersion = '2.3'
         languageVersion = '2.3'
     }
@@ -58,10 +59,10 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(11)
+        languageVersion = JavaLanguageVersion.of(17)
     }
-    sourceCompatibility = JavaVersion.VERSION_11
-    targetCompatibility = JavaVersion.VERSION_11
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
 }
 
 sourceSets {

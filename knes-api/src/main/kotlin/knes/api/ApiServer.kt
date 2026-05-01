@@ -7,12 +7,13 @@ import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import knes.agent.tools.EmulatorToolset
 import knes.emulator.input.InputHandler
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 @Serializable data class RomRequest(val path: String)
-@Serializable data class StepRequest(val buttons: List<String> = emptyList(), val frames: Int = 1, val screenshot: Boolean = false)
+// StepRequest is defined in knes-emulator-session module (knes.api package)
 @Serializable data class StepSequence(val sequence: List<StepRequest>, val screenshot: Boolean = false)
 @Serializable data class TapRequest(val button: String, val count: Int = 1, val pressFrames: Int = 5, val gapFrames: Int = 15, val screenshot: Boolean = false)
 @Serializable data class ButtonsRequest(val buttons: List<String>)
@@ -52,80 +53,73 @@ data class ActionExecuteResponse(
 )
 
 fun Application.configureRoutes(session: EmulatorSession) {
+    val toolset = EmulatorToolset(session)
+
     install(ContentNegotiation) {
         json(Json { prettyPrint = true })
     }
 
     routing {
+        // Health — not delegated (reads session fields directly)
         get("/health") {
             call.respond(StatusResponse("ok", session.romLoaded, session.frameCount))
         }
 
+        // ROM load — delegated; shared-mode guard preserved in route
         post("/rom") {
             if (session.shared) {
                 call.respond(HttpStatusCode.BadRequest, StatusResponse("shared mode: use UI to load ROM"))
                 return@post
             }
             val req = call.receive<RomRequest>()
-            val loaded = session.loadRom(req.path)
-            if (loaded) {
+            val result = toolset.loadRom(req.path)
+            if (result.ok) {
                 call.respond(StatusResponse("loaded", romLoaded = true))
             } else {
                 call.respond(HttpStatusCode.BadRequest, StatusResponse("failed"))
             }
         }
 
+        // Reset — delegated; wrap StatusResult → StatusResponse to preserve "status" field
         post("/reset") {
-            session.reset()
+            toolset.reset()
             call.respond(StatusResponse("reset", session.romLoaded, session.frameCount))
         }
 
+        // Step — delegated: toolset.sequence / toolset.step handle both standalone and shared mode.
         post("/step") {
             if (!session.romLoaded) {
                 call.respond(HttpStatusCode.BadRequest, StatusResponse("no ROM loaded"))
                 return@post
             }
             val text = call.receiveText()
-            val parsed: Pair<List<StepRequest>, Boolean>
+            val parsed: Pair<List<knes.agent.tools.results.StepEntry>, Boolean>
             try {
                 parsed = try {
                     val seq = Json.decodeFromString<StepSequence>(text)
-                    Pair(seq.sequence, seq.screenshot)
+                    Pair(seq.sequence.map { knes.agent.tools.results.StepEntry(it.buttons, it.frames) }, seq.screenshot)
                 } catch (e: Exception) {
                     val req = Json.decodeFromString<StepRequest>(text)
-                    Pair(listOf(req), req.screenshot)
+                    Pair(listOf(knes.agent.tools.results.StepEntry(req.buttons, req.frames)), req.screenshot)
                 }
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.BadRequest, StatusResponse("invalid request: ${e.message}"))
                 return@post
             }
-            val (steps, wantScreenshot) = parsed
+            val (entries, wantScreenshot) = parsed
             try {
-                if (session.shared) {
-                    val latch = session.controller.enqueueSteps(steps)
-                    val totalFrames = steps.sumOf { it.frames }
-                    val timeoutMs = totalFrames * 50L + 5000L
-                    if (!latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)) {
-                        call.respond(
-                            HttpStatusCode.InternalServerError,
-                            StatusResponse("step timed out waiting for $totalFrames frames")
-                        )
-                        return@post
-                    }
+                val result = if (entries.size == 1) {
+                    toolset.step(entries[0].buttons, entries[0].frames, wantScreenshot)
                 } else {
-                    for (step in steps) {
-                        session.controller.setButtons(step.buttons)
-                        session.advanceFrames(step.frames)
-                    }
+                    toolset.sequence(entries, wantScreenshot)
                 }
+                call.respond(StepResponse(result.frame, result.ram, result.screenshot))
             } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, StatusResponse("invalid request: ${e.message}"))
-                return@post
+                call.respond(HttpStatusCode.InternalServerError, StatusResponse("step failed: ${e.message}"))
             }
-            val screenshotBase64 = if (wantScreenshot) session.getScreenBase64() else null
-            call.respond(StepResponse(session.frameCount, session.getWatchedState(), screenshotBase64))
         }
 
+        // Tap — delegated: toolset.tap handles both standalone and shared mode.
         post("/tap") {
             if (!session.romLoaded) {
                 call.respond(HttpStatusCode.BadRequest, StatusResponse("no ROM loaded"))
@@ -139,70 +133,44 @@ fun Application.configureRoutes(session: EmulatorSession) {
                 call.respond(HttpStatusCode.BadRequest, StatusResponse("invalid request: ${e.message}"))
                 return@post
             }
-
-            val steps = (1..req.count).flatMap {
-                listOf(
-                    StepRequest(listOf(req.button), req.pressFrames),
-                    StepRequest(emptyList(), req.gapFrames)
-                )
+            try {
+                val result = toolset.tap(req.button, req.count, req.pressFrames, req.gapFrames, req.screenshot)
+                call.respond(StepResponse(result.frame, result.ram, result.screenshot))
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.InternalServerError, StatusResponse("tap failed: ${e.message}"))
             }
-
-            if (session.shared) {
-                val latch = session.controller.enqueueSteps(steps)
-                val totalFrames = steps.sumOf { it.frames }
-                val timeoutMs = totalFrames * 50L + 5000L
-                if (!latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)) {
-                    call.respond(
-                        HttpStatusCode.InternalServerError,
-                        StatusResponse("tap timed out waiting for frames")
-                    )
-                    return@post
-                }
-            } else {
-                for (step in steps) {
-                    session.controller.setButtons(step.buttons)
-                    session.advanceFrames(step.frames)
-                }
-            }
-            val screenshotBase64 = if (req.screenshot) session.getScreenBase64() else null
-            call.respond(StepResponse(session.frameCount, session.getWatchedState(), screenshotBase64))
         }
 
+        // Screen (binary PNG) — delegated; base64-decode toolset result
         get("/screen") {
             if (!session.romLoaded) {
                 call.respond(HttpStatusCode.BadRequest, StatusResponse("no ROM loaded"))
                 return@get
             }
-            call.respondBytes(session.getScreenPng(), ContentType.Image.PNG)
+            val png = java.util.Base64.getDecoder().decode(toolset.getScreen().base64)
+            call.respondBytes(png, ContentType.Image.PNG)
         }
 
+        // Screen (base64) — delegated; wrap into legacy ScreenBase64Response (field: "image")
         get("/screen/base64") {
             if (!session.romLoaded) {
                 call.respond(HttpStatusCode.BadRequest, StatusResponse("no ROM loaded"))
                 return@get
             }
-            call.respond(ScreenBase64Response(session.frameCount, session.getScreenBase64()))
+            val screen = toolset.getScreen()
+            call.respond(ScreenBase64Response(session.frameCount, screen.base64))
         }
 
+        // State — delegated; StateSnapshot serializes ram/cpu/heldButtons (compatible with tests)
         get("/state") {
             if (!session.romLoaded) {
                 call.respond(HttpStatusCode.BadRequest, StatusResponse("no ROM loaded"))
                 return@get
             }
-            call.respond(StateResponse(
-                frame = session.frameCount,
-                ram = session.getWatchedState(),
-                buttons = session.controller.getHeldButtons(),
-                cpu = CpuState(
-                    pc = session.nes.cpu.REG_PC_NEW,
-                    a = session.nes.cpu.REG_ACC_NEW,
-                    x = session.nes.cpu.REG_X_NEW,
-                    y = session.nes.cpu.REG_Y_NEW,
-                    sp = session.nes.cpu.REG_SP
-                )
-            ))
+            call.respond(toolset.getState())
         }
 
+        // Watch — NOT delegated: no toolset method for setting watched addresses
         post("/watch") {
             val req = call.receive<WatchRequest>()
             val addresses = req.addresses.mapValues { (_, v) ->
@@ -212,16 +180,12 @@ fun Application.configureRoutes(session: EmulatorSession) {
             call.respond(StatusResponse("ok", session.romLoaded, session.frameCount))
         }
 
+        // Profiles list — delegated; ProfileSummary serializes id/name/description
         get("/profiles") {
-            val profiles = knes.debug.GameProfile.list().map { mapOf(
-                "id" to it.id,
-                "name" to it.name,
-                "description" to it.description,
-                "addressCount" to it.addresses.size.toString()
-            )}
-            call.respond(profiles)
+            call.respond(toolset.listProfiles())
         }
 
+        // Profile detail — NOT delegated: toolset has no getProfile(); keep using debug API
         get("/profiles/{id}") {
             val id = call.parameters["id"] ?: return@get call.respond(
                 HttpStatusCode.BadRequest, StatusResponse("missing profile id")
@@ -232,32 +196,39 @@ fun Application.configureRoutes(session: EmulatorSession) {
             call.respond(ApiGameProfile.fromDebugProfile(profile))
         }
 
+        // Apply profile — delegated; wrap StatusResult → StatusResponse for 404 case
         post("/profiles/{id}/apply") {
             val id = call.parameters["id"] ?: return@post call.respond(
                 HttpStatusCode.BadRequest, StatusResponse("missing profile id")
             )
-            val profile = knes.debug.GameProfile.get(id) ?: return@post call.respond(
-                HttpStatusCode.NotFound, StatusResponse("profile not found: $id")
-            )
-            session.setWatchedAddresses(profile.toWatchMap())
-            knes.debug.actions.ActionRegistry.ensureLoaded(id)
-            call.respond(StatusResponse("ok", session.romLoaded, session.frameCount))
+            val result = toolset.applyProfile(id)
+            if (!result.ok) {
+                call.respond(HttpStatusCode.NotFound, StatusResponse("profile not found: $id"))
+            } else {
+                call.respond(StatusResponse("ok", session.romLoaded, session.frameCount))
+            }
         }
 
+        // List actions — delegated; ActionDescriptor has id/profileId/description
         get("/profiles/{id}/actions") {
             val id = call.parameters["id"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, StatusResponse("missing profile id"))
 
-            knes.debug.actions.ActionRegistry.ensureLoaded(id)
-            val actions = knes.debug.GameAction.listForProfile(id)
             val state = if (session.romLoaded) session.getWatchedState() else emptyMap()
+            val actions = toolset.listActions(id)
 
+            // canExecute requires loading the action; resolve from GameAction directly
+            knes.debug.actions.ActionRegistry.ensureLoaded(id)
             call.respond(ActionListResponse(
                 profileId = id,
-                actions = actions.map { ActionInfo(it.id, it.description, it.canExecute(state)) }
+                actions = actions.map {
+                    val action = knes.debug.GameAction.get(id, it.id)
+                    ActionInfo(it.id, it.description, action?.canExecute(state) ?: false)
+                }
             ))
         }
 
+        // Execute action — delegated; wrap ActionToolResult → ActionExecuteResponse
         post("/profiles/{id}/actions/{actionId}") {
             val profileId = call.parameters["id"]
                 ?: return@post call.respond(HttpStatusCode.BadRequest, StatusResponse("missing profile id"))
@@ -278,23 +249,23 @@ fun Application.configureRoutes(session: EmulatorSession) {
                     StatusResponse("action '$actionId' cannot execute in current state"))
             }
 
-            val controller = SessionActionController(session)
-            val result = action.execute(controller)
-
+            val result = toolset.executeAction(profileId, actionId)
             call.respond(ActionExecuteResponse(
-                success = result.success,
+                success = result.ok,
                 message = result.message,
-                state = result.state,
-                screenshot = result.screenshot
+                state = result.data.mapValues { it.value.toIntOrNull() ?: 0 },
+                screenshot = null
             ))
         }
 
+        // Register profile — NOT delegated: toolset has no registerProfile()
         post("/profiles") {
             val apiProfile = call.receive<ApiGameProfile>()
             knes.debug.GameProfile.register(apiProfile.toDebugProfile())
             call.respond(StatusResponse("ok", session.romLoaded, session.frameCount))
         }
 
+        // Press — NOT delegated: toolset.press() returns StatusResult; tests check "held" field
         post("/press") {
             val req = call.receive<ButtonsRequest>()
             for (name in req.buttons) {
@@ -303,6 +274,7 @@ fun Application.configureRoutes(session: EmulatorSession) {
             call.respond(ButtonStateResponse("ok", session.controller.getHeldButtons()))
         }
 
+        // Release — NOT delegated: same "held" field concern as /press
         post("/release") {
             val req = call.receive<ButtonsRequest>()
             for (name in req.buttons) {
@@ -316,6 +288,7 @@ fun Application.configureRoutes(session: EmulatorSession) {
             call.respond(ButtonStateResponse("ok", emptyList()))
         }
 
+        // FM2 — NOT delegated: no toolset method for FM2 playback
         post("/fm2") {
             if (!session.romLoaded) {
                 call.respond(HttpStatusCode.BadRequest, StatusResponse("no ROM loaded"))

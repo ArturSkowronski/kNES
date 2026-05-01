@@ -48,3 +48,5 @@ nbdist/
 *.swp
 *.nes
 !**/src/test/resources/*.nes
+knes-agent/runs/
+roms
