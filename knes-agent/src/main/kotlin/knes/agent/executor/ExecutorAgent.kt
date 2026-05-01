@@ -1,7 +1,6 @@
 package knes.agent.executor
 
 import ai.koog.agents.core.agent.AIAgent
-import ai.koog.agents.core.agent.exception.AIAgentMaxNumberOfIterationsReachedException
 import ai.koog.agents.core.tools.ToolRegistry
 import ai.koog.agents.core.tools.reflect.tools
 import ai.koog.agents.ext.agent.reActStrategy
@@ -37,10 +36,13 @@ class ExecutorAgent(
 
     suspend fun run(input: String): String = try {
         agent.run(input)
-    } catch (e: AIAgentMaxNumberOfIterationsReachedException) {
-        // Koog's reActStrategy hit its internal iteration cap (default 50).
-        // The outer AgentSession will observe RAM and decide what to do next.
-        "ITERATION_CAP: ${e.message?.take(120)}"
+    } catch (e: Exception) {
+        // Koog's reActStrategy hits an internal iteration cap (default 50) and throws
+        // AIAgentMaxNumberOfIterationsReachedException — but that class is `internal`.
+        // Match by class name; let anything else propagate.
+        if (e::class.simpleName == "AIAgentMaxNumberOfIterationsReachedException") {
+            "ITERATION_CAP: ${e.message?.take(120)}"
+        } else throw e
     }
 
     companion object {
