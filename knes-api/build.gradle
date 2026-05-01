@@ -11,9 +11,11 @@ repositories {
 def ktorVersion = '3.1.3'
 
 dependencies {
+    implementation project(':knes-emulator-session')
     implementation project(':knes-emulator')
     implementation project(':knes-controllers')
     implementation project(':knes-debug')
+    implementation project(':knes-agent-tools')
 
     implementation "io.ktor:ktor-server-core:$ktorVersion"
     implementation "io.ktor:ktor-server-netty:$ktorVersion"
