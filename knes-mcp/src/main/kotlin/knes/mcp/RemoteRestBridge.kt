@@ -2,7 +2,6 @@ package knes.mcp
 
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
-import io.modelcontextprotocol.kotlin.sdk.server.StdioServerTransport
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.ContentBlock
 import io.modelcontextprotocol.kotlin.sdk.types.ImageContent
@@ -10,14 +9,6 @@ import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
-import knes.agent.tools.EmulatorToolset
-import knes.agent.tools.results.StepEntry
-import knes.api.EmulatorSession
-import kotlinx.io.asSink
-import kotlinx.io.asSource
-import kotlinx.io.buffered
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -26,15 +17,15 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 
 /**
- * In-process MCP server that delegates to [EmulatorToolset].
+ * Legacy REST-bridge MCP server.
  *
- * Runs the emulator directly — no separate REST process required.
- * Use [createRemoteMcpServer] (--remote flag) for the legacy REST-bridge mode
- * where the Compose UI hosts the emulator on port 6502.
+ * Connects to the Compose UI's embedded API server (localhost:6502) so the LLM
+ * can control the emulator while the user watches on screen.
+ *
+ * Start the Compose UI first, click "API Server", then launch with --remote.
  */
-fun createMcpServer(): Server {
-    val session = EmulatorSession()
-    val toolset = EmulatorToolset(session)
+fun createRemoteMcpServer(): Server {
+    val api = RestApiClient()
 
     val server = Server(
         serverInfo = Implementation(
@@ -47,8 +38,6 @@ fun createMcpServer(): Server {
             )
         )
     )
-
-    val json = Json { encodeDefaults = true }
 
     // 1. load_rom
     server.addTool(
@@ -66,11 +55,14 @@ fun createMcpServer(): Server {
     ) { request ->
         val path = request.arguments?.get("path")?.jsonPrimitive?.content
             ?: return@addTool CallToolResult(content = listOf(TextContent("Missing required parameter: path")), isError = true)
-        val result = toolset.loadRom(path)
-        if (result.ok) {
-            CallToolResult(content = listOf(TextContent(result.message)))
+        if (!api.isAvailable()) {
+            return@addTool CallToolResult(content = listOf(TextContent("Cannot connect to kNES API on port 6502. Start the Compose UI and click 'API Server' first.")), isError = true)
+        }
+        val resp = api.postJson("/rom", """{"path":"$path"}""")
+        if (resp.ok) {
+            CallToolResult(content = listOf(TextContent("ROM loaded: $path")))
         } else {
-            CallToolResult(content = listOf(TextContent(result.message)), isError = true)
+            CallToolResult(content = listOf(TextContent("Failed to load ROM: ${resp.body}")), isError = true)
         }
     }
 
@@ -100,11 +92,20 @@ fun createMcpServer(): Server {
         val buttons = request.arguments?.get("buttons")?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
         val frames = request.arguments?.get("frames")?.jsonPrimitive?.content?.toIntOrNull() ?: 1
         val screenshot = request.arguments?.get("screenshot")?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
-        val result = toolset.step(buttons, frames, screenshot)
-        val text = json.encodeToString(result)
-        val content = mutableListOf<ContentBlock>(TextContent(text))
-        result.screenshot?.let { content.add(ImageContent(data = it, mimeType = "image/png")) }
-        CallToolResult(content = content)
+        val buttonsJson = buttons.joinToString(",") { "\"$it\"" }
+        val resp = api.postJson("/step", """{"buttons":[$buttonsJson],"frames":$frames,"screenshot":$screenshot}""")
+        if (resp.ok) {
+            val content = mutableListOf<ContentBlock>(TextContent(resp.body))
+            if (screenshot) {
+                val imageMatch = Regex(""""screenshot"\s*:\s*"([^"]+)"""").find(resp.body)
+                if (imageMatch != null) {
+                    content.add(ImageContent(data = imageMatch.groupValues[1], mimeType = "image/png"))
+                }
+            }
+            CallToolResult(content = content)
+        } else {
+            CallToolResult(content = listOf(TextContent("step failed: ${resp.body}")), isError = true)
+        }
     }
 
     // 2b. tap
@@ -143,11 +144,19 @@ fun createMcpServer(): Server {
         val pressFrames = request.arguments?.get("press_frames")?.jsonPrimitive?.content?.toIntOrNull() ?: 5
         val gapFrames = request.arguments?.get("gap_frames")?.jsonPrimitive?.content?.toIntOrNull() ?: 15
         val screenshot = request.arguments?.get("screenshot")?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
-        val result = toolset.tap(button, count, pressFrames, gapFrames, screenshot)
-        val text = json.encodeToString(result)
-        val content = mutableListOf<ContentBlock>(TextContent(text))
-        result.screenshot?.let { content.add(ImageContent(data = it, mimeType = "image/png")) }
-        CallToolResult(content = content)
+        val resp = api.postJson("/tap", """{"button":"$button","count":$count,"pressFrames":$pressFrames,"gapFrames":$gapFrames,"screenshot":$screenshot}""")
+        if (resp.ok) {
+            val content = mutableListOf<ContentBlock>(TextContent(resp.body))
+            if (screenshot) {
+                val imageMatch = Regex(""""screenshot"\s*:\s*"([^"]+)"""").find(resp.body)
+                if (imageMatch != null) {
+                    content.add(ImageContent(data = imageMatch.groupValues[1], mimeType = "image/png"))
+                }
+            }
+            CallToolResult(content = content)
+        } else {
+            CallToolResult(content = listOf(TextContent("tap failed: ${resp.body}")), isError = true)
+        }
     }
 
     // 2c. sequence
@@ -183,17 +192,26 @@ fun createMcpServer(): Server {
         val stepsArray = request.arguments?.get("steps")?.jsonArray
             ?: return@addTool CallToolResult(content = listOf(TextContent("Missing: steps")), isError = true)
         val screenshot = request.arguments?.get("screenshot")?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
-        val steps = stepsArray.map { step ->
+
+        val stepsJson = stepsArray.joinToString(",") { step ->
             val obj = step.jsonObject
-            val buttons = obj["buttons"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
-            val frames = obj["frames"]?.jsonPrimitive?.content?.toIntOrNull() ?: 1
-            StepEntry(buttons, frames)
+            val buttons = obj["buttons"]?.jsonArray?.joinToString(",") { "\"${it.jsonPrimitive.content}\"" } ?: ""
+            val frames = obj["frames"]?.jsonPrimitive?.content ?: "1"
+            """{"buttons":[$buttons],"frames":$frames}"""
         }
-        val result = toolset.sequence(steps, screenshot)
-        val text = json.encodeToString(result)
-        val content = mutableListOf<ContentBlock>(TextContent(text))
-        result.screenshot?.let { content.add(ImageContent(data = it, mimeType = "image/png")) }
-        CallToolResult(content = content)
+        val resp = api.postJson("/step", """{"sequence":[$stepsJson],"screenshot":$screenshot}""")
+        if (resp.ok) {
+            val content = mutableListOf<ContentBlock>(TextContent(resp.body))
+            if (screenshot) {
+                val imageMatch = Regex(""""screenshot"\s*:\s*"([^"]+)"""").find(resp.body)
+                if (imageMatch != null) {
+                    content.add(ImageContent(data = imageMatch.groupValues[1], mimeType = "image/png"))
+                }
+            }
+            CallToolResult(content = content)
+        } else {
+            CallToolResult(content = listOf(TextContent("sequence failed: ${resp.body}")), isError = true)
+        }
     }
 
     // 3. get_state
@@ -201,8 +219,12 @@ fun createMcpServer(): Server {
         name = "get_state",
         description = "Get current emulator state: frame count, watched RAM values, CPU registers, and held buttons"
     ) { _ ->
-        val result = toolset.getState()
-        CallToolResult(content = listOf(TextContent(json.encodeToString(result))))
+        val resp = api.get("/state")
+        if (resp.ok) {
+            CallToolResult(content = listOf(TextContent(resp.body)))
+        } else {
+            CallToolResult(content = listOf(TextContent("get_state failed: ${resp.body}")), isError = true)
+        }
     }
 
     // 4. get_screen
@@ -210,8 +232,18 @@ fun createMcpServer(): Server {
         name = "get_screen",
         description = "Capture a screenshot of the current NES frame as a base64-encoded PNG image"
     ) { _ ->
-        val result = toolset.getScreen()
-        CallToolResult(content = listOf(ImageContent(data = result.base64, mimeType = "image/png")))
+        val resp = api.get("/screen/base64")
+        if (resp.ok) {
+            // Extract base64 image from JSON response {"frame":N,"image":"..."}
+            val imageMatch = Regex(""""image"\s*:\s*"([^"]+)"""").find(resp.body)
+            if (imageMatch != null) {
+                CallToolResult(content = listOf(ImageContent(data = imageMatch.groupValues[1], mimeType = "image/png")))
+            } else {
+                CallToolResult(content = listOf(TextContent(resp.body)))
+            }
+        } else {
+            CallToolResult(content = listOf(TextContent("get_screen failed: ${resp.body}")), isError = true)
+        }
     }
 
     // 5. apply_profile
@@ -230,11 +262,11 @@ fun createMcpServer(): Server {
     ) { request ->
         val id = request.arguments?.get("profile_id")?.jsonPrimitive?.content
             ?: return@addTool CallToolResult(content = listOf(TextContent("Missing: profile_id")), isError = true)
-        val result = toolset.applyProfile(id)
-        if (result.ok) {
+        val resp = api.postJson("/profiles/$id/apply", "")
+        if (resp.ok) {
             CallToolResult(content = listOf(TextContent("Profile '$id' applied. RAM values will appear in step and get_state responses.")))
         } else {
-            CallToolResult(content = listOf(TextContent(result.message)), isError = true)
+            CallToolResult(content = listOf(TextContent("Failed to apply profile: ${resp.body}")), isError = true)
         }
     }
 
@@ -256,8 +288,15 @@ fun createMcpServer(): Server {
             ?: return@addTool CallToolResult(
                 content = listOf(TextContent("Missing profile_id")), isError = true
             )
-        val actions = toolset.listActions(profileId)
-        CallToolResult(content = listOf(TextContent(json.encodeToString(actions))))
+
+        val resp = api.get("/profiles/$profileId/actions")
+        if (resp.ok) {
+            CallToolResult(content = listOf(TextContent(resp.body)))
+        } else {
+            CallToolResult(
+                content = listOf(TextContent("list_actions failed: ${resp.body}")), isError = true
+            )
+        }
     }
 
     // 5c. execute_action
@@ -291,11 +330,25 @@ fun createMcpServer(): Server {
                 content = listOf(TextContent("Missing action_id")), isError = true
             )
         val screenshot = request.arguments?.get("screenshot")?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: true
-        val result = toolset.executeAction(profileId, actionId)
-        val text = json.encodeToString(result)
-        val content = mutableListOf<ContentBlock>(TextContent(text))
-        // executeAction doesn't return a screenshot directly; get_screen can be called separately
-        CallToolResult(content = content, isError = !result.ok)
+
+        val resp = api.postJson(
+            "/profiles/$profileId/actions/$actionId",
+            """{"screenshot":$screenshot}"""
+        )
+        if (resp.ok) {
+            val content = mutableListOf<ContentBlock>(TextContent(resp.body))
+            if (screenshot) {
+                val imageMatch = Regex(""""screenshot"\s*:\s*"([^"]+)"""").find(resp.body)
+                if (imageMatch != null) {
+                    content.add(ImageContent(data = imageMatch.groupValues[1], mimeType = "image/png"))
+                }
+            }
+            CallToolResult(content = content)
+        } else {
+            CallToolResult(
+                content = listOf(TextContent("execute_action failed: ${resp.body}")), isError = true
+            )
+        }
     }
 
     // 6. list_profiles
@@ -303,8 +356,12 @@ fun createMcpServer(): Server {
         name = "list_profiles",
         description = "List all available game profiles for RAM watching"
     ) { _ ->
-        val profiles = toolset.listProfiles()
-        CallToolResult(content = listOf(TextContent(json.encodeToString(profiles))))
+        val resp = api.get("/profiles")
+        if (resp.ok) {
+            CallToolResult(content = listOf(TextContent(resp.body)))
+        } else {
+            CallToolResult(content = listOf(TextContent("list_profiles failed: ${resp.body}")), isError = true)
+        }
     }
 
     // 7. press
@@ -324,8 +381,9 @@ fun createMcpServer(): Server {
     ) { request ->
         val buttons = request.arguments?.get("buttons")?.jsonArray?.map { it.jsonPrimitive.content }
             ?: return@addTool CallToolResult(content = listOf(TextContent("Missing: buttons")), isError = true)
-        val result = toolset.press(buttons)
-        CallToolResult(content = listOf(TextContent(json.encodeToString(result))))
+        val json = buttons.joinToString(",") { "\"$it\"" }
+        val resp = api.postJson("/press", """{"buttons":[$json]}""")
+        CallToolResult(content = listOf(TextContent(resp.body)))
     }
 
     // 8. release
@@ -345,8 +403,9 @@ fun createMcpServer(): Server {
     ) { request ->
         val buttons = request.arguments?.get("buttons")?.jsonArray?.map { it.jsonPrimitive.content }
             ?: return@addTool CallToolResult(content = listOf(TextContent("Missing: buttons")), isError = true)
-        val result = toolset.release(buttons)
-        CallToolResult(content = listOf(TextContent(json.encodeToString(result))))
+        val json = buttons.joinToString(",") { "\"$it\"" }
+        val resp = api.postJson("/release", """{"buttons":[$json]}""")
+        CallToolResult(content = listOf(TextContent(resp.body)))
     }
 
     // 9. reset
@@ -354,22 +413,9 @@ fun createMcpServer(): Server {
         name = "reset",
         description = "Reset the NES emulator to its initial state"
     ) { _ ->
-        val result = toolset.reset()
-        CallToolResult(content = listOf(TextContent(json.encodeToString(result))))
+        val resp = api.postJson("/reset", "")
+        CallToolResult(content = listOf(TextContent(resp.body)))
     }
 
     return server
-}
-
-fun runMcpServer(server: Server) {
-    val transport = StdioServerTransport(
-        inputStream = System.`in`.asSource().buffered(),
-        outputStream = System.out.asSink().buffered()
-    )
-    kotlinx.coroutines.runBlocking {
-        server.createSession(transport)
-        val done = kotlinx.coroutines.Job()
-        server.onClose { done.complete() }
-        done.join()
-    }
 }

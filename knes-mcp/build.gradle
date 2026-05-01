@@ -13,6 +13,7 @@ dependencies {
     implementation project(':knes-controllers')
     implementation project(':knes-debug')
     implementation project(':knes-emulator-session')
+    implementation project(':knes-agent-tools')
     implementation project(':knes-api')
 
     implementation "io.modelcontextprotocol:kotlin-sdk:0.8.3"
