@@ -35,7 +35,7 @@ class ExecutorAgent(
         toolRegistry = registry,
         strategy = singleRunStrategy(),
         systemPrompt = ff1ExecutorSystemPrompt,
-        maxIterations = 10,   // Koog counts node executions, not LLM calls. 10 allows 1-2 tool calls + final response without runaway.
+        maxIterations = 20,   // Koog counts node executions, not LLM calls. V2.3 adds findPath; the model may chain findPath → walkOverworldTo (2 tool calls = ~6-8 iterations) plus final response. 20 leaves slack without runaway.
     )
 
     suspend fun run(phase: FfPhase, input: String): String = try {
