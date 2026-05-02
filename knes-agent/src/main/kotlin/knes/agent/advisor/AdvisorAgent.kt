@@ -1,44 +1,47 @@
 package knes.agent.advisor
 
 import ai.koog.agents.core.agent.AIAgent
+import ai.koog.agents.core.agent.singleRunStrategy
 import ai.koog.agents.core.tools.ToolRegistry
 import ai.koog.agents.core.tools.reflect.tools
-import ai.koog.agents.ext.agent.reActStrategy
-import ai.koog.prompt.executor.clients.anthropic.AnthropicLLMClient
-import ai.koog.prompt.executor.clients.anthropic.AnthropicModels
-import ai.koog.prompt.executor.llms.SingleLLMPromptExecutor
-import ai.koog.prompt.llm.LLModel
+import knes.agent.llm.AgentRole
+import knes.agent.llm.AnthropicSession
+import knes.agent.llm.ModelRouter
+import knes.agent.perception.FfPhase
 import knes.agent.tools.EmulatorToolset
 
 /**
- * Single-shot planner. Given the current observation (text + optional screenshot path),
- * returns a short numbered plan-of-attack the executor will follow until the next phase change.
- *
- * Read-only access: only `getState` and `getScreen` are exposed via a wrapper toolset
- * (the advisor must not change game state). It returns plan text; the executor consumes it.
+ * Single-shot planner. Each plan() call does ONE Koog AIAgent.run (singleRunStrategy):
+ * the LLM either returns plain text or invokes one read-only tool (getState/getScreen).
+ * Read-only access — advisor must never mutate emulator state.
  */
 class AdvisorAgent(
-    private val apiKey: String,
+    private val anthropic: AnthropicSession,
+    private val modelRouter: ModelRouter,
     private val toolset: EmulatorToolset,
-    private val model: LLModel = AnthropicModels.Opus_4,   // confirmed: Opus_4 = claude-opus-4-0
 ) {
     private val readOnlyTools = ReadOnlyToolset(toolset)
     private val registry = ToolRegistry { tools(readOnlyTools) }
 
-    // Koog's AIAgent is single-use; build a fresh instance + executor per plan call.
-    private fun newAgent(): AIAgent<String, String> = AIAgent(
-        promptExecutor = SingleLLMPromptExecutor(AnthropicLLMClient(apiKey)),
-        llmModel = model,
+    private fun newAgent(phase: FfPhase): AIAgent<String, String> = AIAgent(
+        promptExecutor = anthropic.executor,
+        llmModel = modelRouter.modelFor(phase, AgentRole.ADVISOR),
         toolRegistry = registry,
-        strategy = reActStrategy(reasoningInterval = 1, name = "ff1_advisor"),
-        systemPrompt = """
+        strategy = singleRunStrategy(),
+        systemPrompt = systemPrompt,
+    )
+
+    suspend fun plan(phase: FfPhase, observation: String): String =
+        newAgent(phase).run(observation)
+
+    companion object {
+        val systemPrompt: String = """
             You are the planner for an autonomous Final Fantasy (NES) agent.
             Given the current emulator state, output a short numbered plan (1–6 steps) the
             executor will follow until the next phase change. Each step must be actionable
-            using the kNES tool surface (step / tap / sequence / execute_action).
+            using the available kNES skills (pressStartUntilOverworld, walkOverworldTo,
+            battleFightAll, walkUntilEncounter).
             Do NOT execute the plan yourself; only describe it as text.
-        """.trimIndent(),
-    )
-
-    suspend fun plan(observation: String): String = newAgent().run(observation)
+        """.trimIndent()
+    }
 }
