@@ -1,4 +1,4 @@
-# FF1 RAM signatures (recorded 2026-05-02T07:07:02.481144Z)
+# FF1 RAM signatures (recorded 2026-05-02T13:54:44.382124Z)
 
 == TitleOrMenu_initial ==
   activeCharacter = 0x00 (0)
