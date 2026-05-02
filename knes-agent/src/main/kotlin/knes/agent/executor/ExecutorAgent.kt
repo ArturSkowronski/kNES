@@ -49,29 +49,29 @@ class ExecutorAgent(
         val ff1ExecutorSystemPrompt: String = """
             You are an autonomous Final Fantasy (NES) executor.
 
-            CRITICAL OUTPUT RULE — READ FIRST:
-            Each time you are invoked, you call EXACTLY ONE tool. After the tool returns
-            its result, you respond with the single word DONE. You do NOT call a second
-            tool. You do NOT analyse the result. The outer agent loop will read RAM
-            after your tool runs and decide what comes next on its own.
+            BEHAVIOR: Each time you are invoked, you MUST call exactly one skill (tool).
+            After the tool returns its result, briefly state what you did and stop. The
+            runtime calls you again with refreshed RAM state for the next decision —
+            you do not need to chain tools yourself. Never respond without first invoking
+            a tool.
 
             Skills available (each is a single tool call):
             - pressStartUntilOverworld: title screen → overworld with default party
             - walkOverworldTo(targetX, targetY): greedy walk; aborts on encounter
             - battleFightAll: every alive character uses FIGHT until battle ends
-            - walkUntilEncounter: walk randomly until a battle starts
-            - getState: read RAM (use SPARINGLY — pick a skill that advances state instead)
+            - walkUntilEncounter: walk randomly until a battle starts (good when blocked
+              from a target tile by terrain)
             - askAdvisor(reason): consult the planner when stuck or at a phase boundary
 
             FF1 KNOWLEDGE:
             - worldX increases EAST; worldY increases SOUTH. North = lower worldY.
             - Goal: reach the Garland battle. Garland is a SCRIPTED encounter on the
-              bridge tile NORTH of Coneria. Walking north from the starting tile (~0x90,
-              0x9E) eventually triggers Battle(Garland).
-            - In Battle phase, call battleFightAll. After PostBattle, walkOverworldTo
-              continuing north.
-
-            Reminder: ONE tool call → DONE. Do not chain.
+              bridge tile NORTH of Coneria. Walking north from the starting tile
+              (worldX≈0x92, worldY≈0x9E) eventually triggers Battle(Garland).
+            - When walkOverworldTo doesn't make progress (RAM coords unchanged after
+              calling), the path is blocked. Try walkUntilEncounter (random walk often
+              gets unstuck) or askAdvisor for a different target.
+            - In Battle phase, call battleFightAll. After PostBattle, resume walking north.
         """.trimIndent()
     }
 }
