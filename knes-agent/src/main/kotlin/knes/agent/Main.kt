@@ -33,10 +33,10 @@ fun main(args: Array<String>) {
             require(toolset.applyProfile(profile).ok) { "Failed to apply profile: $profile" }
 
             val router = ModelRouter()
-            val observer = RamObserver(toolset)
-            val advisor = AdvisorAgent(anthropic, router, toolset)
             val overworldMap = OverworldMap.fromRom(File(rom))
             val fog = FogOfWar()
+            val observer = RamObserver(toolset, overworldMap)
+            val advisor = AdvisorAgent(anthropic, router, toolset, viewportSource = overworldMap, fog = fog)
             val executor = ExecutorAgent(anthropic, router, toolset, advisor, overworldMap, fog)
 
             AgentSession(
