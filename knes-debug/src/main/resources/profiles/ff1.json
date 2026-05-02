@@ -5,6 +5,7 @@
   "addresses": {
     "screenState": {"address": "0x0081", "description": "Screen state (0x68=battle, 0x63=map after battle)"},
     "locationType": {"address": "0x000D", "description": "Location type (0x00=outside/overworld, 0xD1=inside)"},
+    "currentMapId": {"address": "0x0048", "description": "Current interior map index (0=overworld N/A, non-zero=specific castle/town/dungeon map)"},
     "menuCursor": {"address": "0x0062", "description": "Menu cursor position / finger position"},
     "menuHandX": {"address": "0x6AE3", "description": "Menu hand cursor screen X coordinate"},
     "menuHandY": {"address": "0x6AE4", "description": "Menu hand cursor screen Y coordinate"},
