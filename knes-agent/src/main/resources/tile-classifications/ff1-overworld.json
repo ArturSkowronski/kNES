@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "rom": "ff1-us-rev-a",
+  "byType": {
+    "GRASS":    [0],
+    "FOREST":   [],
+    "MOUNTAIN": [],
+    "WATER":    [],
+    "BRIDGE":   [],
+    "ROAD":     [],
+    "TOWN":     [],
+    "CASTLE":   []
+  }
+}
