@@ -7,18 +7,28 @@ import ai.koog.agents.core.tools.reflect.tools
 import knes.agent.llm.AgentRole
 import knes.agent.llm.AnthropicSession
 import knes.agent.llm.ModelRouter
+import knes.agent.perception.AsciiMapRenderer
 import knes.agent.perception.FfPhase
+import knes.agent.perception.FogOfWar
+import knes.agent.perception.ViewportSource
 import knes.agent.tools.EmulatorToolset
 
 /**
  * Single-shot planner. Each plan() call does ONE Koog AIAgent.run (singleRunStrategy):
  * the LLM either returns plain text or invokes one read-only tool (getState/getScreen).
  * Read-only access — advisor must never mutate emulator state.
+ *
+ * V2.3: when called with an Overworld phase and a configured ViewportSource + FogOfWar,
+ * the user-facing observation is augmented with an ASCII map (terrain + fog stats +
+ * blocked tiles) — Gemini-PP finding: textual tile grids match raw screenshots for
+ * spatial reasoning at much lower cost.
  */
 class AdvisorAgent(
     private val anthropic: AnthropicSession,
     private val modelRouter: ModelRouter,
     private val toolset: EmulatorToolset,
+    private val viewportSource: ViewportSource? = null,
+    private val fog: FogOfWar? = null,
 ) {
     private val readOnlyTools = ReadOnlyToolset(toolset)
     private val registry = ToolRegistry { tools(readOnlyTools) }
@@ -32,12 +42,30 @@ class AdvisorAgent(
         maxIterations = 8,   // Koog counts node executions; advisor may inspect state once + produce plan
     )
 
-    suspend fun plan(phase: FfPhase, observation: String): String = try {
-        newAgent(phase).run(observation)
-    } catch (e: Exception) {
-        if (e::class.simpleName == "AIAgentMaxNumberOfIterationsReachedException") {
-            "ADVISOR_ITERATION_CAP: stay the course with previous plan"
-        } else throw e
+    suspend fun plan(phase: FfPhase, observation: String): String {
+        val augmented = augmentForOverworld(phase, observation)
+        return try {
+            newAgent(phase).run(augmented)
+        } catch (e: Exception) {
+            if (e::class.simpleName == "AIAgentMaxNumberOfIterationsReachedException") {
+                "ADVISOR_ITERATION_CAP: stay the course with previous plan"
+            } else throw e
+        }
+    }
+
+    private fun augmentForOverworld(phase: FfPhase, observation: String): String {
+        if (phase !is FfPhase.Overworld) return observation
+        val src = viewportSource ?: return observation
+        val f = fog ?: return observation
+        val viewport = src.readViewport(phase.x to phase.y)
+        f.merge(viewport)
+        val mapBlock = AsciiMapRenderer.render(viewport, f)
+        return buildString {
+            append(observation)
+            if (!observation.endsWith('\n')) append('\n')
+            append('\n')
+            append(mapBlock)
+        }
     }
 
     companion object {
@@ -61,6 +89,12 @@ class AdvisorAgent(
                 emerged.
               - Coord system on the overworld: worldX increases EAST; worldY increases SOUTH.
                 Lower worldY = north, higher worldY = south.
+              - V2.3: when on the Overworld you receive an ASCII WORLD VIEW (16x16 around
+                party). Glyphs: @=party, .=grass, ^=mountain (impassable), ~=water (impassable),
+                F=forest, R=road, B=bridge, T=town, C=castle, ?=unseen, X=blocked-confirmed.
+                Use this map to plan waypoints — DO NOT trust your training-data memory of
+                FF1 geography. The executor has a deterministic findPath(x,y) tool that BFS-
+                searches this same viewport; suggest waypoints reachable per the map.
               - **CRITICAL: After party creation in V2, the party usually starts INSIDE
                 Coneria castle (Indoors), not on the overworld.** First action when you see
                 Indoors should be exitBuilding. Then navigate north on the overworld.
