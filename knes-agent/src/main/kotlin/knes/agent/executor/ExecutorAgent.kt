@@ -31,7 +31,7 @@ class ExecutorAgent(
         toolRegistry = registry,
         strategy = singleRunStrategy(),
         systemPrompt = ff1ExecutorSystemPrompt,
-        maxIterations = 2,   // 1 LLM call → tool call → 1 LLM call → final text. Hard cap on loop.
+        maxIterations = 10,   // Koog counts node executions, not LLM calls. 10 allows 1-2 tool calls + final response without runaway.
     )
 
     suspend fun run(phase: FfPhase, input: String): String = try {

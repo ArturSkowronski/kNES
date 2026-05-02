@@ -29,7 +29,7 @@ class AdvisorAgent(
         toolRegistry = registry,
         strategy = singleRunStrategy(),
         systemPrompt = systemPrompt,
-        maxIterations = 4,   // advisor may call getState/getScreen 1-2 times then produce plan
+        maxIterations = 8,   // Koog counts node executions; advisor may inspect state once + produce plan
     )
 
     suspend fun plan(phase: FfPhase, observation: String): String = try {
