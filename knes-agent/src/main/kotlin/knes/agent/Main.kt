@@ -4,7 +4,10 @@ import knes.agent.advisor.AdvisorAgent
 import knes.agent.executor.ExecutorAgent
 import knes.agent.llm.AnthropicSession
 import knes.agent.llm.ModelRouter
+import knes.agent.perception.FogOfWar
+import knes.agent.perception.OverworldMap
 import knes.agent.perception.RamObserver
+import java.io.File
 import knes.agent.runtime.AgentSession
 import knes.agent.runtime.Budget
 import knes.agent.runtime.Outcome
@@ -30,9 +33,11 @@ fun main(args: Array<String>) {
             require(toolset.applyProfile(profile).ok) { "Failed to apply profile: $profile" }
 
             val router = ModelRouter()
-            val observer = RamObserver(toolset)
-            val advisor = AdvisorAgent(anthropic, router, toolset)
-            val executor = ExecutorAgent(anthropic, router, toolset, advisor)
+            val overworldMap = OverworldMap.fromRom(File(rom))
+            val fog = FogOfWar()
+            val observer = RamObserver(toolset, overworldMap)
+            val advisor = AdvisorAgent(anthropic, router, toolset, viewportSource = overworldMap, fog = fog)
+            val executor = ExecutorAgent(anthropic, router, toolset, advisor, overworldMap, fog)
 
             AgentSession(
                 toolset = toolset,

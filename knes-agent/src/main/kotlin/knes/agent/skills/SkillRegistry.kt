@@ -3,35 +3,28 @@ package knes.agent.skills
 import ai.koog.agents.core.tools.annotations.LLMDescription
 import ai.koog.agents.core.tools.annotations.Tool
 import ai.koog.agents.core.tools.reflect.ToolSet
+import knes.agent.perception.FogOfWar
+import knes.agent.perception.ViewportSource
+import knes.agent.pathfinding.Pathfinder
+import knes.agent.pathfinding.ViewportPathfinder
 import knes.agent.tools.EmulatorToolset
 import knes.agent.tools.results.ActionToolResult
 import knes.agent.tools.results.StateSnapshot
 
-/**
- * V2's reduced LLM-facing tool surface (spec §5).
- *
- *   pressStartUntilOverworld                                      — V2 skill (mashes through title→party→overworld)
- *   walkOverworldTo                                               — V2 skill (greedy directional walk)
- *   battleFightAll / walkUntilEncounter                           — wrappers around existing ff1 GameActions
- *   getState                                                      — read-only state snapshot
- *
- * `askAdvisor` is registered separately by the executor (it lives on the advisor side; not in this ToolSet).
- *
- * `CreateDefaultParty` was intentionally skipped — `PressStartUntilOverworld` already drives the
- * full title→party→overworld sequence by A-mashing through default class confirmations. If V3
- * needs deliberate class selection, add `CreateDefaultParty` then.
- *
- * Raw step/tap/sequence/press/release/loadRom/reset/applyProfile remain on EmulatorToolset
- * (used by Skill implementations and by the Ktor / MCP layers) but are NOT in this ToolSet.
- */
 @LLMDescription(
     "FF1 macro skills: scripted high-level actions that drive the emulator. Pick one per " +
         "outer turn; observe the resulting RAM state and choose the next skill."
 )
-class SkillRegistry(private val toolset: EmulatorToolset) : ToolSet {
+class SkillRegistry(
+    private val toolset: EmulatorToolset,
+    private val viewportSource: ViewportSource,
+    private val fog: FogOfWar,
+    private val pathfinder: Pathfinder = ViewportPathfinder(),
+) : ToolSet {
 
     private val pressStartSkill = PressStartUntilOverworld(toolset)
-    private val walkSkill = WalkOverworldTo(toolset)
+    private val walkSkill = WalkOverworldTo(toolset, viewportSource, fog, pathfinder)
+    private val exitSkill = ExitBuilding(toolset)
 
     @Tool
     @LLMDescription(
@@ -44,10 +37,43 @@ class SkillRegistry(private val toolset: EmulatorToolset) : ToolSet {
 
     @Tool
     @LLMDescription(
-        "Walk on the FF1 overworld toward (targetX, targetY) greedily, one tile at a time. " +
-            "Returns ok=true if the target is reached OR a random encounter starts."
+        "Exit the current building / town / castle interior by walking SOUTH until RAM " +
+            "locationType (0x000D) becomes 0x00 (outside). Use this when phase is Indoors."
     )
-    suspend fun walkOverworldTo(targetX: Int, targetY: Int, maxSteps: Int = 200): SkillResult =
+    suspend fun exitBuilding(maxSteps: Int = 30): SkillResult =
+        exitSkill.invoke(mapOf("maxSteps" to "$maxSteps"))
+
+    @Tool
+    @LLMDescription(
+        "Find a walkable path from current party position to target world coordinates within " +
+            "the visible 16x16 viewport. Returns 'PATH n steps: D,D,...' if reachable, " +
+            "'PARTIAL n steps to (x,y); target outside viewport' if partial, or 'BLOCKED reason' " +
+            "if no path. Deterministic — does not consume LLM tokens."
+    )
+    fun findPath(targetX: Int, targetY: Int): String {
+        val ram = toolset.getState().ram
+        val from = (ram["worldX"] ?: 0) to (ram["worldY"] ?: 0)
+        val viewport = viewportSource.readViewport(from)
+        fog.merge(viewport)
+        val res = pathfinder.findPath(from, targetX to targetY, viewport, fog)
+        return when {
+            res.found && !res.partial ->
+                "PATH ${res.steps.size} steps: ${res.steps.joinToString(",") { it.name }}"
+            res.found && res.partial ->
+                "PARTIAL ${res.steps.size} steps to (${res.reachedTile.first},${res.reachedTile.second}); " +
+                    "target outside viewport. Walk this path then call findPath again. " +
+                    "First steps: ${res.steps.take(8).joinToString(",") { it.name }}"
+            else -> "BLOCKED. ${res.reason ?: "no path"}. Suggest askAdvisor."
+        }
+    }
+
+    @Tool
+    @LLMDescription(
+        "Walk on the FF1 overworld toward (targetX, targetY) using deterministic BFS pathfinding. " +
+            "Marks non-moving steps as blocked in fog-of-war. Returns ok=true if the target is " +
+            "reached OR a random encounter starts."
+    )
+    suspend fun walkOverworldTo(targetX: Int, targetY: Int, maxSteps: Int = 32): SkillResult =
         walkSkill.invoke(mapOf("targetX" to "$targetX", "targetY" to "$targetY", "maxSteps" to "$maxSteps"))
 
     @Tool

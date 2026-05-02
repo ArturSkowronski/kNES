@@ -115,6 +115,21 @@ class EmulatorSession(externalNes: NES? = null) {
 
     fun readMemory(addr: Int): Int = nes.cpuMemory.load(addr).toInt() and 0xFF
 
+    /**
+     * Reads a single tile index from one of the four PPU nametables.
+     * @param ntIndex 0..3 (NES has 4 nametable slots, mirrored per cartridge config).
+     * @param x 0..31 (tile column within the 32x30 nametable).
+     * @param y 0..29 (tile row).
+     * @return tile pattern index 0..255, or 0 if PPU not initialised.
+     */
+    fun readNametableTile(ntIndex: Int, x: Int, y: Int): Int {
+        require(ntIndex in 0..3) { "nametable index $ntIndex out of range" }
+        require(x in 0..31) { "x $x out of range" }
+        require(y in 0..29) { "y $y out of range" }
+        val nt = nes.ppu.nameTable.getOrNull(ntIndex) ?: return 0
+        return nt.getTileIndex(x, y).toInt() and 0xFF
+    }
+
     fun setWatchedAddresses(addresses: Map<String, Int>) {
         watchedAddresses.clear()
         watchedAddresses.putAll(addresses)

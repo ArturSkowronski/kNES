@@ -76,4 +76,35 @@ class RamObserverTest : FunSpec({
 
         RamObserver.classify(ram) shouldBe FfPhase.TitleOrMenu
     }
+
+    test("indoors — locationType=0xD1 with party present → Indoors(localX, localY)") {
+        val ram = mapOf(
+            "screenState" to 0,
+            "locationType" to 0xD1,
+            "localX" to 0x07,
+            "localY" to 0x0C,
+            "worldX" to 0x92,
+            "worldY" to 0x9E,
+            "char1_hpLow" to 0x23,
+            "char1_status" to 0,
+        )
+
+        RamObserver.classify(ram) shouldBe FfPhase.Indoors(localX = 0x07, localY = 0x0C)
+    }
+
+    test("indoors takes precedence over overworld classification when locationType=0xD1") {
+        // Even though worldX/Y are non-zero, locationType=0xD1 means we're inside a building
+        // and worldX/Y are stale. This is the V2.1 root cause we fixed in V2.2.
+        val ram = mapOf(
+            "screenState" to 0,
+            "locationType" to 0xD1,
+            "worldX" to 146,
+            "worldY" to 152,
+            "localX" to 4,
+            "localY" to 9,
+            "char1_hpLow" to 35,
+        )
+
+        RamObserver.classify(ram) shouldBe FfPhase.Indoors(localX = 4, localY = 9)
+    }
 })
