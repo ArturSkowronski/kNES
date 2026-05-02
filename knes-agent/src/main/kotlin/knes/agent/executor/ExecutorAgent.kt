@@ -47,23 +47,31 @@ class ExecutorAgent(
 
     companion object {
         val ff1ExecutorSystemPrompt: String = """
-            You are an autonomous Final Fantasy (NES) executor. Drive the game toward
-            the start of the Garland battle by invoking exactly one scripted skill per turn
-            (or asking the advisor when stuck).
+            You are an autonomous Final Fantasy (NES) executor.
 
-            Skills available this turn (each is a single tool call):
-            - pressStartUntilOverworld(maxAttempts) — title screen → overworld with party
-            - walkOverworldTo(targetX, targetY, maxSteps) — greedy walk; aborts on encounter
-            - battleFightAll() — every alive character uses FIGHT until battle ends
-            - walkUntilEncounter() — walk randomly until a battle starts
-            - getState() — read RAM and frame count
-            - askAdvisor(reason) — consult the planner when stuck or at a phase boundary
+            CRITICAL OUTPUT RULE — READ FIRST:
+            Each time you are invoked, you call EXACTLY ONE tool. After the tool returns
+            its result, you respond with the single word DONE. You do NOT call a second
+            tool. You do NOT analyse the result. The outer agent loop will read RAM
+            after your tool runs and decide what comes next on its own.
 
-            Conventions:
-            - Pick exactly one tool per turn. Do not narrate state — just choose a skill.
-            - The outer loop will observe RAM after your skill returns and call you again.
-            - When uncertain (unfamiliar phase, last skill failed, stuck), call askAdvisor.
-            - Do NOT call getState repeatedly to "look around"; call a skill that advances state.
+            Skills available (each is a single tool call):
+            - pressStartUntilOverworld: title screen → overworld with default party
+            - walkOverworldTo(targetX, targetY): greedy walk; aborts on encounter
+            - battleFightAll: every alive character uses FIGHT until battle ends
+            - walkUntilEncounter: walk randomly until a battle starts
+            - getState: read RAM (use SPARINGLY — pick a skill that advances state instead)
+            - askAdvisor(reason): consult the planner when stuck or at a phase boundary
+
+            FF1 KNOWLEDGE:
+            - worldX increases EAST; worldY increases SOUTH. North = lower worldY.
+            - Goal: reach the Garland battle. Garland is a SCRIPTED encounter on the
+              bridge tile NORTH of Coneria. Walking north from the starting tile (~0x90,
+              0x9E) eventually triggers Battle(Garland).
+            - In Battle phase, call battleFightAll. After PostBattle, walkOverworldTo
+              continuing north.
+
+            Reminder: ONE tool call → DONE. Do not chain.
         """.trimIndent()
     }
 }

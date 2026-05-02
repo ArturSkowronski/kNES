@@ -18,6 +18,10 @@ data class TraceEvent(
     val ramDiff: Map<String, Int> = emptyMap(),
     val screenshot: String? = null,
     val note: String? = null,
+    /** Full prompt input sent to the LLM (system prompt context excluded; user message only). */
+    val input: String? = null,
+    /** Full untruncated text the LLM produced (advisor plan or executor reply). */
+    val output: String? = null,
 )
 
 class Trace(dir: Path) {
