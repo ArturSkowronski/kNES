@@ -76,16 +76,19 @@ class InteriorPathfinder(private val maxSteps: Int = 64) : Pathfinder {
     private fun isExitTile(t: TileType): Boolean =
         t == TileType.DOOR || t == TileType.STAIRS || t == TileType.WARP
 
-    /** South-edge implicit exit: this tile is passable and its south neighbour is
-     *  impassable/UNKNOWN. Walking SOUTH off this tile drops the party off the
-     *  playable area; FF1 engine transitions to the parent map. The viewport should
-     *  be padded with UNKNOWN at boundaries if exits are defined. */
+    /** South-edge implicit exit: this tile is passable AND every tile in the same
+     *  column south of it (down to the viewport bottom) is impassable/UNKNOWN.
+     *  This filters out internal walls — only the outer south boundary of the
+     *  playable area qualifies. FF1 engine transitions to the parent map when the
+     *  party walks SOUTH off the playable area. */
     private fun isSouthEdgeExit(viewport: ViewportMap, lx: Int, ly: Int): Boolean {
         val type = viewport.tiles[ly][lx]
         if (!type.isPassable()) return false
-        val sy = ly + 1
-        if (sy >= viewport.height) return false  // Off-viewport is not an implicit exit
-        return !viewport.tiles[sy][lx].isPassable()
+        if (ly + 1 >= viewport.height) return false  // Reached viewport edge — no proof of outside
+        for (sy in ly + 1 until viewport.height) {
+            if (viewport.tiles[sy][lx].isPassable()) return false
+        }
+        return true
     }
 
     private fun reconstruct(
