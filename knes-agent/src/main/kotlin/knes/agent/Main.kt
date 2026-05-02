@@ -5,6 +5,8 @@ import knes.agent.executor.ExecutorAgent
 import knes.agent.llm.AnthropicSession
 import knes.agent.llm.ModelRouter
 import knes.agent.perception.FogOfWar
+import knes.agent.perception.InteriorMapLoader
+import knes.agent.perception.MapSession
 import knes.agent.perception.OverworldMap
 import knes.agent.perception.RamObserver
 import java.io.File
@@ -35,9 +37,10 @@ fun main(args: Array<String>) {
             val router = ModelRouter()
             val overworldMap = OverworldMap.fromRom(File(rom))
             val fog = FogOfWar()
+            val mapSession = MapSession(InteriorMapLoader(File(rom).readBytes()), fog)
             val observer = RamObserver(toolset, overworldMap)
             val advisor = AdvisorAgent(anthropic, router, toolset, viewportSource = overworldMap, fog = fog)
-            val executor = ExecutorAgent(anthropic, router, toolset, advisor, overworldMap, fog)
+            val executor = ExecutorAgent(anthropic, router, toolset, advisor, overworldMap, mapSession, fog)
 
             AgentSession(
                 toolset = toolset,
