@@ -64,7 +64,11 @@ class RamObserver(
                     (ram["locationType"] ?: 0) == LOCATION_TYPE_INDOORS ||
                     onLocalMap
                 )) {
-                return FfPhase.Indoors(localX = localX, localY = localY)
+                return FfPhase.Indoors(
+                    mapId = ram["currentMapId"] ?: -1,
+                    localX = localX,
+                    localY = localY,
+                )
             }
 
             val onWorldMap = (ram["worldX"] ?: 0) != 0 || (ram["worldY"] ?: 0) != 0
