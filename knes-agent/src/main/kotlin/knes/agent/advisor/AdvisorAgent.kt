@@ -29,10 +29,16 @@ class AdvisorAgent(
         toolRegistry = registry,
         strategy = singleRunStrategy(),
         systemPrompt = systemPrompt,
+        maxIterations = 8,   // Koog counts node executions; advisor may inspect state once + produce plan
     )
 
-    suspend fun plan(phase: FfPhase, observation: String): String =
+    suspend fun plan(phase: FfPhase, observation: String): String = try {
         newAgent(phase).run(observation)
+    } catch (e: Exception) {
+        if (e::class.simpleName == "AIAgentMaxNumberOfIterationsReachedException") {
+            "ADVISOR_ITERATION_CAP: stay the course with previous plan"
+        } else throw e
+    }
 
     companion object {
         val systemPrompt: String = """
