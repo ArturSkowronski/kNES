@@ -9,11 +9,14 @@ import knes.agent.perception.FfPhase
  */
 const val GARLAND_ID = 0x7C
 
-enum class Outcome { InProgress, Victory, PartyDefeated, OutOfBudget, Error }
+enum class Outcome { InProgress, AtGarlandBattle, Victory, PartyDefeated, OutOfBudget, Error }
 
 object SuccessCriteria {
     fun evaluate(phase: FfPhase): Outcome = when (phase) {
-        is FfPhase.Battle -> if (phase.enemyId == GARLAND_ID && phase.enemyDead) Outcome.Victory else Outcome.InProgress
+        is FfPhase.Battle ->
+            if (phase.enemyId == GARLAND_ID) {
+                if (phase.enemyDead) Outcome.Victory else Outcome.AtGarlandBattle
+            } else Outcome.InProgress
         FfPhase.PartyDefeated -> Outcome.PartyDefeated
         else -> Outcome.InProgress
     }

@@ -14,4 +14,7 @@ class SuccessCriteriaTest : FunSpec({
     test("defeat on party wipe") {
         SuccessCriteria.evaluate(FfPhase.PartyDefeated) shouldBe Outcome.PartyDefeated
     }
+    test("at garland battle when alive") {
+        SuccessCriteria.evaluate(FfPhase.Battle(enemyId = GARLAND_ID, enemyHp = 106, enemyDead = false)) shouldBe Outcome.AtGarlandBattle
+    }
 })

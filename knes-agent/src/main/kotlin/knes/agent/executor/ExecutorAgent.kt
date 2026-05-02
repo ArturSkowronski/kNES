@@ -1,70 +1,59 @@
 package knes.agent.executor
 
 import ai.koog.agents.core.agent.AIAgent
+import ai.koog.agents.core.agent.singleRunStrategy
 import ai.koog.agents.core.tools.ToolRegistry
 import ai.koog.agents.core.tools.reflect.tools
-import ai.koog.agents.ext.agent.reActStrategy
-import ai.koog.prompt.executor.clients.anthropic.AnthropicLLMClient
-import ai.koog.prompt.executor.clients.anthropic.AnthropicModels
-import ai.koog.prompt.executor.llms.SingleLLMPromptExecutor
-import ai.koog.prompt.llm.LLModel
 import knes.agent.advisor.AdvisorAgent
+import knes.agent.llm.AgentRole
+import knes.agent.llm.AnthropicSession
+import knes.agent.llm.ModelRouter
+import knes.agent.perception.FfPhase
+import knes.agent.skills.SkillRegistry
 import knes.agent.tools.EmulatorToolset
 
 class ExecutorAgent(
-    private val apiKey: String,
+    private val anthropic: AnthropicSession,
+    private val modelRouter: ModelRouter,
     private val toolset: EmulatorToolset,
     private val advisor: AdvisorAgent,
-    private val model: LLModel = AnthropicModels.Sonnet_4_5,
-    private val reasoningInterval: Int = 1,
 ) {
+    private val skillRegistry = SkillRegistry(toolset)
     private val advisorTool = AdvisorToolset(advisor)
     private val registry = ToolRegistry {
-        tools(toolset)
+        tools(skillRegistry)
         tools(advisorTool)
     }
 
-    // Koog's AIAgent is single-use (StatefulSingleUseAIAgent). Build a fresh one per call.
-    // Also fresh prompt executor + LLM client — Koog 0.5.1 retains conversation state inside
-    // the executor that triggers Anthropic 400 errors after iteration-cap on subsequent runs.
-    // maxIterations caps Koog's internal ReAct loop per outer turn (default 50 is too expensive).
-    private fun newAgent(): AIAgent<String, String> = AIAgent(
-        promptExecutor = SingleLLMPromptExecutor(AnthropicLLMClient(apiKey)),
-        llmModel = model,
+    private fun newAgent(phase: FfPhase): AIAgent<String, String> = AIAgent(
+        promptExecutor = anthropic.executor,
+        llmModel = modelRouter.modelFor(phase, AgentRole.EXECUTOR),
         toolRegistry = registry,
-        strategy = reActStrategy(reasoningInterval = reasoningInterval, name = "ff1_executor"),
+        strategy = singleRunStrategy(),
         systemPrompt = ff1ExecutorSystemPrompt,
-        maxIterations = 10,
     )
 
-    suspend fun run(input: String): String = try {
-        newAgent().run(input)
-    } catch (e: Exception) {
-        // Koog's reActStrategy hits an internal iteration cap (default 50) and throws
-        // AIAgentMaxNumberOfIterationsReachedException — but that class is `internal`.
-        // Match by class name; let anything else propagate.
-        if (e::class.simpleName == "AIAgentMaxNumberOfIterationsReachedException") {
-            "ITERATION_CAP: ${e.message?.take(120)?.trim()}"
-        } else throw e
-    }
+    suspend fun run(phase: FfPhase, input: String): String = newAgent(phase).run(input)
 
     companion object {
-        // Source of truth for the Claude Code MCP setup is docs/ff1-system-prompt.md.
-        // This prompt is a smaller, agent-loop-focused variant: the broader "what is FF1"
-        // context is delivered per-turn from the runtime (RAM diff + plan).
         val ff1ExecutorSystemPrompt: String = """
-            You are an autonomous Final Fantasy (NES) executor. Use the kNES tools to advance
-            the game toward defeating Garland (the bridge boss).
+            You are an autonomous Final Fantasy (NES) executor. Drive the game toward
+            the start of the Garland battle by invoking exactly one scripted skill per turn
+            (or asking the advisor when stuck).
 
-            Tool surface: load_rom / step / tap / sequence / get_state / get_screen /
-            apply_profile / list_actions / execute_action / press / release / reset.
+            Skills available this turn (each is a single tool call):
+            - pressStartUntilOverworld(maxAttempts) — title screen → overworld with party
+            - walkOverworldTo(targetX, targetY, maxSteps) — greedy walk; aborts on encounter
+            - battleFightAll() — every alive character uses FIGHT until battle ends
+            - walkUntilEncounter() — walk randomly until a battle starts
+            - getState() — read RAM and frame count
+            - askAdvisor(reason) — consult the planner when stuck or at a phase boundary
 
-            Conventions: 60 frames = 1 second. Prefer tap/sequence over many steps.
-            Set screenshot=true only when the visual context changed.
-
-            When uncertain or stuck (no progress, unknown screen, battle starts/ends), call
-            askAdvisor("...short reason..."). Otherwise, keep executing the current plan until
-            the next phase boundary. Reply DONE when no further action is required this turn.
+            Conventions:
+            - Pick exactly one tool per turn. Do not narrate state — just choose a skill.
+            - The outer loop will observe RAM after your skill returns and call you again.
+            - When uncertain (unfamiliar phase, last skill failed, stuck), call askAdvisor.
+            - Do NOT call getState repeatedly to "look around"; call a skill that advances state.
         """.trimIndent()
     }
 }
