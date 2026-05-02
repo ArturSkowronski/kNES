@@ -23,10 +23,12 @@ class AgentSession(
     private val budget: Budget = Budget(),
     runDir: Path = Trace.newRunDir(),
 ) {
-    private val trace = Trace(runDir)
+    private val resolvedRunDir = runDir
+    private val trace = Trace(resolvedRunDir)
     private val screenshotPolicy = ScreenshotPolicy()
 
     suspend fun run(): Outcome {
+        println("[knes-agent] run dir: $resolvedRunDir")
         var previousPhase: FfPhase? = null
         var currentPlan = "Start the game from the title screen and begin a new game."
         var idleTurns = 0

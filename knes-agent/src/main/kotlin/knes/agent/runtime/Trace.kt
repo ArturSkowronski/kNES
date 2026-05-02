@@ -40,7 +40,18 @@ class Trace(dir: Path) {
     fun close() = out.close()
 
     companion object {
-        fun newRunDir(root: Path = Path.of("runs")): Path =
+        /**
+         * Default run directory: `$HOME/.knes/runs/<ISO-8601 timestamp>`.
+         * Override the root by setting env `KNES_RUN_DIR` to an absolute path.
+         */
+        fun newRunDir(root: Path = defaultRoot()): Path =
             root.resolve(Instant.now().toString().replace(':', '-'))
+
+        private fun defaultRoot(): Path {
+            val override = System.getenv("KNES_RUN_DIR")?.takeIf { it.isNotBlank() }
+            if (override != null) return Path.of(override)
+            val home = System.getProperty("user.home") ?: "."
+            return Path.of(home, ".knes", "runs")
+        }
     }
 }
