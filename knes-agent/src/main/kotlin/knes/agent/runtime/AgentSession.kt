@@ -23,10 +23,12 @@ class AgentSession(
     private val budget: Budget = Budget(),
     runDir: Path = Trace.newRunDir(),
 ) {
-    private val trace = Trace(runDir)
+    private val resolvedRunDir = runDir
+    private val trace = Trace(resolvedRunDir)
     private val screenshotPolicy = ScreenshotPolicy()
 
     suspend fun run(): Outcome {
+        println("[knes-agent] run dir: $resolvedRunDir")
         var previousPhase: FfPhase? = null
         var currentPlan = "Start the game from the title screen and begin a new game."
         var idleTurns = 0
@@ -58,7 +60,13 @@ class AgentSession(
                     println("[advisor #$advisorCalls] phase=$phase")
                     currentPlan = advisor.plan(phase, obs)
                     println("[advisor plan] ${currentPlan.lineSequence().take(3).joinToString(" | ").take(200)}")
-                    trace.record(TraceEvent(0, "advisor", phase.toString(), note = currentPlan.take(500)))
+                    trace.record(
+                        TraceEvent(
+                            turn = 0, role = "advisor", phase = phase.toString(),
+                            input = obs,           // full observation given to advisor
+                            output = currentPlan,  // full advisor reasoning, untruncated
+                        )
+                    )
                     idleTurns = 0
                 }
 
@@ -67,7 +75,13 @@ class AgentSession(
                 val result = executor.run(phase, executorInput)
                 skillsInvoked += 1
                 println("[executor result] ${result.lineSequence().take(2).joinToString(" | ").take(160)}")
-                trace.record(TraceEvent(0, "executor", phase.toString(), note = result.take(500)))
+                trace.record(
+                    TraceEvent(
+                        turn = 0, role = "executor", phase = phase.toString(),
+                        input = executorInput,   // full prompt sent to executor (with current plan + RAM)
+                        output = result,         // full executor reasoning + final response, untruncated
+                    )
+                )
 
                 val newRam = observer.ramSnapshot()
                 idleTurns = if (newRam == lastRam) idleTurns + 1 else 0
