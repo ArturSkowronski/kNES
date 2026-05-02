@@ -52,8 +52,19 @@ class RamObserver(
             if (charStatusKnown && !anyAlive && (ram["char1_hpLow"] ?: 0) != 0) return FfPhase.PartyDefeated
 
             val partyCreated = (ram["char1_hpLow"] ?: 0) != 0
-            if (partyCreated && (ram["locationType"] ?: 0) == LOCATION_TYPE_INDOORS) {
-                return FfPhase.Indoors(localX = ram["localX"] ?: 0, localY = ram["localY"] ?: 0)
+            val localX = ram["localX"] ?: 0
+            val localY = ram["localY"] ?: 0
+            val onLocalMap = localX != 0 || localY != 0
+            // V2.3.1: locationType==0xD1 is castle/dungeon interior. Town outdoor maps
+            // (e.g. Coneria) have locationType==0 but populate localX/localY anyway.
+            // Treat any non-zero local coords as Indoors — the exitBuilding skill (walks
+            // SOUTH until both worldX/Y and locationType reset) handles both castle exits
+            // AND town exits uniformly.
+            if (partyCreated && (
+                    (ram["locationType"] ?: 0) == LOCATION_TYPE_INDOORS ||
+                    onLocalMap
+                )) {
+                return FfPhase.Indoors(localX = localX, localY = localY)
             }
 
             val onWorldMap = (ram["worldX"] ?: 0) != 0 || (ram["worldY"] ?: 0) != 0
