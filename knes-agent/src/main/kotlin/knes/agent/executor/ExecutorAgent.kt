@@ -31,9 +31,19 @@ class ExecutorAgent(
         toolRegistry = registry,
         strategy = singleRunStrategy(),
         systemPrompt = ff1ExecutorSystemPrompt,
+        maxIterations = 2,   // 1 LLM call → tool call → 1 LLM call → final text. Hard cap on loop.
     )
 
-    suspend fun run(phase: FfPhase, input: String): String = newAgent(phase).run(input)
+    suspend fun run(phase: FfPhase, input: String): String = try {
+        newAgent(phase).run(input)
+    } catch (e: Exception) {
+        // singleRunStrategy + maxIterations=2 should rarely cap, but if the model keeps
+        // calling tools the cap will fire. Treat as a normal turn outcome; outer loop
+        // observes RAM and decides next steps.
+        if (e::class.simpleName == "AIAgentMaxNumberOfIterationsReachedException") {
+            "ITERATION_CAP: ${e.message?.take(120)?.trim()}"
+        } else throw e
+    }
 
     companion object {
         val ff1ExecutorSystemPrompt: String = """
