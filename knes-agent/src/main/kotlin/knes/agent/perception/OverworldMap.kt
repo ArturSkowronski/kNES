@@ -22,7 +22,7 @@ import java.io.File
  *                           (count == 0 means 256 tiles)
  *   0xFF                  -> end of row
  */
-class OverworldMap private constructor(val tiles: ByteArray) {
+class OverworldMap private constructor(val tiles: ByteArray) : ViewportSource {
 
     init {
         require(tiles.size == 256 * 256) { "tiles must be 256x256, got ${tiles.size}" }
@@ -38,7 +38,7 @@ class OverworldMap private constructor(val tiles: ByteArray) {
         OverworldTileClassifier.classify(tileAt(worldX, worldY))
 
     /** Build a 16x16 ViewportMap centered on the given world coordinate. */
-    fun readViewport(partyWorldXY: Pair<Int, Int>): ViewportMap {
+    override fun readViewport(partyWorldXY: Pair<Int, Int>): ViewportMap {
         val size = ViewportMap.SIZE
         val partyLocal = size / 2 to size / 2
         val (pwx, pwy) = partyWorldXY

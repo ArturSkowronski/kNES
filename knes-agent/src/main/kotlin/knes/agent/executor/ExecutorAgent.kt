@@ -9,6 +9,8 @@ import knes.agent.llm.AgentRole
 import knes.agent.llm.AnthropicSession
 import knes.agent.llm.ModelRouter
 import knes.agent.perception.FfPhase
+import knes.agent.perception.FogOfWar
+import knes.agent.perception.ViewportSource
 import knes.agent.skills.SkillRegistry
 import knes.agent.tools.EmulatorToolset
 
@@ -17,8 +19,10 @@ class ExecutorAgent(
     private val modelRouter: ModelRouter,
     private val toolset: EmulatorToolset,
     private val advisor: AdvisorAgent,
+    private val viewportSource: ViewportSource,
+    private val fog: FogOfWar,
 ) {
-    private val skillRegistry = SkillRegistry(toolset)
+    private val skillRegistry = SkillRegistry(toolset, viewportSource, fog)
     private val advisorTool = AdvisorToolset(advisor)
     private val registry = ToolRegistry {
         tools(skillRegistry)
