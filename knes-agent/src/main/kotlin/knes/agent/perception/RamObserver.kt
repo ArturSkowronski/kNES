@@ -10,14 +10,17 @@ class RamObserver(private val toolset: EmulatorToolset) {
     companion object {
         const val SCREEN_STATE_BATTLE = 0x68
         const val SCREEN_STATE_POST_BATTLE = 0x63
+        /** locationType (RAM 0x000D): 0x00=outside/overworld, 0xD1=inside (town/castle/dungeon interior). */
+        const val LOCATION_TYPE_INDOORS = 0xD1
 
         // V2 fix (post-diagnostic): bootFlag is 0x4D within 9 frames of cold boot, useless.
         // Real markers:
-        //   - TitleOrMenu when no party exists AND no overworld coords AND no battle screen
         //   - Battle when screenState == 0x68
         //   - PostBattle when screenState == 0x63
+        //   - Indoors(localX, localY) when locationType == 0xD1 (town/castle interior)
         //   - Overworld(x, y) when on overworld with party
         //   - PartyDefeated when all char_status flags have bit0 set
+        //   - TitleOrMenu when no party exists AND no overworld coords AND no battle screen
         fun classify(ram: Map<String, Int>): FfPhase {
             val screen = ram["screenState"] ?: 0
             if (screen == SCREEN_STATE_BATTLE) {
@@ -37,8 +40,11 @@ class RamObserver(private val toolset: EmulatorToolset) {
             if (charStatusKnown && !anyAlive && (ram["char1_hpLow"] ?: 0) != 0) return FfPhase.PartyDefeated
 
             val partyCreated = (ram["char1_hpLow"] ?: 0) != 0
-            val onWorldMap = (ram["worldX"] ?: 0) != 0 || (ram["worldY"] ?: 0) != 0
+            if (partyCreated && (ram["locationType"] ?: 0) == LOCATION_TYPE_INDOORS) {
+                return FfPhase.Indoors(localX = ram["localX"] ?: 0, localY = ram["localY"] ?: 0)
+            }
 
+            val onWorldMap = (ram["worldX"] ?: 0) != 0 || (ram["worldY"] ?: 0) != 0
             return when {
                 partyCreated && onWorldMap -> FfPhase.Overworld(ram["worldX"] ?: 0, ram["worldY"] ?: 0)
                 else -> FfPhase.TitleOrMenu

@@ -32,6 +32,7 @@ class SkillRegistry(private val toolset: EmulatorToolset) : ToolSet {
 
     private val pressStartSkill = PressStartUntilOverworld(toolset)
     private val walkSkill = WalkOverworldTo(toolset)
+    private val exitSkill = ExitBuilding(toolset)
 
     @Tool
     @LLMDescription(
@@ -41,6 +42,14 @@ class SkillRegistry(private val toolset: EmulatorToolset) : ToolSet {
     )
     suspend fun pressStartUntilOverworld(maxAttempts: Int = 60): SkillResult =
         pressStartSkill.invoke(mapOf("maxAttempts" to "$maxAttempts"))
+
+    @Tool
+    @LLMDescription(
+        "Exit the current building / town / castle interior by walking SOUTH until RAM " +
+            "locationType (0x000D) becomes 0x00 (outside). Use this when phase is Indoors."
+    )
+    suspend fun exitBuilding(maxSteps: Int = 30): SkillResult =
+        exitSkill.invoke(mapOf("maxSteps" to "$maxSteps"))
 
     @Tool
     @LLMDescription(

@@ -47,21 +47,28 @@ class AdvisorAgent(
             executor will follow until the next phase change. Each step must be actionable
             using the available kNES skills:
               - pressStartUntilOverworld: title screen → overworld with default party
-              - walkOverworldTo(x, y): greedy walk to coords; aborts on encounter
+              - exitBuilding: walk SOUTH out of any town/castle interior (use when Indoors)
+              - walkOverworldTo(x, y): greedy walk to coords on the OVERWORLD; aborts on encounter
               - walkUntilEncounter: walk randomly until a battle starts
               - battleFightAll: every alive character uses FIGHT until battle ends
 
             FF1 KNOWLEDGE — use this to plan, not your training-data memory of the game:
-              - Coordinate system: worldX increases EAST; worldY increases SOUTH.
-                So lower worldY = north, higher worldY = south.
-              - Goal: reach the Garland boss battle. Garland is a SCRIPTED encounter
-                on the bridge tile NORTH of Coneria castle. Stepping onto the bridge
-                tile triggers Battle(Garland) automatically — no random rolls needed.
-              - From the post-party-creation starting position (typically
-                worldX≈0x90, worldY≈0x9E), walk NORTH (decreasing worldY) toward the
-                bridge. Random encounters along the way are normal — handle them with
-                battleFightAll, then continue walking.
-              - The bridge is roughly 15-30 tiles north of the start.
+              - Phases you may see: TitleOrMenu, Overworld(x, y), Indoors(localX, localY),
+                Battle(...), PostBattle, PartyDefeated.
+              - Indoors = inside a town/castle; uses LOCAL coords. walkOverworldTo will not
+                work indoors. **First call exitBuilding to reach the world map.** After
+                exiting, phase becomes Overworld with the world coords showing where you
+                emerged.
+              - Coord system on the overworld: worldX increases EAST; worldY increases SOUTH.
+                Lower worldY = north, higher worldY = south.
+              - **CRITICAL: After party creation in V2, the party usually starts INSIDE
+                Coneria castle (Indoors), not on the overworld.** First action when you see
+                Indoors should be exitBuilding. Then navigate north on the overworld.
+              - Goal: Garland is a SCRIPTED encounter on the bridge tile NORTH of Coneria
+                castle. After exiting the castle to overworld, walk NORTH (decreasing worldY)
+                toward the bridge. Random encounters along the way are normal — handle them
+                with battleFightAll, then resume walking north.
+              - The bridge is roughly 15-30 tiles north of where you exit the castle.
 
             Output: a numbered plan with concrete coords. Do NOT execute the plan;
             only describe it.

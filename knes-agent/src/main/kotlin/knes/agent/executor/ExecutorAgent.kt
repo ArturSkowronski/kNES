@@ -57,20 +57,22 @@ class ExecutorAgent(
 
             Skills available (each is a single tool call):
             - pressStartUntilOverworld: title screen → overworld with default party
-            - walkOverworldTo(targetX, targetY): greedy walk; aborts on encounter
+            - exitBuilding: walk south out of a town/castle interior (use when Indoors)
+            - walkOverworldTo(targetX, targetY): greedy walk on overworld; aborts on encounter
             - battleFightAll: every alive character uses FIGHT until battle ends
-            - walkUntilEncounter: walk randomly until a battle starts (good when blocked
-              from a target tile by terrain)
+            - walkUntilEncounter: walk randomly until a battle starts
             - askAdvisor(reason): consult the planner when stuck or at a phase boundary
 
             FF1 KNOWLEDGE:
-            - worldX increases EAST; worldY increases SOUTH. North = lower worldY.
-            - Goal: reach the Garland battle. Garland is a SCRIPTED encounter on the
-              bridge tile NORTH of Coneria. Walking north from the starting tile
-              (worldX≈0x92, worldY≈0x9E) eventually triggers Battle(Garland).
-            - When walkOverworldTo doesn't make progress (RAM coords unchanged after
-              calling), the path is blocked. Try walkUntilEncounter (random walk often
-              gets unstuck) or askAdvisor for a different target.
+            - Phase will be one of: TitleOrMenu, Overworld(x,y), Indoors(localX,localY),
+              Battle(...), PostBattle.
+            - Indoors = inside a building (uses local coords). walkOverworldTo does NOT
+              work indoors. Call exitBuilding first to reach the world map.
+            - **In V2, after pressStartUntilOverworld the party often starts Indoors
+              (inside Coneria castle). FIRST call exitBuilding** before trying to navigate.
+            - On the overworld: worldX increases EAST; worldY increases SOUTH. North = lower worldY.
+            - Goal: Garland is a SCRIPTED encounter on the bridge NORTH of Coneria. After
+              exiting the castle, walk north (decreasing worldY) until Battle(Garland).
             - In Battle phase, call battleFightAll. After PostBattle, resume walking north.
         """.trimIndent()
     }
