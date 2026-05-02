@@ -10,6 +10,7 @@ import knes.agent.llm.ModelRouter
 import knes.agent.perception.AsciiMapRenderer
 import knes.agent.perception.FfPhase
 import knes.agent.perception.FogOfWar
+import knes.agent.perception.MapSession
 import knes.agent.perception.ViewportSource
 import knes.agent.tools.EmulatorToolset
 
@@ -22,12 +23,15 @@ import knes.agent.tools.EmulatorToolset
  * the user-facing observation is augmented with an ASCII map (terrain + fog stats +
  * blocked tiles) — Gemini-PP finding: textual tile grids match raw screenshots for
  * spatial reasoning at much lower cost.
+ *
+ * V2.4: extended to also render ASCII map for Indoors phase when interiorSource is provided.
  */
 class AdvisorAgent(
     private val anthropic: AnthropicSession,
     private val modelRouter: ModelRouter,
     private val toolset: EmulatorToolset,
-    private val viewportSource: ViewportSource? = null,
+    private val viewportSource: ViewportSource? = null,  // overworld source, kept for backward-compat
+    private val interiorSource: ViewportSource? = null,
     private val fog: FogOfWar? = null,
 ) {
     private val readOnlyTools = ReadOnlyToolset(toolset)
@@ -43,7 +47,7 @@ class AdvisorAgent(
     )
 
     suspend fun plan(phase: FfPhase, observation: String): String {
-        val augmented = augmentForOverworld(phase, observation)
+        val augmented = augmentMapView(phase, observation)
         return try {
             newAgent(phase).run(augmented)
         } catch (e: Exception) {
@@ -53,11 +57,20 @@ class AdvisorAgent(
         }
     }
 
-    private fun augmentForOverworld(phase: FfPhase, observation: String): String {
-        if (phase !is FfPhase.Overworld) return observation
-        val src = viewportSource ?: return observation
+    private fun augmentMapView(phase: FfPhase, observation: String): String {
+        val (src, partyXY) = when (phase) {
+            is FfPhase.Overworld -> viewportSource to (phase.x to phase.y)
+            is FfPhase.Indoors -> {
+                if (phase.mapId >= 0 && interiorSource is MapSession) {
+                    interiorSource.ensureCurrent(phase.mapId)
+                }
+                interiorSource to (phase.localX to phase.localY)
+            }
+            else -> null to null
+        }
+        if (src == null || partyXY == null) return observation
         val f = fog ?: return observation
-        val viewport = src.readViewport(phase.x to phase.y)
+        val viewport = src.readViewport(partyXY)
         f.merge(viewport)
         val mapBlock = AsciiMapRenderer.render(viewport, f)
         return buildString {
