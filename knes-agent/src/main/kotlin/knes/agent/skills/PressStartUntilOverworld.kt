@@ -3,46 +3,58 @@ package knes.agent.skills
 import knes.agent.tools.EmulatorToolset
 
 /**
- * Tap START until FF1's bootFlag (RAM 0x00F9) becomes 0x4D, indicating in-game state
- * after the title screen / NEW GAME confirmation. See profile ff1.json:28.
+ * Advance from the FF1 title screen through NEW GAME / class select / name entry
+ * into the overworld. Taps START twice to exit the title attract, then mashes A
+ * until the party is created and on the overworld.
  *
- * Strategy: tap START, gap 30 frames, observe RAM. Up to maxAttempts. Falls back to A
- * after 10 unproductive START taps (intro cinematic sometimes wants A).
+ * Termination: char1_hpLow != 0 OR worldX != 0. Bounded by maxAttempts (default 60).
+ *
+ * V2 fix: replaced broken bootFlag heuristic (bootFlag=0x4D within 9 frames of cold boot)
+ * with real RAM markers: worldX/char1_hpLow populated only after party is created.
  */
 class PressStartUntilOverworld(private val toolset: EmulatorToolset) : Skill {
     override val id = "press_start_until_overworld"
     override val description =
-        "Tap START until the game advances past the title screen / NEW GAME menu. " +
-            "Bounded by maxAttempts (default 60). Falls back to A after 10 START taps without progress."
+        "Advance from the FF1 title screen through NEW GAME / class select / name entry " +
+            "into the overworld. Mashes START then A. Termination: char1_hpLow != 0 OR worldX != 0. " +
+            "Bounded by maxAttempts (default 60)."
 
     override suspend fun invoke(args: Map<String, String>): SkillResult {
         val maxAttempts = args["maxAttempts"]?.toIntOrNull() ?: 60
         var attempts = 0
         var totalFrames = 0
-        var unproductiveStarts = 0
-        var lastBootFlag = toolset.getState().ram["bootFlag"] ?: 0
-        while (attempts < maxAttempts) {
-            val button = if (unproductiveStarts >= 10) "A" else "START"
-            val tap = toolset.tap(button = button, count = 1, pressFrames = 5, gapFrames = 30)
+
+        // Phase 1: tap START twice to exit the title attract.
+        repeat(2) {
+            val tap = toolset.tap(button = "START", count = 1, pressFrames = 5, gapFrames = 30)
             totalFrames += tap.frame
             attempts++
+        }
+
+        // Phase 2: tap A until the party is created and on the overworld.
+        while (attempts < maxAttempts) {
             val ram = toolset.getState().ram
-            val bootFlag = ram["bootFlag"] ?: 0
-            if (bootFlag == 0x4D) {
+            val onOverworld = (ram["char1_hpLow"] ?: 0) != 0 || (ram["worldX"] ?: 0) != 0
+            if (onOverworld) {
                 return SkillResult(
                     ok = true,
-                    message = "bootFlag flipped after $attempts taps",
+                    message = "Reached overworld after $attempts taps " +
+                        "(worldX=0x${(ram["worldX"] ?: 0).toString(16)}, char1_hp=0x${(ram["char1_hpLow"] ?: 0).toString(16)})",
                     framesElapsed = totalFrames,
                     ramAfter = ram,
                 )
             }
-            if (bootFlag == lastBootFlag) unproductiveStarts++ else unproductiveStarts = 0
-            lastBootFlag = bootFlag
+            val tap = toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 30)
+            totalFrames += tap.frame
+            attempts++
         }
         val ram = toolset.getState().ram
         return SkillResult(
             ok = false,
-            message = "bootFlag never reached 0x4D after $maxAttempts taps",
+            message = "Did not reach overworld after $maxAttempts taps " +
+                "(menuCursor=0x${(ram["menuCursor"] ?: 0).toString(16)}, " +
+                "worldX=0x${(ram["worldX"] ?: 0).toString(16)}, " +
+                "char1_hpLow=0x${(ram["char1_hpLow"] ?: 0).toString(16)})",
             framesElapsed = totalFrames,
             ramAfter = ram,
         )

@@ -3,12 +3,13 @@ package knes.agent.skills
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import knes.agent.tools.EmulatorToolset
 import knes.api.EmulatorSession
 import java.io.File
 
 class PressStartUntilOverworldTest : FunSpec({
-    test("advances bootFlag to 0x4D from a fresh boot") {
+    test("advances from cold boot to overworld with party created") {
         val rom = System.getenv("FF1_ROM") ?: "/Users/askowronski/Priv/kNES/roms/ff.nes"
         if (!File(rom).exists()) return@test  // skip when ROM unavailable on CI
 
@@ -20,6 +21,7 @@ class PressStartUntilOverworldTest : FunSpec({
         val result = PressStartUntilOverworld(toolset).invoke()
 
         result.ok.shouldBeTrue()
-        result.ramAfter["bootFlag"] shouldBe 0x4D
+        result.ramAfter["char1_hpLow"]!! shouldNotBe 0
+        result.ramAfter["worldX"]!! shouldNotBe 0
     }
 })
