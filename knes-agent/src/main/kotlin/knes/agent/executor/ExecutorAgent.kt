@@ -63,22 +63,32 @@ class ExecutorAgent(
 
             Skills available (each is a single tool call):
             - pressStartUntilOverworld: title screen → overworld with default party
-            - exitBuilding: walk south out of a town/castle interior (use when Indoors)
-            - walkOverworldTo(targetX, targetY): greedy walk on overworld; aborts on encounter
+            - exitInterior: walk to nearest exit (DOOR/STAIRS/WARP or south-edge) of the
+              current FF1 interior map using a deterministic BFS pathfinder. Handles
+              sub-map transitions automatically. Use when phase is Indoors.
+            - walkOverworldTo(targetX, targetY): walk on overworld using deterministic
+              BFS pathfinder; aborts on encounter
+            - findPath(targetX, targetY): query the overworld pathfinder (does not move)
+            - findPathToExit: query the interior pathfinder for the nearest exit
             - battleFightAll: every alive character uses FIGHT until battle ends
             - walkUntilEncounter: walk randomly until a battle starts
             - askAdvisor(reason): consult the planner when stuck or at a phase boundary
 
             FF1 KNOWLEDGE:
-            - Phase will be one of: TitleOrMenu, Overworld(x,y), Indoors(localX,localY),
+            - Phase will be one of: TitleOrMenu, Overworld(x,y), Indoors(mapId,localX,localY),
               Battle(...), PostBattle.
-            - Indoors = inside a building (uses local coords). walkOverworldTo does NOT
-              work indoors. Call exitBuilding first to reach the world map.
-            - **In V2, after pressStartUntilOverworld the party often starts Indoors
-              (inside Coneria castle). FIRST call exitBuilding** before trying to navigate.
+            - Indoors = inside a building / town / castle (uses local coords). walkOverworldTo
+              does NOT work indoors. Call exitInterior to reach the world map.
+            - V2.4: Indoors phase carries `mapId` identifying the interior in ROM.
+              The exitInterior skill knows how to reload the map when you transition
+              to a sub-map (stairs/warp). Just keep calling exitInterior until phase
+              becomes Overworld.
+            - V2.4: when phase is Indoors you also receive an ASCII MAP showing the
+              current interior. Glyphs: @=party, .=floor, ^=wall, ~=water, D=door,
+              >=stairs, *=warp, ?=unseen/outside, X=blocked-confirmed.
             - On the overworld: worldX increases EAST; worldY increases SOUTH. North = lower worldY.
             - Goal: Garland is a SCRIPTED encounter on the bridge NORTH of Coneria. After
-              exiting the castle, walk north (decreasing worldY) until Battle(Garland).
+              exiting any interior, walk north (decreasing worldY) until Battle(Garland).
             - In Battle phase, call battleFightAll. After PostBattle, resume walking north.
         """.trimIndent()
     }

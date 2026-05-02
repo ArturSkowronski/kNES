@@ -88,29 +88,38 @@ class AdvisorAgent(
             executor will follow until the next phase change. Each step must be actionable
             using the available kNES skills:
               - pressStartUntilOverworld: title screen → overworld with default party
-              - exitBuilding: walk SOUTH out of any town/castle interior (use when Indoors)
-              - walkOverworldTo(x, y): greedy walk to coords on the OVERWORLD; aborts on encounter
+              - exitInterior: walk to the nearest exit (DOOR/STAIRS/WARP or south-edge)
+                of the current FF1 interior map using a deterministic BFS pathfinder.
+                Handles sub-map transitions automatically. Use when Indoors.
+              - walkOverworldTo(x, y): deterministic BFS walk to coords on the OVERWORLD;
+                aborts on encounter
               - walkUntilEncounter: walk randomly until a battle starts
               - battleFightAll: every alive character uses FIGHT until battle ends
 
             FF1 KNOWLEDGE — use this to plan, not your training-data memory of the game:
-              - Phases you may see: TitleOrMenu, Overworld(x, y), Indoors(localX, localY),
-                Battle(...), PostBattle, PartyDefeated.
-              - Indoors = inside a town/castle; uses LOCAL coords. walkOverworldTo will not
-                work indoors. **First call exitBuilding to reach the world map.** After
-                exiting, phase becomes Overworld with the world coords showing where you
-                emerged.
+              - Phases you may see: TitleOrMenu, Overworld(x, y),
+                Indoors(mapId, localX, localY), Battle(...), PostBattle, PartyDefeated.
+              - Indoors = inside a town/castle/dungeon; uses LOCAL coords. walkOverworldTo
+                will not work indoors. Call exitInterior to reach the world map. The skill
+                drives sub-map transitions (stairs/warps) on its own; keep calling it until
+                the phase becomes Overworld.
               - Coord system on the overworld: worldX increases EAST; worldY increases SOUTH.
                 Lower worldY = north, higher worldY = south.
-              - V2.3: when on the Overworld you receive an ASCII WORLD VIEW (16x16 around
+              - V2.3+: when on the Overworld you receive an ASCII WORLD VIEW (16x16 around
                 party). Glyphs: @=party, .=grass, ^=mountain (impassable), ~=water (impassable),
                 F=forest, R=road, B=bridge, T=town, C=castle, ?=unseen, X=blocked-confirmed.
                 Use this map to plan waypoints — DO NOT trust your training-data memory of
                 FF1 geography. The executor has a deterministic findPath(x,y) tool that BFS-
                 searches this same viewport; suggest waypoints reachable per the map.
-              - **CRITICAL: After party creation in V2, the party usually starts INSIDE
-                Coneria castle (Indoors), not on the overworld.** First action when you see
-                Indoors should be exitBuilding. Then navigate north on the overworld.
+              - V2.4: when phase is Indoors you also receive an ASCII map of the current
+                interior. Glyphs include D=door, >=stairs, *=warp. Doors lead OUT of the
+                interior to the overworld; stairs/warps move between sub-maps within the same
+                interior. Suggest exitInterior — the BFS finds the nearest exit and drives
+                the party there. Successive sub-map transitions eventually land back on the
+                overworld.
+              - After party creation in V2, the party usually starts INSIDE Coneria castle
+                (Indoors). First action when you see Indoors should be exitInterior. Then
+                navigate north on the overworld.
               - Goal: Garland is a SCRIPTED encounter on the bridge tile NORTH of Coneria
                 castle. After exiting the castle to overworld, walk NORTH (decreasing worldY)
                 toward the bridge. Random encounters along the way are normal — handle them
