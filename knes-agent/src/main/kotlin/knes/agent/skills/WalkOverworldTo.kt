@@ -88,7 +88,16 @@ class WalkOverworldTo(
             val ram1 = toolset.getState().ram
             val nx = ram1["worldX"] ?: cx
             val ny = ram1["worldY"] ?: cy
-            if (nx == cx && ny == cy) {
+            // V2.5.9: only mark fog blocked when the step is genuinely "I tried to walk
+            // there and the engine refused because terrain". If RAM signals a transition
+            // (locationType / localX/Y / screenState changed), the world coords are frozen
+            // by design — that tile is *passable*, we just got transported elsewhere.
+            // Marking it blocked poisons fog and ruins future pathfinding.
+            val transitioned = (ram1["locationType"] ?: 0) != (ram0["locationType"] ?: 0) ||
+                (ram1["localX"] ?: 0) != (ram0["localX"] ?: 0) ||
+                (ram1["localY"] ?: 0) != (ram0["localY"] ?: 0) ||
+                (ram1["screenState"] ?: 0) != (ram0["screenState"] ?: 0)
+            if (nx == cx && ny == cy && !transitioned) {
                 fog.markBlocked(cx + nextDir.dx, cy + nextDir.dy)
             }
         }
