@@ -61,9 +61,9 @@ class GameActionTest : FunSpec({
 
     test("FF1 BattleFightAll: canExecute checks screenState") {
         val action = BattleFightAll()
-        action.canExecute(mapOf("screenState" to 0x68)) shouldBe true
+        action.canExecute(mapOf("screenState" to 0x68)) shouldBe true   // battle
+        action.canExecute(mapOf("screenState" to 0x63)) shouldBe true   // PostBattle (V2.4.3: skill dismisses PostBattle modal)
         action.canExecute(mapOf("screenState" to 0x00)) shouldBe false
-        action.canExecute(mapOf("screenState" to 0x63)) shouldBe false
         action.canExecute(emptyMap()) shouldBe false
     }
 
@@ -91,18 +91,20 @@ class GameActionTest : FunSpec({
         var stateCallCount = 0
 
         val mockController = object : ActionController {
+            // V2.4.3: skill now dismisses both Battle (0x68) and PostBattle (0x63).
+            // Mock progression: 3 battle states → some PostBattle states → cleared (0x00).
             override fun readState(): Map<String, Int> {
                 stateCallCount++
-                return if (stateCallCount <= 3) {
-                    mapOf(
+                return when {
+                    stateCallCount <= 3 -> mapOf(
                         "screenState" to 0x68,
                         "char1_status" to 0,
                         "char2_status" to 0,
                         "char3_status" to 0,
                         "char4_status" to 0
                     )
-                } else {
-                    mapOf("screenState" to 0x63)
+                    stateCallCount <= 6 -> mapOf("screenState" to 0x63)  // PostBattle modal taps
+                    else -> mapOf("screenState" to 0x00)                  // cleared to overworld
                 }
             }
 
