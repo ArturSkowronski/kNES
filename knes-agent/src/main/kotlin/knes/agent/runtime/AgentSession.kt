@@ -49,6 +49,20 @@ class AgentSession(
                     return outcome
                 }
 
+                // V2.5.6: deterministic PostBattle dismissal. The modal blocks input;
+                // until it clears, walkOverworldTo / exitInterior return BLOCKED. The LLM
+                // sometimes loops on these instead of calling battleFightAll, burning the
+                // budget. Auto-tap A here so the agent never waits on the modal.
+                if (phase is FfPhase.PostBattle) {
+                    println("[postbattle auto-dismiss]")
+                    toolset.executeAction(profileId = "ff1", actionId = "battle_fight_all")
+                    trace.record(TraceEvent(
+                        turn = 0, role = "system", phase = phase.toString(),
+                        note = "auto-dismissed PostBattle via battle_fight_all",
+                    ))
+                    continue  // re-observe phase next iteration
+                }
+
                 val phaseChanged = previousPhase == null || previousPhase::class != phase::class
                 if (phaseChanged || idleTurns >= 20) {
                     if (++advisorCalls > budget.maxAdvisorCalls) return Outcome.OutOfBudget

@@ -92,7 +92,14 @@ class ExecutorAgent(
             - On the overworld: worldX increases EAST; worldY increases SOUTH. North = lower worldY.
             - Goal: Garland is a SCRIPTED encounter on the bridge NORTH of Coneria. After
               exiting any interior, walk north (decreasing worldY) until Battle(Garland).
-            - In Battle phase, call battleFightAll. After PostBattle, resume walking north.
+            - In Battle phase: call battleFightAll. It auto-fights every round.
+            - In PostBattle phase: call battleFightAll AGAIN — it dismisses the
+              post-battle (rewards/XP) modal by tapping A. You CANNOT walk while
+              PostBattle is on screen; walkOverworldTo will return BLOCKED because
+              the engine ignores movement input during the modal. Only after
+              battleFightAll clears PostBattle will phase become Overworld and walking
+              resume. Do NOT call walkOverworldTo while phase is PostBattle.
+            - After PostBattle clears (phase = Overworld), resume walking north.
         """.trimIndent()
     }
 }
