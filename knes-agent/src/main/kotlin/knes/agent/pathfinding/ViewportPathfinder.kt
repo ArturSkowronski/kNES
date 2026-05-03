@@ -56,13 +56,15 @@ class ViewportPathfinder(private val maxSteps: Int = 32) : Pathfinder {
                 if (nx !in 0 until w || ny !in 0 until h) continue
                 val tile = viewport.tiles[ny][nx]
                 if (!tile.isPassable()) continue
+                val isDestination = targetLocal != null &&
+                    nx == targetLocal.first && ny == targetLocal.second
+                // V2.5.4: hard-impassable transit. TOWN/CASTLE tiles are impassable
+                // unless they ARE the goal (shopping). Replaces the V2.4.6 cost-50
+                // soft-penalty which leaked through when no detour fit in the viewport.
+                if (tile.isImpassableTransit() && !isDestination) continue
                 val (wx, wy) = viewport.localToWorld(nx, ny)
                 if (fog.isBlocked(wx, wy)) continue
-                // Destination tile is always cheap: if the caller picked a TOWN/CASTLE
-                // as the goal (e.g. shopping), don't penalize entering it. Penalty only
-                // applies when town/castle tiles lie *between* origin and goal.
-                val tileCost = if (targetLocal != null && nx == targetLocal.first && ny == targetLocal.second) 1
-                               else tile.cost()
+                val tileCost = if (isDestination) 1 else tile.cost()
                 val nCost = cost + tileCost
                 if (nCost < dist[ny][nx]) {
                     dist[ny][nx] = nCost

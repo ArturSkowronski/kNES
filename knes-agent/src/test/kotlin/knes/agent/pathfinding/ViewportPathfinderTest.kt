@@ -112,15 +112,16 @@ class ViewportPathfinderTest : FunSpec({
         res.steps.shouldContainExactly(Direction.N, Direction.N)
     }
 
-    test("walks through TOWN if it's the only available path (still passable)") {
-        // Wall off all detours; TOWN is the only non-blocked tile north.
+    test("V2.5.4 hard-impassable: TOWN in the only route blocks reaching a non-TOWN goal") {
+        // Wall off all detours; TOWN sits on the only corridor north.
         val vm = viewportOf(fill = TileType.MOUNTAIN) { tiles ->
-            // open vertical corridor through (8,*)
             for (yy in 4..8) tiles[yy][8] = TileType.GRASS
             tiles[6][8] = TileType.TOWN
         }
         val res = pf.findPath(from = 100 to 100, to = 100 to 96, viewport = vm, fog = FogOfWar())
-        res.found shouldBe true
-        res.steps.size shouldBe 4
+        // Pre-V2.5.4: would route through TOWN (cost 50). V2.5.4: hard-impassable
+        // when not destination, so the route is fully blocked.
+        res.found shouldBe false
+        res.steps shouldBe emptyList()
     }
 })

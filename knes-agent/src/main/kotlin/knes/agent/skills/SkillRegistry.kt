@@ -94,7 +94,7 @@ class SkillRegistry(
         toolCallLog.append("findPath", "targetX=$targetX, targetY=$targetY")
         val ram = toolset.getState().ram
         val from = (ram["worldX"] ?: 0) to (ram["worldY"] ?: 0)
-        val viewport = overworldMap.readViewport(from)
+        val viewport = overworldMap.readFullMapView(from)
         fog.merge(viewport)
         val res = overworldPathfinder.findPath(from, targetX to targetY, viewport, fog)
         return when {

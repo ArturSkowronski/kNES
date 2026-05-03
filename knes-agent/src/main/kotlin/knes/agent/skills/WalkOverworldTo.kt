@@ -65,7 +65,10 @@ class WalkOverworldTo(
             if (cx == tx && cy == ty) {
                 return SkillResult(true, "reached ($tx,$ty) in $stepsTaken steps", totalFrames, ram0)
             }
-            val viewport = viewportSource.readViewport(cx to cy)
+            // V2.5.4: pathfind over the full 256×256 overworld so the planner can
+            // route around large blockers (e.g. Coneria town blob) instead of being
+            // boxed into the 16×16 viewport.
+            val viewport = viewportSource.readFullMapView(cx to cy)
             fog.merge(viewport)
             val path = pathfinder.findPath(cx to cy, tx to ty, viewport, fog)
             // V2.5.3: per-pathfinder-call trace so we can verify cost-weighting choices live.

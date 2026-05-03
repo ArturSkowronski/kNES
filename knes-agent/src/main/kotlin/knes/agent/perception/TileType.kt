@@ -30,4 +30,16 @@ enum class TileType(val glyph: Char) {
         TOWN, CASTLE -> 50
         else -> 1
     }
+
+    /**
+     * Hard-impassable when traversed (not the destination). V2.4.6 evidence: cost-50
+     * weighting alone fails when TOWN/CASTLE blobs span the full 16×16 viewport — the
+     * pathfinder still routes through them because there's no alternative. With this
+     * rule the pathfinder skips these tiles entirely *unless* they are the explicit
+     * goal, embodying the LLM's intent: "go to town" → enter; "pass by town" → reroute.
+     */
+    fun isImpassableTransit(): Boolean = when (this) {
+        TOWN, CASTLE -> true
+        else -> false
+    }
 }
