@@ -5,6 +5,7 @@ import knes.agent.perception.MapSession
 import knes.agent.perception.TileType
 import knes.agent.pathfinding.InteriorPathfinder
 import knes.agent.pathfinding.Pathfinder
+import knes.agent.runtime.ToolCallLog
 import knes.agent.tools.EmulatorToolset
 
 /**
@@ -22,6 +23,7 @@ class ExitInterior(
     private val mapSession: MapSession,
     private val fog: FogOfWar,
     private val pathfinder: Pathfinder = InteriorPathfinder(),
+    private val toolCallLog: ToolCallLog? = null,
 ) : Skill {
     override val id = "exit_interior"
     override val description =
@@ -90,6 +92,10 @@ class ExitInterior(
             val ly1 = ram1["localY"] ?: 0
             val partyX1 = lx1 + VIEWPORT_PARTY_OFFSET_X
             val partyY1 = ly1 + VIEWPORT_PARTY_OFFSET_Y
+            // V2.6.5: per-step trace so we can verify whether step actually moved party.
+            toolCallLog?.append("exitInterior.step",
+                "from=($partyX,$partyY) dir=${nextDir.name} → after=($partyX1,$partyY1) " +
+                    "mapId=$mid1 pathLen=${path.steps.size}")
             if (mid1 == mapId && partyX1 == partyX && partyY1 == partyY) {
                 fog.markBlocked(partyX + nextDir.dx, partyY + nextDir.dy)
             }
