@@ -77,18 +77,30 @@ class InteriorPathfinder(private val maxSteps: Int = 64) : Pathfinder {
         t == TileType.DOOR || t == TileType.STAIRS || t == TileType.WARP
 
     /** South-edge implicit exit: this tile is passable AND every tile in the same
-     *  column south of it (down to the viewport bottom) is impassable/UNKNOWN.
+     *  column south of it (within SOUTH_EDGE_PROBE_DEPTH rows) is impassable/UNKNOWN.
      *  This filters out internal walls — only the outer south boundary of the
      *  playable area qualifies. FF1 engine transitions to the parent map when the
-     *  party walks SOUTH off the playable area. */
+     *  party walks SOUTH off the playable area.
+     *
+     *  V2.6.3: probe depth bounded (originally checked to viewport.height end). With
+     *  the V2.6.2 64×64 full-map view that broke the heuristic — distant rows below
+     *  the playable area can be GRASS (0x00 fill) which falsely fails the check.
+     *  Bounded depth restores 16×16-equivalent semantics while still benefitting from
+     *  global BFS reachability. */
     private fun isSouthEdgeExit(viewport: ViewportMap, lx: Int, ly: Int): Boolean {
         val type = viewport.tiles[ly][lx]
         if (!type.isPassable()) return false
-        if (ly + 1 >= viewport.height) return false  // Reached viewport edge — no proof of outside
-        for (sy in ly + 1 until viewport.height) {
+        if (ly + 1 >= viewport.height) return false  // Reached map edge — no proof of outside
+        val end = minOf(ly + 1 + SOUTH_EDGE_PROBE_DEPTH, viewport.height)
+        if (end <= ly + 1) return false
+        for (sy in ly + 1 until end) {
             if (viewport.tiles[sy][lx].isPassable()) return false
         }
         return true
+    }
+
+    private companion object {
+        const val SOUTH_EDGE_PROBE_DEPTH = 8
     }
 
     private fun reconstruct(
