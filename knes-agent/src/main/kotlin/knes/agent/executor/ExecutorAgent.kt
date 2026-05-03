@@ -12,6 +12,7 @@ import knes.agent.perception.FfPhase
 import knes.agent.perception.FogOfWar
 import knes.agent.perception.MapSession
 import knes.agent.perception.OverworldMap
+import knes.agent.runtime.ToolCallLog
 import knes.agent.skills.SkillRegistry
 import knes.agent.tools.EmulatorToolset
 
@@ -23,8 +24,10 @@ class ExecutorAgent(
     private val overworldMap: OverworldMap,
     private val mapSession: MapSession,
     private val fog: FogOfWar,
+    private val toolCallLog: ToolCallLog = ToolCallLog(),
 ) {
-    private val skillRegistry = SkillRegistry(toolset, overworldMap, mapSession, fog)
+    private val skillRegistry = SkillRegistry(toolset, overworldMap, mapSession, fog,
+        toolCallLog = toolCallLog)
     private val advisorTool = AdvisorToolset(advisor)
     private val registry = ToolRegistry {
         tools(skillRegistry)

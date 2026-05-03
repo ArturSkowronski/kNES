@@ -41,14 +41,16 @@ fun main(args: Array<String>) {
             val mapSession = MapSession(InteriorMapLoader(File(rom).readBytes()), fog)
             val visionClassifier = AnthropicVisionPhaseClassifier(apiKey = key)
             val observer = RamObserver(toolset, overworldMap, vision = visionClassifier)
+            val toolCallLog = knes.agent.runtime.ToolCallLog()
             val advisor = AdvisorAgent(anthropic, router, toolset, viewportSource = overworldMap, interiorSource = mapSession, fog = fog)
-            val executor = ExecutorAgent(anthropic, router, toolset, advisor, overworldMap, mapSession, fog)
+            val executor = ExecutorAgent(anthropic, router, toolset, advisor, overworldMap, mapSession, fog, toolCallLog)
 
             AgentSession(
                 toolset = toolset,
                 observer = observer,
                 executor = executor,
                 advisor = advisor,
+                toolCallLog = toolCallLog,
                 budget = Budget(maxSkillInvocations = maxSkills, costCapUsd = costCap, wallClockCapSeconds = wallCap),
             ).run()
         }

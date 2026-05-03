@@ -20,6 +20,7 @@ class AgentSession(
     private val observer: RamObserver,
     private val executor: ExecutorAgent,
     private val advisor: AdvisorAgent,
+    private val toolCallLog: ToolCallLog = ToolCallLog(),
     private val budget: Budget = Budget(),
     runDir: Path = Trace.newRunDir(),
 ) {
@@ -75,11 +76,14 @@ class AgentSession(
                 val result = executor.run(phase, executorInput)
                 skillsInvoked += 1
                 println("[executor result] ${result.lineSequence().take(2).joinToString(" | ").take(160)}")
+                val drainedCalls = toolCallLog.drain()
+                println("[executor calls] ${drainedCalls.joinToString(" ; ").take(200)}")
                 trace.record(
                     TraceEvent(
                         turn = 0, role = "executor", phase = phase.toString(),
                         input = executorInput,   // full prompt sent to executor (with current plan + RAM)
                         output = result,         // full executor reasoning + final response, untruncated
+                        toolCalls = drainedCalls,
                     )
                 )
 

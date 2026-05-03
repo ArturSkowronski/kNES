@@ -9,6 +9,7 @@ import knes.agent.perception.OverworldMap
 import knes.agent.pathfinding.InteriorPathfinder
 import knes.agent.pathfinding.Pathfinder
 import knes.agent.pathfinding.ViewportPathfinder
+import knes.agent.runtime.ToolCallLog
 import knes.agent.tools.EmulatorToolset
 import knes.agent.tools.results.ActionToolResult
 import knes.agent.tools.results.StateSnapshot
@@ -24,6 +25,7 @@ class SkillRegistry(
     private val fog: FogOfWar,
     private val overworldPathfinder: Pathfinder = ViewportPathfinder(),
     private val interiorPathfinder: Pathfinder = InteriorPathfinder(),
+    private val toolCallLog: ToolCallLog = ToolCallLog(),
 ) : ToolSet {
 
     private val pressStartSkill = PressStartUntilOverworld(toolset)
@@ -35,8 +37,10 @@ class SkillRegistry(
         "Advance from the FF1 title screen through NEW GAME / class select / name entry into " +
             "the overworld. Mashes START then A. Termination: char1_hpLow != 0 OR worldX != 0."
     )
-    suspend fun pressStartUntilOverworld(maxAttempts: Int = 60): SkillResult =
-        pressStartSkill.invoke(mapOf("maxAttempts" to "$maxAttempts"))
+    suspend fun pressStartUntilOverworld(maxAttempts: Int = 60): SkillResult {
+        toolCallLog.append("pressStartUntilOverworld", "maxAttempts=$maxAttempts")
+        return pressStartSkill.invoke(mapOf("maxAttempts" to "$maxAttempts"))
+    }
 
     @Tool
     @LLMDescription(
@@ -44,8 +48,10 @@ class SkillRegistry(
             "south-edge implicit exit) using deterministic BFS. Stops on sub-map transition, " +
             "encounter, or arrival on overworld. Use when phase is Indoors."
     )
-    suspend fun exitInterior(maxSteps: Int = 64): SkillResult =
-        exitInteriorSkill.invoke(mapOf("maxSteps" to "$maxSteps"))
+    suspend fun exitInterior(maxSteps: Int = 64): SkillResult {
+        toolCallLog.append("exitInterior", "maxSteps=$maxSteps")
+        return exitInteriorSkill.invoke(mapOf("maxSteps" to "$maxSteps"))
+    }
 
     @Tool
     @LLMDescription(
@@ -54,6 +60,7 @@ class SkillRegistry(
             "Deterministic; no LLM tokens."
     )
     fun findPathToExit(): String {
+        toolCallLog.appendNoArgs("findPathToExit")
         val ram = toolset.getState().ram
         val mapId = ram["currentMapId"] ?: -1
         if (mapId < 0) return "BLOCKED. currentMapId unknown."
@@ -73,8 +80,10 @@ class SkillRegistry(
     @LLMDescription(
         "Walk on the FF1 overworld toward (targetX, targetY) using deterministic BFS pathfinding."
     )
-    suspend fun walkOverworldTo(targetX: Int, targetY: Int, maxSteps: Int = 32): SkillResult =
-        walkSkill.invoke(mapOf("targetX" to "$targetX", "targetY" to "$targetY", "maxSteps" to "$maxSteps"))
+    suspend fun walkOverworldTo(targetX: Int, targetY: Int, maxSteps: Int = 32): SkillResult {
+        toolCallLog.append("walkOverworldTo", "targetX=$targetX, targetY=$targetY, maxSteps=$maxSteps")
+        return walkSkill.invoke(mapOf("targetX" to "$targetX", "targetY" to "$targetY", "maxSteps" to "$maxSteps"))
+    }
 
     @Tool
     @LLMDescription(
@@ -82,6 +91,7 @@ class SkillRegistry(
             "the visible 16x16 overworld viewport."
     )
     fun findPath(targetX: Int, targetY: Int): String {
+        toolCallLog.append("findPath", "targetX=$targetX, targetY=$targetY")
         val ram = toolset.getState().ram
         val from = (ram["worldX"] ?: 0) to (ram["worldY"] ?: 0)
         val viewport = overworldMap.readViewport(from)
@@ -99,13 +109,17 @@ class SkillRegistry(
 
     @Tool
     @LLMDescription("Run the registered FF1 battle_fight_all action.")
-    suspend fun battleFightAll(): ActionToolResult =
-        toolset.executeAction(profileId = "ff1", actionId = "battle_fight_all")
+    suspend fun battleFightAll(): ActionToolResult {
+        toolCallLog.appendNoArgs("battleFightAll")
+        return toolset.executeAction(profileId = "ff1", actionId = "battle_fight_all")
+    }
 
     @Tool
     @LLMDescription("Run the registered FF1 walk_until_encounter action.")
-    suspend fun walkUntilEncounter(): ActionToolResult =
-        toolset.executeAction(profileId = "ff1", actionId = "walk_until_encounter")
+    suspend fun walkUntilEncounter(): ActionToolResult {
+        toolCallLog.appendNoArgs("walkUntilEncounter")
+        return toolset.executeAction(profileId = "ff1", actionId = "walk_until_encounter")
+    }
 
     @Tool
     @LLMDescription("Return frame count, watched RAM, CPU regs, held buttons.")
