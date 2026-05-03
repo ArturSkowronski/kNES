@@ -43,7 +43,19 @@ class RamObserver(
         val wx = ram["worldX"] ?: 0
         val wy = ram["worldY"] ?: 0
         val partyCreated = (ram["char1_hpLow"] ?: 0) != 0
+        val mapId = ram["currentMapId"] ?: 0
         if (partyCreated && locType == 0 && lx == 0 && ly == 0 && (wx != 0 || wy != 0)) {
+            return FfPhase.Overworld(wx, wy)
+        }
+        // V3.1: extended hard-override. After walkOverworldTo aborts on a stale
+        // interior-transition signal, FF1 leaves localX/Y non-zero on the world
+        // map (RAM 0x0029/0x002A is "Non-world map position" per datacrystal —
+        // FF1 never zeroes it on overworld entry). The strict V2.5.7 override
+        // misses this case and the vision phase classifier (Haiku) flips to
+        // false-Indoors, oscillating forever (V3.0 slice 1 evidence).
+        // currentMapId=0 means "no interior loaded" — combined with locType=0
+        // and live world coords, the party is unambiguously on the world map.
+        if (partyCreated && locType == 0 && mapId == 0 && (wx != 0 || wy != 0)) {
             return FfPhase.Overworld(wx, wy)
         }
         val v = vision ?: return classify(ram)  // RAM-only fallback (legacy V2.3.1 heuristic)
