@@ -88,9 +88,11 @@ class AdvisorAgent(
             executor will follow until the next phase change. Each step must be actionable
             using the available kNES skills:
               - pressStartUntilOverworld: title screen → overworld with default party
-              - exitInterior: walk to the nearest exit (DOOR/STAIRS/WARP or south-edge)
-                of the current FF1 interior map using a deterministic BFS pathfinder.
-                Handles sub-map transitions automatically. Use when Indoors.
+              - walkInteriorVision: PREFERRED in Indoors. Vision-driven step-by-step
+                walk toward the nearest exit. Loops internally until exit, encounter,
+                or visually STUCK. Pass a step budget such as 12–24.
+              - exitInterior: (DEPRECATED on towns; ~13% step success) offline-decoder
+                fallback. Only suggest this if walkInteriorVision returns STUCK twice.
               - walkOverworldTo(x, y): deterministic BFS walk to coords on the OVERWORLD;
                 aborts on encounter
               - walkUntilEncounter: walk randomly until a battle starts
@@ -111,12 +113,14 @@ class AdvisorAgent(
                 Use this map to plan waypoints — DO NOT trust your training-data memory of
                 FF1 geography. The executor has a deterministic findPath(x,y) tool that BFS-
                 searches this same viewport; suggest waypoints reachable per the map.
-              - V2.4: when phase is Indoors you also receive an ASCII map of the current
-                interior. Glyphs include D=door, >=stairs, *=warp. Doors lead OUT of the
-                interior to the overworld; stairs/warps move between sub-maps within the same
-                interior. Suggest exitInterior — the BFS finds the nearest exit and drives
-                the party there. Successive sub-map transitions eventually land back on the
-                overworld.
+              - V3.0: interior navigation is VISION-BASED. Tell the executor to call
+                walkInteriorVision with a step budget (12–24). DO NOT propose target
+                localX/localY coords inside towns or castles — the offline map decoder
+                is unreliable. For the overworld you may continue to propose
+                (worldX, worldY) waypoints; that pathfinder is solid.
+              - You may still receive an ASCII map of the interior; treat it as
+                supplementary context, not as ground truth. The vision navigator
+                reads the rendered frame directly.
               - V2.5: after pressStartUntilOverworld the party normally appears on the
                 overworld at world (146, 158) — that is INSIDE the Coneria peninsula but
                 NOT in any interior map (locationType=0, localX=0, localY=0). RAM-override

@@ -66,13 +66,16 @@ class ExecutorAgent(
 
             Skills available (each is a single tool call):
             - pressStartUntilOverworld: title screen → overworld with default party
-            - exitInterior: walk to nearest exit (DOOR/STAIRS/WARP or south-edge) of the
-              current FF1 interior map using a deterministic BFS pathfinder. Handles
-              sub-map transitions automatically. Use when phase is Indoors.
+            - walkInteriorVision: PREFERRED in Indoors. Vision-driven step-by-step
+              walk toward the nearest exit. The skill loops internally until exit,
+              encounter, or visually STUCK. maxSteps default 24.
+            - exitInterior: (DEPRECATED on towns; ~13% step success) decoder-based
+              exit walker. Use only as fallback when walkInteriorVision returns STUCK
+              repeatedly.
             - walkOverworldTo(targetX, targetY): walk on overworld using deterministic
               BFS pathfinder; aborts on encounter
             - findPath(targetX, targetY): query the overworld pathfinder (does not move)
-            - findPathToExit: query the interior pathfinder for the nearest exit
+            - findPathToExit: (DEPRECATED) decoder query for interior pathfinder
             - battleFightAll: every alive character uses FIGHT until battle ends
             - walkUntilEncounter: walk randomly until a battle starts
             - askAdvisor(reason): consult the planner when stuck or at a phase boundary
@@ -80,15 +83,17 @@ class ExecutorAgent(
             FF1 KNOWLEDGE:
             - Phase will be one of: TitleOrMenu, Overworld(x,y), Indoors(mapId,localX,localY),
               Battle(...), PostBattle.
-            - Indoors = inside a building / town / castle (uses local coords). walkOverworldTo
-              does NOT work indoors. Call exitInterior to reach the world map.
-            - V2.4: Indoors phase carries `mapId` identifying the interior in ROM.
-              The exitInterior skill knows how to reload the map when you transition
-              to a sub-map (stairs/warp). Just keep calling exitInterior until phase
-              becomes Overworld.
-            - V2.4: when phase is Indoors you also receive an ASCII MAP showing the
-              current interior. Glyphs: @=party, .=floor, ^=wall, ~=water, D=door,
-              >=stairs, *=warp, ?=unseen/outside, X=blocked-confirmed.
+            - Indoors = inside a building / town / castle (uses local coords).
+              walkOverworldTo does NOT work indoors. Call walkInteriorVision —
+              it sees the screen and picks one direction per step. The skill loops
+              internally until exit, encounter, or visually STUCK. If it returns STUCK,
+              ask the advisor (askAdvisor) before retrying or falling back to exitInterior.
+            - V3.0: the offline ROM map decoder (used by exitInterior /
+              findPathToExit) is unreliable on FF1 town maps (covers <30% of tiles).
+              walkInteriorVision delegates to a vision model that reads the actual
+              rendered frame, so it works on any interior the player can see.
+            - The Indoors phase still carries `mapId`; treat it as logging metadata,
+              not as something to act on.
             - On the overworld: worldX increases EAST; worldY increases SOUTH. North = lower worldY.
             - V2.5: party normally spawns at Overworld(146, 158) right after
               pressStartUntilOverworld. You should NOT see Indoors at the very start.
