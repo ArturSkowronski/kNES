@@ -49,30 +49,54 @@ correlation-not-causation: party did move from (5, 28) to (4, 11) under
 new BFS, but the path may have been *pseudo-random* through ROM-decoded
 bytes that happened to align with playable terrain by coincidence.
 
-## Your task — verify, then decide
+## Verification result (executed at end of last session)
 
-Do NOT immediately code. Do this analysis first:
+Ran the mapId=8 dump test. Results decisive but contradictory:
 
-1. **Enable `dump mapId=8 to verify scroll-offset hypothesis` in
-   `OverworldDumpTest.kt`** (currently `config(enabled = false)`). Run it.
-   It prints the byte/classify at (5, 28), (4, 11), (10, 32), (13, 35),
-   (12, 18) plus a 0..47 × 0..47 glyph dump. Tell me:
-   - Are (5, 28) and (4, 11) passable in our decoded mapId=8?
-   - Are (13, 35) and (12, 18) passable?
-   - Where is the actual playable area in mapId=8?
-   - Where does the V2.4.4 "exit at (10, 32)" land — is it a real exit tile or interior?
+| RAM coord | Raw interpretation | Scroll-offset interpretation |
+|---|---|---|
+| (5, 28) (V2.4.4 spawn) | **passable** ✓ (0x31 floor) | (13, 35) **wall** ✗ |
+| (4, 11) (V2.6.4 stuck) | **wall** ✗ (0x30) | (12, 18) **STAIRS** ✓ (0x44) |
 
-2. **Cross-check with FF1 community RAM map.** Specifically, find authoritative
-   FF1 disassembly notes (Disch's FF1 disassembly is canonical) and verify
-   whether RAM 0x0029/0x002A is "party tile" or "scroll offset". Spend 10
-   minutes max on this — if not conclusive, treat as inconclusive.
+Neither interpretation works for both positions. THIRD theory now leading:
 
-3. **Run the dump tests at decision time.** Based on findings, recommend:
-   - **Revert V2.6.4** (raw localX/Y = party tile) → mapId=24 stuck remains.
-   - **Keep V2.6.4** (scroll offset) → need to handle NPC-blocking and
-     refine coord arithmetic.
-   - **Hybrid** — different offset semantics per map type (towns vs castles
-     vs dungeons). FF1 may use both schemes.
+**Theory C: our decoded mapId=8 is NOT the same map the game actually
+plays.** The dump shows mapId=8 as a castle-like layout (walls 0x30,
+floors 0x31, STAIRS 0x44, internal rooms, south-edge openings at y=33/34).
+This looks more like Coneria Castle than Coneria Town outdoor. FF1 may
+have a sub-map ID layered on top of `currentMapId` (RAM 0x0048) that
+selects the actual playable map. Our `InteriorMapLoader.load(8)` always
+decodes the same ROM section — but the in-game map may differ depending
+on which sub-room party is in.
+
+If C is correct, BFS finds paths through OUR decoded bytes, party walks
+in real game by coincidence (when our decoded passable matches the real
+passable). 13% step-success rate (76/583 in V2.6.5 trace) supports this.
+
+## Your task — verify Theory C, then decide
+
+Do NOT code blindly. Do this analysis first:
+
+1. **Find FF1 sub-map ID byte.** Look at FF1 RAM map (Disch disassembly,
+   datacrystal FF1 RAM page). There may be a SECOND map ID byte (e.g.
+   0x004A or somewhere) that distinguishes "Coneria Castle interior" from
+   "weapon shop" from "throne room sub-map" — all sharing currentMapId=8.
+   Profile `knes-debug/src/main/resources/profiles/ff1.json` doesn't track it.
+
+2. **Capture screenshot at first Indoors(mapId=8) frame.** The trace doesn't
+   record images. Add screenshot capture to AgentSession on first phase
+   change to Indoors. Compare visually with our decoded mapId=8 dump —
+   confirm whether party is in the same map our loader thinks.
+
+3. **Verify InteriorMapLoader pointer table.** ROM offset 0x10010, 128 maps,
+   2 bytes each. Maybe FF1 uses a different table for sub-maps vs main
+   maps; or the bank-resolution code in `load()` is wrong for mapId>=8.
+
+4. **Decide based on evidence:**
+   - If our decoded mapId=8 ≠ real map: fix the loader / find correct table.
+   - If decoded map IS correct but RAM coords need a different interpretation:
+     the screenshot will show party position visually; reverse-engineer.
+   - If both correct but transitions happen invisibly: track sub-map ID byte.
 
 ## Constraints / preferences
 
