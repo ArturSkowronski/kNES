@@ -56,7 +56,11 @@ class ExitInterior(
             mapSession.ensureCurrent(mapId)
             val lx = ram["localX"] ?: 0
             val ly = ram["localY"] ?: 0
-            val viewport = mapSession.readViewport(lx to ly)
+            // V2.6.2: BFS over the full 64×64 interior map so we find DOOR/STAIRS/WARP/
+            // south-edge exits even when party is at the corner of the playable area.
+            // 16×16 viewport pathfinding (V2.4.x) stalled when party at (3, 2) in
+            // mapId=24 because exits are far outside the visible window.
+            val viewport = mapSession.readFullMapView(lx to ly)
             fog.merge(viewport)
             val path = pathfinder.findPath(lx to ly, 0 to 0, viewport, fog)
             if (!path.found || path.steps.isEmpty()) {

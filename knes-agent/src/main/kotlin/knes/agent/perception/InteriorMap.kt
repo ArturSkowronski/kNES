@@ -31,6 +31,19 @@ class InteriorMap(internal val tiles: ByteArray) : ViewportSource {
         return ViewportMap(grid, partyLocal, partyWorldXY)
     }
 
+    /**
+     * V2.6.2: 64×64 ViewportMap covering the whole interior. Used by InteriorPathfinder
+     * so it can BFS the full map and find south-edge / DOOR / STAIRS / WARP exits even
+     * when the party is far from them (originally V2.4.6-A in STATE doc; V2.5.x stalls
+     * in mapId=24 sub-maps with party at (3, 2) where the 16×16 viewport doesn't reach
+     * any exit). Local coords coincide with map coords (party-local = party-world).
+     */
+    override fun readFullMapView(partyWorldXY: Pair<Int, Int>): ViewportMap {
+        val (px, py) = partyWorldXY
+        val grid = Array(HEIGHT) { y -> Array(WIDTH) { x -> classifyAt(x, y) } }
+        return ViewportMap(grid, partyLocalXY = px to py, partyWorldXY = partyWorldXY)
+    }
+
     companion object {
         const val WIDTH = 64
         const val HEIGHT = 64

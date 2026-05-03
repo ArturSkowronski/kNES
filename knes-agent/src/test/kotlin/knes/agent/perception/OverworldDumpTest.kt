@@ -41,5 +41,55 @@ class OverworldDumpTest : FunSpec({
             println("findPath $from → $to : found=${res.found} partial=${res.partial} " +
                 "len=${res.steps.size} reason='${res.reason}' reached=${res.reachedTile}")
         }
+
+        // V2.6.1: dump raw tile bytes around suspected TOWN/CASTLE entry tiles
+        // to identify the byte values our classifier mis-categorises.
+        // V2.6.0 evidence: stepping N from (145, 152) into (145, 151) transported
+        // party into Coneria Town interior — yet (145, 151) shows as '.' (grass)
+        // in the glyph dump.
+        println()
+        println("Raw tile bytes around suspected entries:")
+        val probes = listOf(
+            "above-spawn-grass" to (145 to 151),
+            "spawn-tile" to (146 to 158),
+            "Coneria-castle-glyph-CC" to (152 to 157),
+            "Coneria-town-glyph-CC" to (152 to 159),
+            "Coneria-town-glyph-TT" to (152 to 160),
+            "south-of-spawn" to (146 to 159),
+        )
+        for ((name, p) in probes) {
+            val (px, py) = p
+            val byte = map.tileAt(px, py)
+            val tt = map.classifyAt(px, py)
+            println("  $name @ ($px, $py) = byte 0x${byte.toString(16).padStart(2, '0')} → ${tt.name} (${tt.glyph})")
+        }
+        println()
+        println("Row y=151 bytes (col 7..16, glyphs all '.'):")
+        for (x in 137..147) {
+            val b = map.tileAt(x, 151)
+            print("  ($x,151)=0x${b.toString(16).padStart(2,'0')}")
+        }
+        println()
+        println("Row y=152 bytes (col 8..17):")
+        for (x in 138..147) {
+            val b = map.tileAt(x, 152)
+            print("  ($x,152)=0x${b.toString(16).padStart(2,'0')}")
+        }
+        println()
+        println("Row y=160 bytes around Coneria town:")
+        for (x in 149..156) {
+            val b = map.tileAt(x, 160)
+            print("  ($x,160)=0x${b.toString(16).padStart(2,'0')}")
+        }
+        println()
+        println("Suspect entry trigger zone — agent stepped S from (145,152) and entered mapId=8:")
+        for (y in 152..162) {
+            print("  y=$y: ")
+            for (x in 142..156) {
+                val b = map.tileAt(x, y)
+                print("0x${b.toString(16).padStart(2,'0')} ")
+            }
+            println()
+        }
     }
 })

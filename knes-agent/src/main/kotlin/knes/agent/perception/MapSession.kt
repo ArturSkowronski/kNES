@@ -26,4 +26,10 @@ class MapSession(
         val map = currentMap ?: error("MapSession.readViewport called before ensureCurrent")
         return map.readViewport(partyWorldXY)
     }
+
+    /** V2.6.2: full 64×64 interior view for BFS over the whole map (vs 16×16 advisor view). */
+    override fun readFullMapView(partyWorldXY: Pair<Int, Int>): ViewportMap {
+        val map = currentMap ?: error("MapSession.readFullMapView called before ensureCurrent")
+        return map.readFullMapView(partyWorldXY)
+    }
 }
