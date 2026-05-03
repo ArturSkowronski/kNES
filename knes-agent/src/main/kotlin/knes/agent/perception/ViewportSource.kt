@@ -1,11 +1,14 @@
 package knes.agent.perception
 
 /**
- * Minimal interface for anything that can produce a 16x16 ViewportMap centered on
- * the party's current world coordinate. Lets WalkOverworldTo / SkillRegistry depend
- * on a small contract instead of the full OverworldMap (which requires ROM bytes),
- * keeping unit tests light.
+ * Producer of ViewportMaps centered on the party. Two views:
+ *  - readViewport: 16x16 around party (ASCII rendering / advisor prompts).
+ *  - readFullMapView: 256x256 overworld for global pathfinding so the planner
+ *    can route around large blockers (Coneria town etc.) that span the entire
+ *    16x16 window. Test fakes can implement only readViewport; the default
+ *    implementation falls back to it so legacy 16x16 tests keep working.
  */
-fun interface ViewportSource {
+interface ViewportSource {
     fun readViewport(partyWorldXY: Pair<Int, Int>): ViewportMap
+    fun readFullMapView(partyWorldXY: Pair<Int, Int>): ViewportMap = readViewport(partyWorldXY)
 }

@@ -89,7 +89,7 @@ class RamObserverTest : FunSpec({
             "char1_status" to 0,
         )
 
-        RamObserver.classify(ram) shouldBe FfPhase.Indoors(localX = 0x07, localY = 0x0C)
+        RamObserver.classify(ram) shouldBe FfPhase.Indoors(mapId = -1, localX = 0x07, localY = 0x0C)
     }
 
     test("indoors takes precedence over overworld classification when locationType=0xD1") {
@@ -105,6 +105,6 @@ class RamObserverTest : FunSpec({
             "char1_hpLow" to 35,
         )
 
-        RamObserver.classify(ram) shouldBe FfPhase.Indoors(localX = 4, localY = 9)
+        RamObserver.classify(ram) shouldBe FfPhase.Indoors(mapId = -1, localX = 4, localY = 9)
     }
 })

@@ -5,7 +5,11 @@ import knes.agent.executor.ExecutorAgent
 import knes.agent.llm.AnthropicSession
 import knes.agent.llm.ModelRouter
 import knes.agent.perception.FogOfWar
+import knes.agent.perception.InteriorMapLoader
+import knes.agent.perception.MapSession
 import knes.agent.perception.OverworldMap
+import knes.agent.perception.AnthropicVisionInteriorNavigator
+import knes.agent.perception.AnthropicVisionPhaseClassifier
 import knes.agent.perception.RamObserver
 import java.io.File
 import knes.agent.runtime.AgentSession
@@ -35,15 +39,20 @@ fun main(args: Array<String>) {
             val router = ModelRouter()
             val overworldMap = OverworldMap.fromRom(File(rom))
             val fog = FogOfWar()
-            val observer = RamObserver(toolset, overworldMap)
-            val advisor = AdvisorAgent(anthropic, router, toolset, viewportSource = overworldMap, fog = fog)
-            val executor = ExecutorAgent(anthropic, router, toolset, advisor, overworldMap, fog)
+            val mapSession = MapSession(InteriorMapLoader(File(rom).readBytes()), fog)
+            val visionClassifier = AnthropicVisionPhaseClassifier(apiKey = key)
+            val visionInteriorNavigator = AnthropicVisionInteriorNavigator(apiKey = key)
+            val observer = RamObserver(toolset, overworldMap, vision = visionClassifier)
+            val toolCallLog = knes.agent.runtime.ToolCallLog()
+            val advisor = AdvisorAgent(anthropic, router, toolset, viewportSource = overworldMap, interiorSource = mapSession, fog = fog)
+            val executor = ExecutorAgent(anthropic, router, toolset, advisor, overworldMap, mapSession, fog, toolCallLog, visionInteriorNavigator)
 
             AgentSession(
                 toolset = toolset,
                 observer = observer,
                 executor = executor,
                 advisor = advisor,
+                toolCallLog = toolCallLog,
                 budget = Budget(maxSkillInvocations = maxSkills, costCapUsd = costCap, wallClockCapSeconds = wallCap),
             ).run()
         }

@@ -2,7 +2,7 @@ package knes.agent.pathfinding
 
 import knes.agent.perception.FogOfWar
 import knes.agent.perception.ViewportMap
-import java.util.ArrayDeque
+import java.util.PriorityQueue
 
 class ViewportPathfinder(private val maxSteps: Int = 32) : Pathfinder {
 
@@ -19,17 +19,22 @@ class ViewportPathfinder(private val maxSteps: Int = 32) : Pathfinder {
         val targetLocal = viewport.worldToLocal(to.first, to.second)
         val w = viewport.width
         val h = viewport.height
-        val visited = Array(h) { BooleanArray(w) }
+        val INF = Int.MAX_VALUE
+        val dist = Array(h) { IntArray(w) { INF } }
         val viaDir = Array(h) { Array<Direction?>(w) { null } }
-        val q = ArrayDeque<Pair<Int, Int>>()
-        q.add(start)
-        visited[start.second][start.first] = true
+        // Dijkstra: visit cheapest-cost-so-far first. Cost is incurred on entering a tile,
+        // so origin is free (cost=0) and TOWN/CASTLE detours are penalized via TileType.cost().
+        val pq = PriorityQueue<IntArray>(compareBy { it[0] })
+        dist[start.second][start.first] = 0
+        pq.add(intArrayOf(0, start.first, start.second))
         var bestReachable: Pair<Int, Int> = start
         val edgeTarget = targetEdge(viewport, to)
         var bestDistToTargetSq = distSq(start, targetLocal ?: edgeTarget)
 
-        while (q.isNotEmpty()) {
-            val (cx, cy) = q.poll()
+        while (pq.isNotEmpty()) {
+            val node = pq.poll()
+            val cost = node[0]; val cx = node[1]; val cy = node[2]
+            if (cost > dist[cy][cx]) continue  // stale entry
             if (targetLocal != null && cx == targetLocal.first && cy == targetLocal.second) {
                 val steps = reconstruct(cx, cy, start, viaDir)
                 if (steps.size > maxSteps) {
@@ -49,13 +54,23 @@ class ViewportPathfinder(private val maxSteps: Int = 32) : Pathfinder {
                 val nx = cx + dir.dx
                 val ny = cy + dir.dy
                 if (nx !in 0 until w || ny !in 0 until h) continue
-                if (visited[ny][nx]) continue
-                if (!viewport.tiles[ny][nx].isPassable()) continue
+                val tile = viewport.tiles[ny][nx]
+                if (!tile.isPassable()) continue
+                val isDestination = targetLocal != null &&
+                    nx == targetLocal.first && ny == targetLocal.second
+                // V2.5.4: hard-impassable transit. TOWN/CASTLE tiles are impassable
+                // unless they ARE the goal (shopping). Replaces the V2.4.6 cost-50
+                // soft-penalty which leaked through when no detour fit in the viewport.
+                if (tile.isImpassableTransit() && !isDestination) continue
                 val (wx, wy) = viewport.localToWorld(nx, ny)
                 if (fog.isBlocked(wx, wy)) continue
-                visited[ny][nx] = true
-                viaDir[ny][nx] = dir
-                q.add(nx to ny)
+                val tileCost = if (isDestination) 1 else tile.cost()
+                val nCost = cost + tileCost
+                if (nCost < dist[ny][nx]) {
+                    dist[ny][nx] = nCost
+                    viaDir[ny][nx] = dir
+                    pq.add(intArrayOf(nCost, nx, ny))
+                }
             }
         }
 

@@ -4,9 +4,13 @@ import ai.koog.agents.core.tools.annotations.LLMDescription
 import ai.koog.agents.core.tools.annotations.Tool
 import ai.koog.agents.core.tools.reflect.ToolSet
 import knes.agent.perception.FogOfWar
-import knes.agent.perception.ViewportSource
+import knes.agent.perception.MapSession
+import knes.agent.perception.OverworldMap
+import knes.agent.perception.VisionInteriorNavigator
+import knes.agent.pathfinding.InteriorPathfinder
 import knes.agent.pathfinding.Pathfinder
 import knes.agent.pathfinding.ViewportPathfinder
+import knes.agent.runtime.ToolCallLog
 import knes.agent.tools.EmulatorToolset
 import knes.agent.tools.results.ActionToolResult
 import knes.agent.tools.results.StateSnapshot
@@ -17,74 +21,126 @@ import knes.agent.tools.results.StateSnapshot
 )
 class SkillRegistry(
     private val toolset: EmulatorToolset,
-    private val viewportSource: ViewportSource,
+    private val overworldMap: OverworldMap,
+    private val mapSession: MapSession,
     private val fog: FogOfWar,
-    private val pathfinder: Pathfinder = ViewportPathfinder(),
+    private val overworldPathfinder: Pathfinder = ViewportPathfinder(),
+    private val interiorPathfinder: Pathfinder = InteriorPathfinder(),
+    private val toolCallLog: ToolCallLog = ToolCallLog(),
+    private val visionInteriorNavigator: VisionInteriorNavigator? = null,
 ) : ToolSet {
 
     private val pressStartSkill = PressStartUntilOverworld(toolset)
-    private val walkSkill = WalkOverworldTo(toolset, viewportSource, fog, pathfinder)
-    private val exitSkill = ExitBuilding(toolset)
+    private val walkSkill = WalkOverworldTo(toolset, overworldMap, fog, overworldPathfinder, toolCallLog)
+    private val exitInteriorSkill = ExitInterior(toolset, mapSession, fog, interiorPathfinder, toolCallLog)
+    private val walkInteriorVisionSkill = visionInteriorNavigator?.let {
+        WalkInteriorVision(toolset, it, toolCallLog)
+    }
 
     @Tool
     @LLMDescription(
         "Advance from the FF1 title screen through NEW GAME / class select / name entry into " +
-            "the overworld. Mashes START then A. Termination: char1_hpLow != 0 OR worldX != 0. " +
-            "Bounded by maxAttempts (default 60)."
+            "the overworld. Mashes START then A. Termination: char1_hpLow != 0 OR worldX != 0."
     )
-    suspend fun pressStartUntilOverworld(maxAttempts: Int = 60): SkillResult =
-        pressStartSkill.invoke(mapOf("maxAttempts" to "$maxAttempts"))
+    suspend fun pressStartUntilOverworld(maxAttempts: Int = 60): SkillResult {
+        toolCallLog.append("pressStartUntilOverworld", "maxAttempts=$maxAttempts")
+        return pressStartSkill.invoke(mapOf("maxAttempts" to "$maxAttempts"))
+    }
 
     @Tool
     @LLMDescription(
-        "Exit the current building / town / castle interior by walking SOUTH until RAM " +
-            "locationType (0x000D) becomes 0x00 (outside). Use this when phase is Indoors."
+        "PREFERRED for Indoors phase. Walk inside the current FF1 interior map by " +
+            "asking a vision model for one direction at a time. Each step looks at " +
+            "the screen, picks N/S/E/W, taps the button, verifies movement via RAM. " +
+            "Stops on exit-to-overworld, encounter, or visual STUCK. maxSteps default 24."
     )
-    suspend fun exitBuilding(maxSteps: Int = 30): SkillResult =
-        exitSkill.invoke(mapOf("maxSteps" to "$maxSteps"))
+    suspend fun walkInteriorVision(maxSteps: Int = 24): SkillResult {
+        val skill = walkInteriorVisionSkill
+            ?: return SkillResult(false,
+                "vision navigator not configured (ANTHROPIC_API_KEY missing?)", 0, emptyMap())
+        toolCallLog.append("walkInteriorVision", "maxSteps=$maxSteps")
+        return skill.invoke(mapOf("maxSteps" to "$maxSteps"))
+    }
 
     @Tool
     @LLMDescription(
-        "Find a walkable path from current party position to target world coordinates within " +
-            "the visible 16x16 viewport. Returns 'PATH n steps: D,D,...' if reachable, " +
-            "'PARTIAL n steps to (x,y); target outside viewport' if partial, or 'BLOCKED reason' " +
-            "if no path. Deterministic — does not consume LLM tokens."
+        "(DEPRECATED on towns; ~13% step success) Walk to the nearest interior exit " +
+            "using the offline ROM-decoder pathfinder. Kept as fallback only — prefer " +
+            "walkInteriorVision in Indoors. Stops on sub-map transition, encounter, " +
+            "or arrival on overworld."
     )
-    fun findPath(targetX: Int, targetY: Int): String {
+    suspend fun exitInterior(maxSteps: Int = 64): SkillResult {
+        toolCallLog.append("exitInterior", "maxSteps=$maxSteps")
+        return exitInteriorSkill.invoke(mapOf("maxSteps" to "$maxSteps"))
+    }
+
+    @Tool
+    @LLMDescription(
+        "(DEPRECATED) Query the offline interior pathfinder for the nearest exit. " +
+            "Decoder is unreliable on town maps — prefer walkInteriorVision."
+    )
+    fun findPathToExit(): String {
+        toolCallLog.appendNoArgs("findPathToExit")
         val ram = toolset.getState().ram
-        val from = (ram["worldX"] ?: 0) to (ram["worldY"] ?: 0)
-        val viewport = viewportSource.readViewport(from)
+        val mapId = ram["currentMapId"] ?: -1
+        if (mapId < 0) return "BLOCKED. currentMapId unknown."
+        mapSession.ensureCurrent(mapId)
+        // V2.6.4: localX/localY = scroll offset; party tile = scroll + (8, 7).
+        val from = ((ram["localX"] ?: 0) + 8) to ((ram["localY"] ?: 0) + 7)
+        val viewport = mapSession.readFullMapView(from)  // V2.6.2: full 64×64 BFS
         fog.merge(viewport)
-        val res = pathfinder.findPath(from, targetX to targetY, viewport, fog)
+        val res = interiorPathfinder.findPath(from, 0 to 0, viewport, fog)
         return when {
-            res.found && !res.partial ->
-                "PATH ${res.steps.size} steps: ${res.steps.joinToString(",") { it.name }}"
-            res.found && res.partial ->
-                "PARTIAL ${res.steps.size} steps to (${res.reachedTile.first},${res.reachedTile.second}); " +
-                    "target outside viewport. Walk this path then call findPath again. " +
-                    "First steps: ${res.steps.take(8).joinToString(",") { it.name }}"
-            else -> "BLOCKED. ${res.reason ?: "no path"}. Suggest askAdvisor."
+            res.found -> "PATH ${res.steps.size} steps to exit at (${res.reachedTile.first}," +
+                "${res.reachedTile.second}): ${res.steps.joinToString(",") { it.name }}"
+            else -> "BLOCKED. ${res.reason ?: "no exit visible"}."
         }
     }
 
     @Tool
     @LLMDescription(
-        "Walk on the FF1 overworld toward (targetX, targetY) using deterministic BFS pathfinding. " +
-            "Marks non-moving steps as blocked in fog-of-war. Returns ok=true if the target is " +
-            "reached OR a random encounter starts."
+        "Walk on the FF1 overworld toward (targetX, targetY) using deterministic BFS pathfinding."
     )
-    suspend fun walkOverworldTo(targetX: Int, targetY: Int, maxSteps: Int = 32): SkillResult =
-        walkSkill.invoke(mapOf("targetX" to "$targetX", "targetY" to "$targetY", "maxSteps" to "$maxSteps"))
+    suspend fun walkOverworldTo(targetX: Int, targetY: Int, maxSteps: Int = 32): SkillResult {
+        toolCallLog.append("walkOverworldTo", "targetX=$targetX, targetY=$targetY, maxSteps=$maxSteps")
+        return walkSkill.invoke(mapOf("targetX" to "$targetX", "targetY" to "$targetY", "maxSteps" to "$maxSteps"))
+    }
 
     @Tool
-    @LLMDescription("Run the registered FF1 battle_fight_all action: every alive character uses FIGHT until the battle ends.")
-    suspend fun battleFightAll(): ActionToolResult =
-        toolset.executeAction(profileId = "ff1", actionId = "battle_fight_all")
+    @LLMDescription(
+        "Find walkable path from current party position to target world coordinates within " +
+            "the visible 16x16 overworld viewport."
+    )
+    fun findPath(targetX: Int, targetY: Int): String {
+        toolCallLog.append("findPath", "targetX=$targetX, targetY=$targetY")
+        val ram = toolset.getState().ram
+        val from = (ram["worldX"] ?: 0) to (ram["worldY"] ?: 0)
+        val viewport = overworldMap.readFullMapView(from)
+        fog.merge(viewport)
+        val res = overworldPathfinder.findPath(from, targetX to targetY, viewport, fog)
+        return when {
+            res.found && !res.partial ->
+                "PATH ${res.steps.size} steps: ${res.steps.joinToString(",") { it.name }}"
+            res.found && res.partial ->
+                "PARTIAL ${res.steps.size} steps to (${res.reachedTile.first},${res.reachedTile.second}); " +
+                    "first steps: ${res.steps.take(8).joinToString(",") { it.name }}"
+            else -> "BLOCKED. ${res.reason ?: "no path"}. Suggest askAdvisor."
+        }
+    }
 
     @Tool
-    @LLMDescription("Run the registered FF1 walk_until_encounter action: walk randomly until a battle starts.")
-    suspend fun walkUntilEncounter(): ActionToolResult =
-        toolset.executeAction(profileId = "ff1", actionId = "walk_until_encounter")
+    @LLMDescription("Run the registered FF1 battle_fight_all action.")
+    suspend fun battleFightAll(): ActionToolResult {
+        toolCallLog.appendNoArgs("battleFightAll")
+        return toolset.executeAction(profileId = "ff1", actionId = "battle_fight_all")
+    }
+
+    @Tool
+    @LLMDescription("Run the registered FF1 walk_until_encounter action.")
+    suspend fun walkUntilEncounter(): ActionToolResult {
+        toolCallLog.appendNoArgs("walkUntilEncounter")
+        return toolset.executeAction(profileId = "ff1", actionId = "walk_until_encounter")
+    }
 
     @Tool
     @LLMDescription("Return frame count, watched RAM, CPU regs, held buttons.")

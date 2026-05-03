@@ -3,6 +3,8 @@ package knes.agent.skills
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.booleans.shouldBeTrue
 import knes.agent.perception.FogOfWar
+import knes.agent.perception.InteriorMapLoader
+import knes.agent.perception.MapSession
 import knes.agent.perception.OverworldMap
 import knes.agent.tools.EmulatorToolset
 import knes.api.EmulatorSession
@@ -20,7 +22,11 @@ class WalkOverworldToTest : FunSpec({
         PressStartUntilOverworld(toolset).invoke()  // bring game to overworld
         // FF1 V2 boots Indoors (Coneria castle); BFS over the ROM overworld map only
         // makes sense once locationType drops to 0x00. Walk south until outside.
-        ExitBuilding(toolset).invoke()
+        run {
+            val fogTmp = FogOfWar()
+            val mapSessionTmp = MapSession(InteriorMapLoader(File(rom).readBytes()), fogTmp)
+            ExitBuilding(toolset, mapSessionTmp, fogTmp).invoke()
+        }
         // Settle after exiting interior so the screen-transition completes before we
         // start measuring world coords / pressing direction buttons.
         toolset.step(buttons = emptyList(), frames = 60)

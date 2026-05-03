@@ -20,6 +20,7 @@ class AgentSession(
     private val observer: RamObserver,
     private val executor: ExecutorAgent,
     private val advisor: AdvisorAgent,
+    private val toolCallLog: ToolCallLog = ToolCallLog(),
     private val budget: Budget = Budget(),
     runDir: Path = Trace.newRunDir(),
 ) {
@@ -39,7 +40,7 @@ class AgentSession(
 
         try {
             while (true) {
-                val phase = observer.observe()
+                val phase = observer.observeWithVision()
                 val ram = observer.ramSnapshot()
 
                 val outcome = SuccessCriteria.evaluate(phase)
@@ -48,14 +49,37 @@ class AgentSession(
                     return outcome
                 }
 
+                // V2.5.6: deterministic PostBattle dismissal. The modal blocks input;
+                // until it clears, walkOverworldTo / exitInterior return BLOCKED. The LLM
+                // sometimes loops on these instead of calling battleFightAll, burning the
+                // budget. Auto-tap A here so the agent never waits on the modal.
+                if (phase is FfPhase.PostBattle) {
+                    println("[postbattle auto-dismiss]")
+                    toolset.executeAction(profileId = "ff1", actionId = "battle_fight_all")
+                    trace.record(TraceEvent(
+                        turn = 0, role = "system", phase = phase.toString(),
+                        note = "auto-dismissed PostBattle via battle_fight_all",
+                    ))
+                    continue  // re-observe phase next iteration
+                }
+
                 val phaseChanged = previousPhase == null || previousPhase::class != phase::class
-                if (phaseChanged || idleTurns >= 20) {
+                // V4 hybrid C: advisor consult earlier when stuck inside an interior.
+                // The decoder is unreliable on towns; vision-by-advisor (not per-step
+                // skill) gives cardinal hints without burning vision tokens every step.
+                val stuckInInterior = phase is FfPhase.Indoors && idleTurns >= 5
+                if (phaseChanged || stuckInInterior || idleTurns >= 20) {
                     if (++advisorCalls > budget.maxAdvisorCalls) return Outcome.OutOfBudget
                     val attachShot = screenshotPolicy.shouldAttach(previousPhase, phase)
+                    val reason = when {
+                        phaseChanged -> "phase change"
+                        stuckInInterior -> "stuck in interior (idle=$idleTurns) — please look at the screen and suggest a cardinal direction"
+                        else -> "watchdog stuck (idle=$idleTurns)"
+                    }
                     val obs = buildString {
                         append("Phase: $phase\nRAM: $ram\n")
                         if (attachShot) append("(screenshot available via getScreen)\n")
-                        append("Reason: ${if (phaseChanged) "phase change" else "watchdog stuck"}")
+                        append("Reason: $reason")
                     }
                     println("[advisor #$advisorCalls] phase=$phase")
                     currentPlan = advisor.plan(phase, obs)
@@ -75,11 +99,14 @@ class AgentSession(
                 val result = executor.run(phase, executorInput)
                 skillsInvoked += 1
                 println("[executor result] ${result.lineSequence().take(2).joinToString(" | ").take(160)}")
+                val drainedCalls = toolCallLog.drain()
+                println("[executor calls] ${drainedCalls.joinToString(" ; ").take(200)}")
                 trace.record(
                     TraceEvent(
                         turn = 0, role = "executor", phase = phase.toString(),
                         input = executorInput,   // full prompt sent to executor (with current plan + RAM)
                         output = result,         // full executor reasoning + final response, untruncated
+                        toolCalls = drainedCalls,
                     )
                 )
 

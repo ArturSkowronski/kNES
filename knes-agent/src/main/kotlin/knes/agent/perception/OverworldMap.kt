@@ -52,6 +52,17 @@ class OverworldMap private constructor(val tiles: ByteArray) : ViewportSource {
         return ViewportMap(grid, partyLocal, partyWorldXY)
     }
 
+    /**
+     * 256×256 ViewportMap covering the whole overworld. Local coords coincide with
+     * world coords (party-local = party-world). Used by the global pathfinder so it
+     * can plan around large blockers that span the 16×16 window.
+     */
+    override fun readFullMapView(partyWorldXY: Pair<Int, Int>): ViewportMap {
+        val (pwx, pwy) = partyWorldXY
+        val grid = Array(256) { y -> Array(256) { x -> classifyAt(x, y) } }
+        return ViewportMap(grid, partyLocalXY = pwx to pwy, partyWorldXY = partyWorldXY)
+    }
+
     companion object {
         fun fromRom(romFile: File): OverworldMap = fromRom(romFile.readBytes())
 
