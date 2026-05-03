@@ -28,7 +28,7 @@ class ExitInterior(
         "Walk to the nearest exit of the current FF1 interior map. Stops on map " +
             "transition, encounter, or arrival on overworld."
 
-    private val FRAMES_PER_TILE = 16
+    private val FRAMES_PER_TILE = 24  // V2.4.4: matched WalkOverworldTo. 16 was too short — party didn't physically move, so the loop mis-marked the target tile blocked, then exhausted neighbours.
 
     override suspend fun invoke(args: Map<String, String>): SkillResult {
         val maxSteps = args["maxSteps"]?.toIntOrNull() ?: 64
