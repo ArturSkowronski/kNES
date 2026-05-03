@@ -64,13 +64,22 @@ class AgentSession(
                 }
 
                 val phaseChanged = previousPhase == null || previousPhase::class != phase::class
-                if (phaseChanged || idleTurns >= 20) {
+                // V4 hybrid C: advisor consult earlier when stuck inside an interior.
+                // The decoder is unreliable on towns; vision-by-advisor (not per-step
+                // skill) gives cardinal hints without burning vision tokens every step.
+                val stuckInInterior = phase is FfPhase.Indoors && idleTurns >= 5
+                if (phaseChanged || stuckInInterior || idleTurns >= 20) {
                     if (++advisorCalls > budget.maxAdvisorCalls) return Outcome.OutOfBudget
                     val attachShot = screenshotPolicy.shouldAttach(previousPhase, phase)
+                    val reason = when {
+                        phaseChanged -> "phase change"
+                        stuckInInterior -> "stuck in interior (idle=$idleTurns) — please look at the screen and suggest a cardinal direction"
+                        else -> "watchdog stuck (idle=$idleTurns)"
+                    }
                     val obs = buildString {
                         append("Phase: $phase\nRAM: $ram\n")
                         if (attachShot) append("(screenshot available via getScreen)\n")
-                        append("Reason: ${if (phaseChanged) "phase change" else "watchdog stuck"}")
+                        append("Reason: $reason")
                     }
                     println("[advisor #$advisorCalls] phase=$phase")
                     currentPlan = advisor.plan(phase, obs)

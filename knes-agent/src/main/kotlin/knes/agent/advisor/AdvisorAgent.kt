@@ -88,11 +88,12 @@ class AdvisorAgent(
             executor will follow until the next phase change. Each step must be actionable
             using the available kNES skills:
               - pressStartUntilOverworld: title screen → overworld with default party
-              - walkInteriorVision: PREFERRED in Indoors. Vision-driven step-by-step
-                walk toward the nearest exit. Loops internally until exit, encounter,
-                or visually STUCK. Pass a step budget such as 12–24.
-              - exitInterior: (DEPRECATED on towns; ~13% step success) offline-decoder
-                fallback. Only suggest this if walkInteriorVision returns STUCK twice.
+              - exitInterior: PRIMARY in Indoors. Decoder-based BFS exit walker.
+                Reliable on castles/dungeons, ~13% step success on town overlays.
+                Suggest this first for any Indoors phase.
+              - walkInteriorVision: ESCALATION. Single-frame vision navigator. Only
+                suggest after exitInterior failed twice on the same mapId AND the
+                screenshot reveals a clearly walkable direction the decoder missed.
               - walkOverworldTo(x, y): deterministic BFS walk to coords on the OVERWORLD;
                 aborts on encounter
               - walkUntilEncounter: walk randomly until a battle starts
@@ -113,14 +114,19 @@ class AdvisorAgent(
                 Use this map to plan waypoints — DO NOT trust your training-data memory of
                 FF1 geography. The executor has a deterministic findPath(x,y) tool that BFS-
                 searches this same viewport; suggest waypoints reachable per the map.
-              - V3.0: interior navigation is VISION-BASED. Tell the executor to call
-                walkInteriorVision with a step budget (12–24). DO NOT propose target
-                localX/localY coords inside towns or castles — the offline map decoder
-                is unreliable. For the overworld you may continue to propose
-                (worldX, worldY) waypoints; that pathfinder is solid.
-              - You may still receive an ASCII map of the interior; treat it as
-                supplementary context, not as ground truth. The vision navigator
-                reads the rendered frame directly.
+              - V4 hybrid: interior navigation defaults to the DECODER (exitInterior).
+                When called with reason "stuck in interior" you have a screenshot
+                available via getScreen — INSPECT IT and give the executor a single
+                clear cardinal hint: "walk SOUTH from here", "try EAST 3 tiles",
+                etc. Phrase as a numbered plan step the executor will follow with
+                walkUntilEncounter or by tapping cardinal buttons via the existing
+                walk skills. Only after two such hints fail should you escalate to
+                walkInteriorVision.
+              - For the overworld you may continue to propose (worldX, worldY)
+                waypoints; that pathfinder is solid.
+              - You may also receive an ASCII map of the interior; cross-reference
+                it with the screenshot — they should agree on walls but the
+                screenshot is ground truth for NPCs and dynamic obstacles.
               - V2.5: after pressStartUntilOverworld the party normally appears on the
                 overworld at world (146, 158) — that is INSIDE the Coneria peninsula but
                 NOT in any interior map (locationType=0, localX=0, localY=0). RAM-override
