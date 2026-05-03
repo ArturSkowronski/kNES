@@ -3,36 +3,38 @@ package knes.agent.perception
 /**
  * Classifies FF1 NES interior tile bytes (0x00..0x7F) to TileType.
  *
- * Built empirically from map-8 (Coneria town) decoded hex grid cross-referenced
- * with FF1 map data:
- *   - 0x39: outside-map padding (UNKNOWN/impassable)
- *   - 0x30, 0x32-0x35: building walls/corners (MOUNTAIN/impassable)
- *   - 0x21, 0x31: floors (GRASS/passable)
- *   - 0x38, 0x3a, 0x3b, 0x3d: in-town decorations (GRASS/passable)
- *   - 0x00..0x1F: furniture/shop items/NPC sprites (GRASS/passable)
- *   - 0x44: isolated tile in town floor — tentatively STAIRS (passable + transition)
+ * V2.4.2: extended from map-8 (Coneria town) baseline using a histogram across
+ * mapIds 0..30. Findings:
+ *   - Each map type uses its own outside-of-map padding byte (towns/castles
+ *     mostly 0x39; castle/dungeon variants 0x3c, 0x3f, 0x47).
+ *   - Walls span 0x30..0x37 (V2.4 saw only 0x30/0x32-0x35 in Coneria town).
+ *   - Decorations and furniture occupy 0x00..0x2F generously and are passable.
+ *   - 0x40+ tile ids appear in dungeons; bytes around 0x40..0x4E are mostly
+ *     passable floor/decoration. 0x44 remains tentatively STAIRS pending
+ *     per-map verification.
  *
- * NOTE: FF1 town/castle interiors do NOT have explicit DOOR tiles. The engine
- * handles "walk off south edge of playable area" implicitly. InteriorPathfinder
- * detects the south-edge exit geometrically.
+ * Strategy: explicitly enumerate confirmed walls + paddings. Treat all other
+ * ids in 0x00..0x7F as GRASS (passable) — preferring over-permissive over
+ * under-permissive, because FF1 maps lean heavily on a few wall ids surrounded
+ * by lots of decoration variants. False-passable inside an actual wall would
+ * be self-correcting via the WalkOverworldTo / ExitInterior idle-detection
+ * (a non-moving step gets fog-marked blocked).
  *
- * Anything outside these buckets returns UNKNOWN (conservative — impassable).
- * Future maps may surface tile ids that need adding (Marsh Cave, towers, etc.).
+ * NOTE: FF1 interiors do NOT have explicit DOOR tiles. InteriorPathfinder
+ * detects south-edge exits geometrically.
  */
 object InteriorTileClassifier {
     fun classify(tileId: Int): TileType = when (tileId and 0xFF) {
-        // Furniture / shop sprites / decorations (passable in towns)
-        in 0x00..0x1F -> TileType.GRASS
-        // Floors
-        0x21, 0x31 -> TileType.GRASS
-        // Walls (building outlines)
-        0x30, 0x32, 0x33, 0x34, 0x35 -> TileType.MOUNTAIN
-        // In-town decoration props (lamp post / sign / well)
-        0x38, 0x3a, 0x3b, 0x3d -> TileType.GRASS
-        // Outside-of-map padding
-        0x39 -> TileType.UNKNOWN
-        // Stairs / activatable tile
+        // Floor tile common across town/castle interiors (must precede wall range)
+        0x31 -> TileType.GRASS
+        // Walls (interior-map building outlines + corners)
+        0x30, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37 -> TileType.MOUNTAIN
+        // Outside-of-map padding (per-map type — collected via histogram of mapIds 0..30)
+        0x39, 0x3c, 0x3f, 0x47 -> TileType.UNKNOWN
+        // Stairs / activatable tile (verified in Coneria town; tentative elsewhere)
         0x44 -> TileType.STAIRS
+        // Everything else in the valid byte range: passable floor / decoration / NPC sprite
+        in 0x00..0x7F -> TileType.GRASS
         else -> TileType.UNKNOWN
     }
 }
