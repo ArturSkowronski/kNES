@@ -71,10 +71,11 @@ class WalkOverworldTo(
             val viewport = viewportSource.readFullMapView(cx to cy)
             fog.merge(viewport)
             val path = pathfinder.findPath(cx to cy, tx to ty, viewport, fog)
-            // V2.5.3: per-pathfinder-call trace so we can verify cost-weighting choices live.
+            // V2.5.3/V2.5.8: per-pathfinder-call trace including reason on failure.
             toolCallLog?.append("walkOverworldTo.step",
                 "from=($cx,$cy) found=${path.found} partial=${path.partial} " +
-                    "len=${path.steps.size} dir=${path.steps.firstOrNull()?.name ?: "-"}")
+                    "len=${path.steps.size} dir=${path.steps.firstOrNull()?.name ?: "-"}" +
+                    (if (!path.found || path.partial) " reason=${path.reason ?: "-"}" else ""))
             if (!path.found || path.steps.isEmpty()) {
                 val ram = toolset.getState().ram
                 return SkillResult(false,
