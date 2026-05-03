@@ -31,6 +31,21 @@ class RamObserver(
     suspend fun observeWithVision(): FfPhase {
         val ram = toolset.getState().ram
         deterministicFromRam(ram)?.let { return it }
+        // V2.5.7: RAM hard-override for unambiguous overworld. Vision (Haiku 4.5) is
+        // unreliable around towns/castles — same RAM signature was classified as
+        // Indoors in 20/22 frames in V2.5.6 evidence. When RAM is clearly overworld
+        // (locationType=0, no local coords, party exists, world coords valid), trust
+        // RAM and skip vision. Vision is reserved for true ambiguity (spawn frame
+        // where party-in-castle has overworld-zero locals due to RAM init quirks).
+        val locType = ram["locationType"] ?: 0
+        val lx = ram["localX"] ?: 0
+        val ly = ram["localY"] ?: 0
+        val wx = ram["worldX"] ?: 0
+        val wy = ram["worldY"] ?: 0
+        val partyCreated = (ram["char1_hpLow"] ?: 0) != 0
+        if (partyCreated && locType == 0 && lx == 0 && ly == 0 && (wx != 0 || wy != 0)) {
+            return FfPhase.Overworld(wx, wy)
+        }
         val v = vision ?: return classify(ram)  // RAM-only fallback (legacy V2.3.1 heuristic)
         val state = toolset.getState()
         val shot = toolset.getScreen().base64
