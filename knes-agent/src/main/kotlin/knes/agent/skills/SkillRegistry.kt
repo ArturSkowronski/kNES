@@ -6,6 +6,7 @@ import ai.koog.agents.core.tools.reflect.ToolSet
 import knes.agent.perception.FogOfWar
 import knes.agent.perception.MapSession
 import knes.agent.perception.OverworldMap
+import knes.agent.perception.VisionInteriorNavigator
 import knes.agent.pathfinding.InteriorPathfinder
 import knes.agent.pathfinding.Pathfinder
 import knes.agent.pathfinding.ViewportPathfinder
@@ -26,11 +27,15 @@ class SkillRegistry(
     private val overworldPathfinder: Pathfinder = ViewportPathfinder(),
     private val interiorPathfinder: Pathfinder = InteriorPathfinder(),
     private val toolCallLog: ToolCallLog = ToolCallLog(),
+    private val visionInteriorNavigator: VisionInteriorNavigator? = null,
 ) : ToolSet {
 
     private val pressStartSkill = PressStartUntilOverworld(toolset)
     private val walkSkill = WalkOverworldTo(toolset, overworldMap, fog, overworldPathfinder, toolCallLog)
     private val exitInteriorSkill = ExitInterior(toolset, mapSession, fog, interiorPathfinder, toolCallLog)
+    private val walkInteriorVisionSkill = visionInteriorNavigator?.let {
+        WalkInteriorVision(toolset, it, toolCallLog)
+    }
 
     @Tool
     @LLMDescription(
@@ -44,9 +49,25 @@ class SkillRegistry(
 
     @Tool
     @LLMDescription(
-        "Walk to the nearest exit of the current FF1 interior map (DOOR/STAIRS/WARP or " +
-            "south-edge implicit exit) using deterministic BFS. Stops on sub-map transition, " +
-            "encounter, or arrival on overworld. Use when phase is Indoors."
+        "PREFERRED for Indoors phase. Walk inside the current FF1 interior map by " +
+            "asking a vision model for one direction at a time. Each step looks at " +
+            "the screen, picks N/S/E/W, taps the button, verifies movement via RAM. " +
+            "Stops on exit-to-overworld, encounter, or visual STUCK. maxSteps default 24."
+    )
+    suspend fun walkInteriorVision(maxSteps: Int = 24): SkillResult {
+        val skill = walkInteriorVisionSkill
+            ?: return SkillResult(false,
+                "vision navigator not configured (ANTHROPIC_API_KEY missing?)", 0, emptyMap())
+        toolCallLog.append("walkInteriorVision", "maxSteps=$maxSteps")
+        return skill.invoke(mapOf("maxSteps" to "$maxSteps"))
+    }
+
+    @Tool
+    @LLMDescription(
+        "(DEPRECATED on towns; ~13% step success) Walk to the nearest interior exit " +
+            "using the offline ROM-decoder pathfinder. Kept as fallback only — prefer " +
+            "walkInteriorVision in Indoors. Stops on sub-map transition, encounter, " +
+            "or arrival on overworld."
     )
     suspend fun exitInterior(maxSteps: Int = 64): SkillResult {
         toolCallLog.append("exitInterior", "maxSteps=$maxSteps")
@@ -55,9 +76,8 @@ class SkillRegistry(
 
     @Tool
     @LLMDescription(
-        "Find walkable path from current local position to the nearest interior exit " +
-            "(DOOR/STAIRS/WARP or south-edge) within the visible 16x16 viewport. " +
-            "Deterministic; no LLM tokens."
+        "(DEPRECATED) Query the offline interior pathfinder for the nearest exit. " +
+            "Decoder is unreliable on town maps — prefer walkInteriorVision."
     )
     fun findPathToExit(): String {
         toolCallLog.appendNoArgs("findPathToExit")
