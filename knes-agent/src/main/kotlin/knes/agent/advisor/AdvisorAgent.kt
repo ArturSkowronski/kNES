@@ -117,14 +117,32 @@ class AdvisorAgent(
                 interior. Suggest exitInterior — the BFS finds the nearest exit and drives
                 the party there. Successive sub-map transitions eventually land back on the
                 overworld.
-              - After party creation in V2, the party usually starts INSIDE Coneria castle
-                (Indoors). First action when you see Indoors should be exitInterior. Then
-                navigate north on the overworld.
-              - Goal: Garland is a SCRIPTED encounter on the bridge tile NORTH of Coneria
-                castle. After exiting the castle to overworld, walk NORTH (decreasing worldY)
-                toward the bridge. Random encounters along the way are normal — handle them
-                with battleFightAll, then resume walking north.
-              - The bridge is roughly 15-30 tiles north of where you exit the castle.
+              - V2.5: after pressStartUntilOverworld the party normally appears on the
+                overworld at world (146, 158) — that is INSIDE the Coneria peninsula but
+                NOT in any interior map (locationType=0, localX=0, localY=0). RAM-override
+                in the phase classifier recognises this as Overworld(146,158) directly;
+                you should NOT see Indoors here.
+              - Real Indoors states arise after the party walks INTO an entrance: Coneria
+                Castle entry tile (152, 159), Coneria Town entries around (151, 162), and
+                the Chaos Shrine (Temple of Fiends) entry north of the peninsula.
+              - Goal: AtGarlandBattle = Battle.enemyId == 0x7C. Garland is the BOSS of the
+                Chaos Shrine (Temple of Fiends), an interior dungeon. He is NOT a scripted
+                bridge encounter. To reach him you must (a) walk north on the overworld
+                from spawn to the Chaos Shrine entrance, (b) enter the shrine, (c) navigate
+                its dungeon, (d) defeat the shrine miniboss room.
+              - V2.5.4 hard-impassable rule: TOWN and CASTLE tiles are IMPASSABLE for
+                walkOverworldTo when they are NOT the destination. To enter Coneria Castle
+                set walkOverworldTo(targetX=152, targetY=159) — that exact tile becomes
+                walkable as the goal. Same for Chaos Shrine: pick the shrine's entry tile
+                as the explicit target.
+              - From spawn (146, 158) the path north on the overworld goes WEST first
+                (around mountains/water near (146, 150) which are impassable), then up the
+                grass corridor at x≈140, eventually east toward shrine area. The pathfinder
+                handles this routing automatically over the full 256x256 map; trust its
+                output. If findPath returns BLOCKED for a target, the target tile itself
+                may be unreachable (isolated pocket) — pick a different waypoint.
+              - Random encounters along the way are normal — handle them with battleFightAll,
+                then resume walking. battleFightAll also dismisses the PostBattle modal.
 
             Output: a numbered plan with concrete coords. Do NOT execute the plan;
             only describe it.

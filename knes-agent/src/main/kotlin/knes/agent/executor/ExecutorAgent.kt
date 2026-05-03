@@ -90,9 +90,18 @@ class ExecutorAgent(
               current interior. Glyphs: @=party, .=floor, ^=wall, ~=water, D=door,
               >=stairs, *=warp, ?=unseen/outside, X=blocked-confirmed.
             - On the overworld: worldX increases EAST; worldY increases SOUTH. North = lower worldY.
-            - Goal: Garland is a SCRIPTED encounter on the bridge NORTH of Coneria. After
-              exiting any interior, walk north (decreasing worldY) until Battle(Garland).
-            - In Battle phase: call battleFightAll. It auto-fights every round.
+            - V2.5: party normally spawns at Overworld(146, 158) right after
+              pressStartUntilOverworld. You should NOT see Indoors at the very start.
+            - Goal: AtGarlandBattle = Battle.enemyId == 0x7C. Garland is the BOSS of the
+              Chaos Shrine (Temple of Fiends), an INTERIOR dungeon — not a scripted bridge
+              fight. To reach him: walk north on overworld → enter Chaos Shrine via its
+              entry tile (use walkOverworldTo with the shrine's coords as target) →
+              exitInterior repeatedly to navigate sub-maps → fight Garland.
+            - V2.5.4 hard-impassable: TOWN/CASTLE tiles on the overworld are impassable
+              for walkOverworldTo UNLESS they are the explicit target. To enter a town or
+              castle, pass its exact tile as targetX/targetY.
+            - In Battle phase: call battleFightAll. It auto-fights every round AND
+              dismisses the PostBattle (XP/rewards) modal automatically.
             - In PostBattle phase: call battleFightAll AGAIN — it dismisses the
               post-battle (rewards/XP) modal by tapping A. You CANNOT walk while
               PostBattle is on screen; walkOverworldTo will return BLOCKED because
