@@ -30,6 +30,12 @@ class ExitInterior(
 
     private val FRAMES_PER_TILE = 48  // V2.4.5: 24 (overworld) still wasn't enough indoors. FF1 interior walk animation appears slower; 48 provides margin.
 
+    // V2.6.4: NES viewport is 16×15 tiles; party stays at center of screen.
+    // RAM localX/localY = top-left of viewport (scroll offset). Party's actual
+    // map tile = scroll + (8, 7).
+    private val VIEWPORT_PARTY_OFFSET_X = 8
+    private val VIEWPORT_PARTY_OFFSET_Y = 7
+
     override suspend fun invoke(args: Map<String, String>): SkillResult {
         val maxSteps = args["maxSteps"]?.toIntOrNull() ?: 64
         var totalFrames = 0
@@ -54,19 +60,22 @@ class ExitInterior(
                 return SkillResult(false, "currentMapId unknown — RAM byte not configured", totalFrames, ram)
             }
             mapSession.ensureCurrent(mapId)
-            val lx = ram["localX"] ?: 0
-            val ly = ram["localY"] ?: 0
-            // V2.6.2: BFS over the full 64×64 interior map so we find DOOR/STAIRS/WARP/
-            // south-edge exits even when party is at the corner of the playable area.
-            // 16×16 viewport pathfinding (V2.4.x) stalled when party at (3, 2) in
-            // mapId=24 because exits are far outside the visible window.
-            val viewport = mapSession.readFullMapView(lx to ly)
+            // V2.6.4: localX/localY in RAM are SCROLL OFFSET (top-left of 16×15 NES
+            // viewport), not the party's tile. Party stands at center of screen; its
+            // actual map tile = (localX + VIEWPORT_PARTY_OFFSET_X, localY + …Y).
+            // Verified against mapId=24 dump: RAM (3, 2) + (8, 7) = (11, 9) which is
+            // the throne-room corridor floor (byte 0x31 = passable). RAM (3, 2) raw
+            // landed on (3, 2) = 0x3c padding which is why pre-V2.6.4 BFS exhausted.
+            val partyX = (ram["localX"] ?: 0) + VIEWPORT_PARTY_OFFSET_X
+            val partyY = (ram["localY"] ?: 0) + VIEWPORT_PARTY_OFFSET_Y
+            val viewport = mapSession.readFullMapView(partyX to partyY)
             fog.merge(viewport)
-            val path = pathfinder.findPath(lx to ly, 0 to 0, viewport, fog)
+            val path = pathfinder.findPath(partyX to partyY, 0 to 0, viewport, fog)
             if (!path.found || path.steps.isEmpty()) {
                 return SkillResult(
                     false,
-                    "no exit visible at mapId=$mapId, ($lx,$ly): ${path.reason ?: ""}",
+                    "no exit visible at mapId=$mapId, party=($partyX,$partyY) " +
+                        "scroll=(${ram["localX"]},${ram["localY"]}): ${path.reason ?: ""}",
                     totalFrames, ram,
                 )
             }
@@ -79,13 +88,15 @@ class ExitInterior(
             val mid1 = ram1["currentMapId"] ?: -1
             val lx1 = ram1["localX"] ?: 0
             val ly1 = ram1["localY"] ?: 0
-            if (mid1 == mapId && lx1 == lx && ly1 == ly) {
-                fog.markBlocked(lx + nextDir.dx, ly + nextDir.dy)
+            val partyX1 = lx1 + VIEWPORT_PARTY_OFFSET_X
+            val partyY1 = ly1 + VIEWPORT_PARTY_OFFSET_Y
+            if (mid1 == mapId && partyX1 == partyX && partyY1 == partyY) {
+                fog.markBlocked(partyX + nextDir.dx, partyY + nextDir.dy)
             }
 
             // If party landed on STAIRS / WARP, tap A to activate transition.
-            if (mid1 == mapId && (lx1 != lx || ly1 != ly)) {
-                val tileNow = mapSession.currentMap?.classifyAt(lx1, ly1)
+            if (mid1 == mapId && (partyX1 != partyX || partyY1 != partyY)) {
+                val tileNow = mapSession.currentMap?.classifyAt(partyX1, partyY1)
                 if (tileNow == TileType.STAIRS || tileNow == TileType.WARP) {
                     toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 30)
                 }

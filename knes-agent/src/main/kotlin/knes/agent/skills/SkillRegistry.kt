@@ -65,7 +65,8 @@ class SkillRegistry(
         val mapId = ram["currentMapId"] ?: -1
         if (mapId < 0) return "BLOCKED. currentMapId unknown."
         mapSession.ensureCurrent(mapId)
-        val from = (ram["localX"] ?: 0) to (ram["localY"] ?: 0)
+        // V2.6.4: localX/localY = scroll offset; party tile = scroll + (8, 7).
+        val from = ((ram["localX"] ?: 0) + 8) to ((ram["localY"] ?: 0) + 7)
         val viewport = mapSession.readFullMapView(from)  // V2.6.2: full 64×64 BFS
         fog.merge(viewport)
         val res = interiorPathfinder.findPath(from, 0 to 0, viewport, fog)
