@@ -32,6 +32,13 @@ class WalkInteriorVision(
         var totalFrames = 0
         var stepsTaken = 0
         var lastBlocked: InteriorMove? = null
+        var consecutiveStuck = 0
+        // V3.2: when navigator says STUCK on step 0 with no movement evidence, the
+        // skill should not yet trust it. Default to SOUTH (FF1 castle/town entries
+        // are at south edges) and reroll. Only honor STUCK after STUCK_THRESHOLD
+        // consecutive returns — by then we have visual + RAM evidence the party is
+        // actually pinned.
+        val stuckThreshold = 2
 
         while (stepsTaken < maxSteps) {
             val ramPre = toolset.getState().ram
@@ -54,15 +61,36 @@ class WalkInteriorVision(
                 "step=$stepsTaken dir=${dir.name}" +
                     (lastBlocked?.let { " hintBlocked=${it.name}" } ?: ""))
 
-            when (dir) {
+            val effectiveDir: InteriorMove = when (dir) {
                 InteriorMove.EXIT -> return SkillResult(true,
                     "vision says exited after $stepsTaken steps", totalFrames, ramPre)
-                InteriorMove.STUCK, InteriorMove.UNCLEAR -> return SkillResult(false,
-                    "vision returned ${dir.name} after $stepsTaken steps", totalFrames, ramPre)
-                else -> { /* fall through to tap */ }
+                InteriorMove.STUCK, InteriorMove.UNCLEAR -> {
+                    consecutiveStuck++
+                    if (consecutiveStuck >= stuckThreshold) {
+                        return SkillResult(false,
+                            "vision returned ${dir.name} ${consecutiveStuck}x in a row " +
+                                "after $stepsTaken steps", totalFrames, ramPre)
+                    }
+                    // V3.2 default: try SOUTH first (FF1 entries usually at south edge),
+                    // unless that's what last failed — then try a perpendicular cardinal.
+                    val fallback = when (lastBlocked) {
+                        InteriorMove.SOUTH -> InteriorMove.WEST
+                        InteriorMove.WEST -> InteriorMove.NORTH
+                        InteriorMove.NORTH -> InteriorMove.EAST
+                        InteriorMove.EAST -> InteriorMove.SOUTH
+                        else -> InteriorMove.SOUTH
+                    }
+                    toolCallLog?.append("walkInteriorVision.fallback",
+                        "stuck=$consecutiveStuck dir->${fallback.name} (was ${dir.name})")
+                    fallback
+                }
+                else -> {
+                    consecutiveStuck = 0
+                    dir
+                }
             }
 
-            val r = toolset.step(buttons = listOf(dir.button!!), frames = framesPerTile)
+            val r = toolset.step(buttons = listOf(effectiveDir.button!!), frames = framesPerTile)
             totalFrames += r.frame
             stepsTaken++
 
@@ -76,7 +104,7 @@ class WalkInteriorVision(
                     "after=(${ramPost["localX"]},${ramPost["localY"]}) " +
                     "moved=$moved transitioned=$transitioned")
 
-            lastBlocked = if (!moved && !transitioned) dir else null
+            lastBlocked = if (!moved && !transitioned) effectiveDir else null
             if (transitioned) {
                 return SkillResult(true,
                     "exited mid-loop at (${ramPost["worldX"]},${ramPost["worldY"]})",

@@ -192,22 +192,28 @@ class AnthropicVisionInteriorNavigator(
         private val DIRECTION_REGEX = Regex("""\"direction\"\s*:\s*\"([A-Za-z]+)\"""")
 
         private const val SYSTEM_PROMPT =
-            "You navigate a party in Final Fantasy 1 (NES) inside a town/castle/dungeon. " +
+            "You navigate a party in Final Fantasy 1 (NES) inside a town, castle, or dungeon. " +
                 "The party stands at the centre of the screen (around tile column 8, row 7). " +
-                "Pick ONE direction (N/S/E/W) that moves the party CLOSER TO THE EXIT — " +
-                "the way out to the world map. Exits look like: an unadorned doorway at a " +
-                "wall edge, a staircase tile (small steps icon), an open corridor that " +
-                "extends off the visible viewport at the SOUTH edge of the room, a path " +
-                "leading to the bottom of the screen. " +
-                "NON-EXITS (do NOT walk toward these as if they were exits): thrones, " +
-                "kings/NPCs in chairs, treasure chests, dais platforms, fountains, shop " +
-                "counters, locked doors with rings/handles. These are decoration / interactive " +
-                "tiles, not the way out. " +
-                "Castles in FF1 are entered through their southern entrance, so the way out " +
-                "is normally toward the SOUTH — head AWAY from thrones and ornate features. " +
-                "If the screen shows the overworld (top-down terrain map with no walls/floors, " +
-                "visible grass, mountains, water), return EXIT. " +
-                "If you cannot identify any clear walkable direction, return STUCK. " +
+                "Pick ONE direction (N/S/E/W) that moves the party CLOSER TO THE EXIT (the world map). " +
+                "Interior types and how to read them: " +
+                "(1) TOWN — open OUTDOOR area with shops/houses, dirt or stone PATHS between buildings, " +
+                "NPCs (red/blue/green sprites) standing on paths. The path-network IS walkable. NPCs are " +
+                "minor obstacles you walk AROUND. The exit is the south edge of the visible map — " +
+                "walk SOUTH along visible paths until the screen scrolls off the town. " +
+                "(2) CASTLE — stone-floored corridors and rooms, walls, columns, sometimes a throne or " +
+                "king. The way OUT is the southern pillar-corridor (the way the party came in). " +
+                "(3) DUNGEON — dark rooms, staircases (`>` icon), warps (`*` icon). Stairs/warps are " +
+                "transitions to other sub-maps; head toward them or toward the south edge. " +
+                "Walkable terrain: dirt paths, stone floors, bridges, open doorways, staircase tiles. " +
+                "Impassable: SOLID walls, water tiles (~), impassable bushes. " +
+                "Decorative / interactive (NOT exits): thrones, kings/NPCs in chairs, treasure chests, " +
+                "dais platforms, fountains, shop counters, ornate doors with rings — do NOT mistake these " +
+                "for the way out. " +
+                "If the screen clearly shows the overworld (top-down terrain map: grass, mountains, " +
+                "water, party visible on terrain) return EXIT. " +
+                "Return STUCK ONLY if the party is fully surrounded by walls/water on all four cardinal " +
+                "tiles — i.e. there is genuinely no walkable adjacent tile. If even ONE direction shows " +
+                "walkable terrain, pick that direction even if the path looks long or winding. " +
                 "Output ONLY JSON: {\"direction\":\"N|S|E|W|EXIT|STUCK\",\"reason\":\"<<=80 chars\"}."
     }
 }
