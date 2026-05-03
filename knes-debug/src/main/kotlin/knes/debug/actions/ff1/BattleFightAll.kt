@@ -11,7 +11,9 @@ class BattleFightAll : GameAction {
 
     companion object {
         private const val SCREEN_STATE_BATTLE = 0x68
+        private const val SCREEN_STATE_POST_BATTLE = 0x63
         private const val MAX_ROUNDS = 30
+        private const val MAX_POST_BATTLE_TAPS = 30
         private const val STATUS_DEAD_BIT = 1
 
         init {
@@ -22,7 +24,8 @@ class BattleFightAll : GameAction {
     }
 
     override fun canExecute(state: Map<String, Int>): Boolean {
-        return state["screenState"] == SCREEN_STATE_BATTLE
+        val ss = state["screenState"] ?: return false
+        return ss == SCREEN_STATE_BATTLE || ss == SCREEN_STATE_POST_BATTLE
     }
 
     override fun execute(controller: ActionController): ActionResult {
@@ -44,15 +47,27 @@ class BattleFightAll : GameAction {
             rounds++
         }
 
-        controller.tap("A", count = 10, pressFrames = 5, gapFrames = 40)
-        controller.waitFrames(60)
+        // Dismiss PostBattle results screen(s): multi-stage XP / level-up / gold.
+        // Tap A one screen at a time with a frame buffer between, until the engine
+        // transitions out of both Battle and PostBattle phases.
+        var postTaps = 0
+        while (postTaps < MAX_POST_BATTLE_TAPS) {
+            val s = controller.readState()
+            val ss = s["screenState"] ?: 0
+            if (ss != SCREEN_STATE_BATTLE && ss != SCREEN_STATE_POST_BATTLE) break
+            controller.tap("A", count = 1, pressFrames = 5, gapFrames = 30)
+            controller.waitFrames(30)
+            postTaps++
+        }
 
         val finalState = controller.readState()
-        val won = finalState["screenState"] != SCREEN_STATE_BATTLE
+        val finalSs = finalState["screenState"] ?: 0
+        val cleared = finalSs != SCREEN_STATE_BATTLE && finalSs != SCREEN_STATE_POST_BATTLE
 
         return ActionResult(
-            success = won,
-            message = if (won) "Battle complete in $rounds rounds" else "Battle not finished after $MAX_ROUNDS rounds",
+            success = cleared,
+            message = if (cleared) "Battle complete in $rounds rounds, dismissed PostBattle in $postTaps taps"
+                      else "Battle/PostBattle not cleared after $MAX_ROUNDS rounds + $postTaps post-taps",
             state = finalState,
             screenshot = controller.screenshot()
         )
