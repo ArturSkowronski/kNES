@@ -39,7 +39,7 @@ class AgentSession(
 
         try {
             while (true) {
-                val phase = observer.observe()
+                val phase = observer.observeWithVision()
                 val ram = observer.ramSnapshot()
 
                 val outcome = SuccessCriteria.evaluate(phase)

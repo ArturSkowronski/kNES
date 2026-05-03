@@ -8,6 +8,7 @@ import knes.agent.perception.FogOfWar
 import knes.agent.perception.InteriorMapLoader
 import knes.agent.perception.MapSession
 import knes.agent.perception.OverworldMap
+import knes.agent.perception.AnthropicVisionPhaseClassifier
 import knes.agent.perception.RamObserver
 import java.io.File
 import knes.agent.runtime.AgentSession
@@ -38,7 +39,8 @@ fun main(args: Array<String>) {
             val overworldMap = OverworldMap.fromRom(File(rom))
             val fog = FogOfWar()
             val mapSession = MapSession(InteriorMapLoader(File(rom).readBytes()), fog)
-            val observer = RamObserver(toolset, overworldMap)
+            val visionClassifier = AnthropicVisionPhaseClassifier(apiKey = key)
+            val observer = RamObserver(toolset, overworldMap, vision = visionClassifier)
             val advisor = AdvisorAgent(anthropic, router, toolset, viewportSource = overworldMap, interiorSource = mapSession, fog = fog)
             val executor = ExecutorAgent(anthropic, router, toolset, advisor, overworldMap, mapSession, fog)
 
