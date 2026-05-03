@@ -6,6 +6,33 @@ import java.io.File
 
 /** Diagnostic dump — not a real test. Run only when ROM is present at default path. */
 class OverworldDumpTest : FunSpec({
+    test("dump mapId=8 to verify scroll-offset hypothesis against V2.4.4 evidence").config(enabled = false) {
+        val romPath = File("/Users/askowronski/Priv/kNES/roms/ff.nes")
+        if (!romPath.exists()) return@config
+        val rom = romPath.readBytes()
+        val map = InteriorMapLoader(rom).load(8)
+        // Party RAM signatures we've seen: (5, 28) and (4, 11).
+        // If localX/Y = party tile directly, those tiles should be passable.
+        // If localX/Y = scroll offset, party tile = (lx+8, ly+7).
+        val testCases = listOf(5 to 28, 4 to 11, 13 to 35, 12 to 18, 10 to 32)
+        println("mapId=8 byte/classify at known positions:")
+        for ((x, y) in testCases) {
+            val b = map.tileAt(x, y)
+            val t = map.classifyAt(x, y)
+            println("  ($x, $y) byte=0x${b.toString(16).padStart(2,'0')} → ${t.name} passable=${t.isPassable()}")
+        }
+        println()
+        println("mapId=8 glyph dump 0..47 x 0..47:")
+        print("       ")
+        for (x in 0..47) print(x % 10)
+        println()
+        for (y in 0..47) {
+            print("y=${y.toString().padStart(2)}: ")
+            for (x in 0..47) print(map.classifyAt(x, y).glyph)
+            println()
+        }
+    }
+
     test("dump interior mapId=24 full 64x64 — locate playable area").config(enabled = false) {
         val romPath = File("/Users/askowronski/Priv/kNES/roms/ff.nes")
         if (!romPath.exists()) return@config
