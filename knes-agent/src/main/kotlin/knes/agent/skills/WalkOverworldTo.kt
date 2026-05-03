@@ -4,6 +4,7 @@ import knes.agent.perception.FogOfWar
 import knes.agent.perception.ViewportSource
 import knes.agent.pathfinding.Pathfinder
 import knes.agent.pathfinding.ViewportPathfinder
+import knes.agent.runtime.ToolCallLog
 import knes.agent.tools.EmulatorToolset
 
 /**
@@ -19,6 +20,7 @@ class WalkOverworldTo(
     private val viewportSource: ViewportSource,
     private val fog: FogOfWar,
     private val pathfinder: Pathfinder = ViewportPathfinder(),
+    private val toolCallLog: ToolCallLog? = null,
 ) : Skill {
     override val id = "walk_overworld_to"
     override val description =
@@ -40,6 +42,24 @@ class WalkOverworldTo(
             if ((ram0["screenState"] ?: 0) == 0x68) {
                 return SkillResult(true, "encounter triggered after $stepsTaken steps", totalFrames, ram0)
             }
+            // V2.5.2: abort on interior entry. If party stepped onto a TOWN/CASTLE tile and
+            // got transported into an interior map mid-walk, the overworld pathfinder is no
+            // longer steering anything useful — return cleanly so outer loop can re-classify
+            // phase and pick exitInterior.
+            val locType = ram0["locationType"] ?: 0
+            val lx = ram0["localX"] ?: 0
+            val ly = ram0["localY"] ?: 0
+            if (locType != 0 || lx != 0 || ly != 0) {
+                val cx0 = ram0["worldX"] ?: -1
+                val cy0 = ram0["worldY"] ?: -1
+                toolCallLog?.append("walkOverworldTo.aborted",
+                    "entered interior after $stepsTaken steps; world=($cx0,$cy0) " +
+                        "mapId=${ram0["currentMapId"]} local=($lx,$ly) locType=$locType")
+                return SkillResult(true,
+                    "entered interior after $stepsTaken steps at world=($cx0,$cy0); " +
+                        "mapId=${ram0["currentMapId"]} local=($lx,$ly)",
+                    totalFrames, ram0)
+            }
             val cx = ram0["worldX"] ?: return SkillResult(false, "worldX missing")
             val cy = ram0["worldY"] ?: return SkillResult(false, "worldY missing")
             if (cx == tx && cy == ty) {
@@ -48,6 +68,10 @@ class WalkOverworldTo(
             val viewport = viewportSource.readViewport(cx to cy)
             fog.merge(viewport)
             val path = pathfinder.findPath(cx to cy, tx to ty, viewport, fog)
+            // V2.5.3: per-pathfinder-call trace so we can verify cost-weighting choices live.
+            toolCallLog?.append("walkOverworldTo.step",
+                "from=($cx,$cy) found=${path.found} partial=${path.partial} " +
+                    "len=${path.steps.size} dir=${path.steps.firstOrNull()?.name ?: "-"}")
             if (!path.found || path.steps.isEmpty()) {
                 val ram = toolset.getState().ram
                 return SkillResult(false,

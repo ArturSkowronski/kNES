@@ -29,7 +29,7 @@ class SkillRegistry(
 ) : ToolSet {
 
     private val pressStartSkill = PressStartUntilOverworld(toolset)
-    private val walkSkill = WalkOverworldTo(toolset, overworldMap, fog, overworldPathfinder)
+    private val walkSkill = WalkOverworldTo(toolset, overworldMap, fog, overworldPathfinder, toolCallLog)
     private val exitInteriorSkill = ExitInterior(toolset, mapSession, fog, interiorPathfinder)
 
     @Tool
