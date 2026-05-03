@@ -6,6 +6,41 @@ import java.io.File
 
 /** Diagnostic dump — not a real test. Run only when ROM is present at default path. */
 class OverworldDumpTest : FunSpec({
+    test("dump interior mapId=24 (V2.6.3 stuck point)").config(enabled = false) {
+        val romPath = File("/Users/askowronski/Priv/kNES/roms/ff.nes")
+        if (!romPath.exists()) return@config
+        val rom = romPath.readBytes()
+        val loader = InteriorMapLoader(rom)
+        val map = loader.load(24)
+        println("Interior mapId=24, full 64x64 byte dump (top 24 rows, party at (3,2)):")
+        for (y in 0..23) {
+            print("  y=${y.toString().padStart(2)}: ")
+            for (x in 0..23) {
+                val b = map.tileAt(x, y)
+                print("0x${b.toString(16).padStart(2,'0')} ")
+            }
+            println()
+        }
+        println()
+        println("Interior mapId=24, glyph dump (top 24 rows, x=0..23):")
+        for (y in 0..23) {
+            print("  y=${y.toString().padStart(2)}: ")
+            for (x in 0..23) {
+                val t = map.classifyAt(x, y)
+                print(t.glyph)
+            }
+            println()
+        }
+
+        // Try the pathfinder from (3, 2) on full 64×64 map
+        val pf = knes.agent.pathfinding.InteriorPathfinder(maxSteps = 128)
+        val viewport = map.readFullMapView(3 to 2)
+        val res = pf.findPath(3 to 2, 0 to 0, viewport, FogOfWar())
+        println()
+        println("InteriorPathfinder.findPath((3,2)) = found=${res.found} partial=${res.partial} " +
+            "len=${res.steps.size} reached=${res.reachedTile} reason='${res.reason}'")
+    }
+
     test("dump overworld region around Coneria → Garland north corridor").config(enabled = false) {
         val romPath = File("/Users/askowronski/Priv/kNES/roms/ff.nes")
         if (!romPath.exists()) return@config
