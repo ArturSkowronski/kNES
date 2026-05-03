@@ -20,4 +20,14 @@ enum class TileType(val glyph: Char) {
         GRASS, FOREST, ROAD, BRIDGE, TOWN, CASTLE, DOOR, STAIRS, WARP -> true
         MOUNTAIN, WATER, UNKNOWN -> false
     }
+
+    /**
+     * Movement cost used by overworld pathfinder. Higher = avoid unless on path.
+     * TOWN/CASTLE walking onto them triggers an interior transition the agent then
+     * has to escape from — for goal-directed travel they should be detours, not shortcuts.
+     */
+    fun cost(): Int = when (this) {
+        TOWN, CASTLE -> 50
+        else -> 1
+    }
 }

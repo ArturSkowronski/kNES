@@ -78,4 +78,49 @@ class ViewportPathfinderTest : FunSpec({
         res.partial shouldBe false
         res.steps.size shouldBe 7
     }
+
+    test("prefers grass detour over walking through TOWN tile on direct path") {
+        // Direct north path goes through party-local (8,7), (8,6), (8,5), (8,4).
+        // Plant a TOWN at (8,6) — agent should detour via (7,*) or (9,*) rather than enter.
+        val vm = viewportOf { tiles -> tiles[6][8] = TileType.TOWN }
+        val res = pf.findPath(from = 100 to 100, to = 100 to 96, viewport = vm, fog = FogOfWar())
+        res.found shouldBe true
+        res.partial shouldBe false
+        // Detour adds 2 steps (one sideways out, one back). 4 → 6.
+        res.steps.size shouldBe 6
+        // None of the steps should land on the TOWN tile.
+        var x = 8; var y = 8
+        val visited = mutableListOf(x to y)
+        for (d in res.steps) { x += d.dx; y += d.dy; visited += (x to y) }
+        visited.none { it == (8 to 6) } shouldBe true
+    }
+
+    test("CASTLE blocks shortcut: pathfinder routes around it") {
+        val vm = viewportOf { tiles -> tiles[6][8] = TileType.CASTLE }
+        val res = pf.findPath(from = 100 to 100, to = 100 to 96, viewport = vm, fog = FogOfWar())
+        res.found shouldBe true
+        res.steps.size shouldBe 6
+    }
+
+    test("TOWN as destination is reached directly (no detour penalty on goal tile)") {
+        // The LLM picked a town for shopping — pathfinder should walk straight in.
+        val vm = viewportOf { tiles -> tiles[6][8] = TileType.TOWN }
+        val res = pf.findPath(from = 100 to 100, to = 100 to 98, viewport = vm, fog = FogOfWar())
+        // target is the TOWN tile at world (100, 98) → local (8, 6). Direct = 2 N steps.
+        res.found shouldBe true
+        res.partial shouldBe false
+        res.steps.shouldContainExactly(Direction.N, Direction.N)
+    }
+
+    test("walks through TOWN if it's the only available path (still passable)") {
+        // Wall off all detours; TOWN is the only non-blocked tile north.
+        val vm = viewportOf(fill = TileType.MOUNTAIN) { tiles ->
+            // open vertical corridor through (8,*)
+            for (yy in 4..8) tiles[yy][8] = TileType.GRASS
+            tiles[6][8] = TileType.TOWN
+        }
+        val res = pf.findPath(from = 100 to 100, to = 100 to 96, viewport = vm, fog = FogOfWar())
+        res.found shouldBe true
+        res.steps.size shouldBe 4
+    }
 })
