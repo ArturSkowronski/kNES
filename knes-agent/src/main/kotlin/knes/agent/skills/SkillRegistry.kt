@@ -26,10 +26,13 @@ class SkillRegistry(
     private val mapSession: MapSession,
     private val fog: FogOfWar,
     private val overworldPathfinder: Pathfinder = ViewportPathfinder(),
-    private val interiorPathfinder: Pathfinder = InteriorPathfinder(),
     private val toolCallLog: ToolCallLog = ToolCallLog(),
     private val visionInteriorNavigator: VisionInteriorNavigator? = null,
     private val interiorMemory: InteriorMemory = InteriorMemory(),
+    private val interiorPathfinder: Pathfinder = InteriorPathfinder(
+        memory = interiorMemory,
+        mapIdProvider = { toolset.getState().ram["currentMapId"] ?: -1 },
+    ),
 ) : ToolSet {
 
     private val pressStartSkill = PressStartUntilOverworld(toolset)
