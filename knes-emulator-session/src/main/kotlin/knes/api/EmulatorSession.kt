@@ -1,5 +1,6 @@
 package knes.api
 
+import knes.emulator.ByteBuffer
 import knes.emulator.NES
 import knes.emulator.input.InputHandler
 import knes.emulator.ui.GUI
@@ -114,6 +115,35 @@ class EmulatorSession(externalNes: NES? = null) {
     }
 
     fun readMemory(addr: Int): Int = nes.cpuMemory.load(addr).toInt() and 0xFF
+
+    /**
+     * Serialize current emulator state (CPU regs + RAM, PPU memory + regs, OAM, mapper
+     * banks). Wraps the vNES-inherited [NES.stateSave] which writes a versioned blob to
+     * a [ByteBuffer]. Round-trips with [loadState]: the byte payload from save followed
+     * by load on the same (or compatible) ROM yields a deterministic resume point.
+     *
+     * Use case: capture a known-good post-boot game state once, persist as a fixture,
+     * and have tests load the fixture instead of replaying boot every time.
+     */
+    fun saveState(): ByteArray {
+        if (!romLoaded) error("saveState requires ROM loaded")
+        val buf = ByteBuffer(64 * 1024, ByteBuffer.BO_LITTLE_ENDIAN)
+        buf.setExpandable(true)
+        nes.stateSave(buf)
+        return buf.getBytes()
+    }
+
+    /**
+     * Restore a previously saved emulator state. ROM must already be loaded (and match
+     * the ROM the snapshot was taken against — no version negotiation beyond the
+     * single-byte version header in the snapshot itself). Returns true on successful
+     * load.
+     */
+    fun loadState(bytes: ByteArray): Boolean {
+        if (!romLoaded) error("loadState requires ROM loaded")
+        val buf = ByteBuffer(bytes, ByteBuffer.BO_LITTLE_ENDIAN)
+        return nes.stateLoad(buf)
+    }
 
     /**
      * Reads a single tile index from one of the four PPU nametables.

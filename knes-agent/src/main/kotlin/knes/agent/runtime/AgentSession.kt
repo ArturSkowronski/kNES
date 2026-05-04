@@ -23,6 +23,14 @@ class AgentSession(
     private val toolCallLog: ToolCallLog = ToolCallLog(),
     private val budget: Budget = Budget(),
     runDir: Path = Trace.newRunDir(),
+    /**
+     * Optional per-turn hook fired after each executor turn. Receives current
+     * phase and RAM snapshot. Returning a non-null Outcome short-circuits the
+     * loop and returns that outcome. Used by fixture-builder tests to stop
+     * the agent the moment a target state is reached (e.g. mapId=8 entered)
+     * without modifying the production goal of reaching Garland.
+     */
+    private val onTurnEnd: ((FfPhase, Map<String, Int>) -> Outcome?)? = null,
 ) {
     private val resolvedRunDir = runDir
     private val trace = Trace(resolvedRunDir)
@@ -114,6 +122,12 @@ class AgentSession(
                 idleTurns = if (newRam == lastRam) idleTurns + 1 else 0
                 lastRam = newRam
                 previousPhase = phase
+
+                onTurnEnd?.invoke(phase, newRam)?.let { hookOutcome ->
+                    trace.record(TraceEvent(turn = 0, role = "hook", phase = phase.toString(),
+                        note = "onTurnEnd → $hookOutcome"))
+                    return hookOutcome
+                }
 
                 if (skillsInvoked > budget.maxSkillInvocations) return Outcome.OutOfBudget
                 val elapsedSec = (System.currentTimeMillis() - startMs) / 1000

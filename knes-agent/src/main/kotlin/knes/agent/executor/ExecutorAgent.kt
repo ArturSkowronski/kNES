@@ -27,7 +27,17 @@ class ExecutorAgent(
     private val fog: FogOfWar,
     private val toolCallLog: ToolCallLog = ToolCallLog(),
     private val visionInteriorNavigator: VisionInteriorNavigator? = null,
+    /**
+     * Optional override of the canonical "Goal: AtGarlandBattle" paragraph.
+     * Use cases: fixture-builder tests targeting an intermediate state (entering
+     * a specific town/dungeon), eval runs measuring agent reliability on a
+     * narrower task. When null, the production prompt with Garland goal is used.
+     */
+    private val goalOverride: String? = null,
 ) {
+    private val systemPrompt: String =
+        if (goalOverride == null) ff1ExecutorSystemPrompt
+        else ff1ExecutorSystemPrompt.replace(GOAL_PARAGRAPH, goalOverride)
     private val skillRegistry = SkillRegistry(toolset, overworldMap, mapSession, fog,
         toolCallLog = toolCallLog, visionInteriorNavigator = visionInteriorNavigator)
     private val advisorTool = AdvisorToolset(advisor)
@@ -41,7 +51,7 @@ class ExecutorAgent(
         llmModel = modelRouter.modelFor(phase, AgentRole.EXECUTOR),
         toolRegistry = registry,
         strategy = singleRunStrategy(),
-        systemPrompt = ff1ExecutorSystemPrompt,
+        systemPrompt = systemPrompt,
         maxIterations = 20,   // Koog counts node executions, not LLM calls. V2.3 adds findPath; the model may chain findPath → walkOverworldTo (2 tool calls = ~6-8 iterations) plus final response. 20 leaves slack without runaway.
     )
 
@@ -57,6 +67,16 @@ class ExecutorAgent(
     }
 
     companion object {
+        /** The canonical Garland goal paragraph in [ff1ExecutorSystemPrompt]. Tests
+         *  may construct an [ExecutorAgent] with goalOverride to swap this paragraph
+         *  for a different goal description without forking the whole prompt.
+         */
+        val GOAL_PARAGRAPH: String = "- Goal: AtGarlandBattle = Battle.enemyId == 0x7C. Garland is the BOSS of the\n" +
+            "  Chaos Shrine (Temple of Fiends), an INTERIOR dungeon — not a scripted bridge\n" +
+            "  fight. To reach him: walk north on overworld → enter Chaos Shrine via its\n" +
+            "  entry tile (use walkOverworldTo with the shrine's coords as target) →\n" +
+            "  exitInterior repeatedly to navigate sub-maps → fight Garland."
+
         val ff1ExecutorSystemPrompt: String = """
             You are an autonomous Final Fantasy (NES) executor.
 
