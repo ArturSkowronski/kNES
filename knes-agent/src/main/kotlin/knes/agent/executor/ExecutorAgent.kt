@@ -56,7 +56,7 @@ class ExecutorAgent(
         toolRegistry = registry,
         strategy = singleRunStrategy(),
         systemPrompt = systemPrompt,
-        maxIterations = 20,   // Koog counts node executions, not LLM calls. V2.3 adds findPath; the model may chain findPath → walkOverworldTo (2 tool calls = ~6-8 iterations) plus final response. 20 leaves slack without runaway.
+        maxIterations = 4,   // V5.23: was 20. System prompt mandates "exactly one skill per turn", so the legitimate node sequence is think → tool → think-on-result → respond (≈4 nodes). The previous 20 ceiling silently allowed the model to chain 6-10 tools in one Koog run, defeating the per-turn observation loop. Caps at 4 force the runtime to drive the loop.
     )
 
     suspend fun run(phase: FfPhase, input: String): String = try {

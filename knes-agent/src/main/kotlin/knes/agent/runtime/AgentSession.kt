@@ -45,6 +45,15 @@ class AgentSession(
         var advisorCalls = 0
         var skillsInvoked = 0
         val startMs = System.currentTimeMillis()
+        // V5.23: cross-turn memory of FF1 ROM-encoded warp tiles the agent has tripped
+        // into. Both AIAgent instances are spun up fresh each turn (singleRunStrategy +
+        // newAgent per phase) so they have NO native memory of prior failures. We track
+        // here and inject into both advisor and executor observations so neither suggests
+        // routing back through a known warp.
+        val failedWarpTiles: MutableSet<Pair<Int, Int>> = mutableSetOf()
+        // Match toolCallLog format: "entered interior after N steps; world=(X,Y) ... targeted=false"
+        // (set by WalkOverworldTo.kt when an UNEXPECTED interior was entered mid-route).
+        val failedRegex = Regex("""world=\((\d+),(\d+)\)[^|]*targeted=false""")
 
         try {
             while (true) {
@@ -87,6 +96,14 @@ class AgentSession(
                     val obs = buildString {
                         append("Phase: $phase\nRAM: $ram\n")
                         if (attachShot) append("(screenshot available via getScreen)\n")
+                        if (failedWarpTiles.isNotEmpty()) {
+                            // V5.23: session memory injected so the planner reroutes
+                            // around tiles that previously warped the party indoors.
+                            append("Session memory — known FF1 warp tiles to avoid as " +
+                                "targets or route-throughs: ")
+                            append(failedWarpTiles.joinToString(", ") { "(${it.first},${it.second})" })
+                            append('\n')
+                        }
                         append("Reason: $reason")
                     }
                     println("[advisor #$advisorCalls] phase=$phase")
@@ -102,13 +119,32 @@ class AgentSession(
                     idleTurns = 0
                 }
 
-                val executorInput = "Plan:\n$currentPlan\n\nCurrent phase: $phase\nRAM: $ram"
+                val executorInput = buildString {
+                    append("Plan:\n$currentPlan\n\nCurrent phase: $phase\nRAM: $ram")
+                    if (failedWarpTiles.isNotEmpty()) {
+                        append("\nSession memory — known FF1 warp tiles to avoid as targets " +
+                            "or route-throughs: ")
+                        append(failedWarpTiles.joinToString(", ") { "(${it.first},${it.second})" })
+                    }
+                }
                 println("[executor turn=$skillsInvoked] phase=$phase idle=$idleTurns")
                 val result = executor.run(phase, executorInput)
                 skillsInvoked += 1
                 println("[executor result] ${result.lineSequence().take(2).joinToString(" | ").take(160)}")
                 val drainedCalls = toolCallLog.drain()
                 println("[executor calls] ${drainedCalls.joinToString(" ; ").take(200)}")
+                // V5.23: extract UNEXPECTED warp tiles from the toolCallLog (set by
+                // WalkOverworldTo.aborted when targeted=false). Drained calls include
+                // the abort message verbatim, so this is a stable signal independent
+                // of how the LLM phrases its final response.
+                drainedCalls.forEach { call ->
+                    failedRegex.findAll(call).forEach { m ->
+                        val tile = m.groupValues[1].toInt() to m.groupValues[2].toInt()
+                        if (failedWarpTiles.add(tile)) {
+                            println("[session-memory] +failedWarpTile=$tile (total=${failedWarpTiles.size})")
+                        }
+                    }
+                }
                 trace.record(
                     TraceEvent(
                         turn = 0, role = "executor", phase = phase.toString(),
