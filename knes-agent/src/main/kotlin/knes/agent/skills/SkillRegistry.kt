@@ -4,6 +4,7 @@ import ai.koog.agents.core.tools.annotations.LLMDescription
 import ai.koog.agents.core.tools.annotations.Tool
 import ai.koog.agents.core.tools.reflect.ToolSet
 import knes.agent.perception.FogOfWar
+import knes.agent.perception.InteriorMemory
 import knes.agent.perception.MapSession
 import knes.agent.perception.OverworldMap
 import knes.agent.perception.VisionInteriorNavigator
@@ -28,13 +29,15 @@ class SkillRegistry(
     private val interiorPathfinder: Pathfinder = InteriorPathfinder(),
     private val toolCallLog: ToolCallLog = ToolCallLog(),
     private val visionInteriorNavigator: VisionInteriorNavigator? = null,
+    private val interiorMemory: InteriorMemory = InteriorMemory(),
 ) : ToolSet {
 
     private val pressStartSkill = PressStartUntilOverworld(toolset)
     private val walkSkill = WalkOverworldTo(toolset, overworldMap, fog, overworldPathfinder, toolCallLog)
-    private val exitInteriorSkill = ExitInterior(toolset, mapSession, fog, interiorPathfinder, toolCallLog)
+    private val exitInteriorSkill =
+        ExitInterior(toolset, mapSession, fog, interiorPathfinder, toolCallLog, interiorMemory)
     private val walkInteriorVisionSkill = visionInteriorNavigator?.let {
-        WalkInteriorVision(toolset, it, toolCallLog)
+        WalkInteriorVision(toolset, it, toolCallLog, interiorMemory)
     }
 
     @Tool

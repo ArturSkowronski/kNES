@@ -1,6 +1,8 @@
 package knes.agent.skills
 
+import knes.agent.perception.InteriorMemory
 import knes.agent.perception.InteriorMove
+import knes.agent.perception.InteriorObservation
 import knes.agent.perception.VisionInteriorNavigator
 import knes.agent.runtime.ToolCallLog
 import knes.agent.tools.EmulatorToolset
@@ -21,6 +23,7 @@ class WalkInteriorVision(
     private val toolset: EmulatorToolset,
     private val navigator: VisionInteriorNavigator,
     private val toolCallLog: ToolCallLog? = null,
+    private val interiorMemory: InteriorMemory? = null,
     private val framesPerTile: Int = 48,  // matches V2.4.5 ExitInterior tuning
 ) : Skill {
     override val id = "walk_interior_vision"
@@ -33,6 +36,7 @@ class WalkInteriorVision(
         var stepsTaken = 0
         var lastBlocked: InteriorMove? = null
         var consecutiveStuck = 0
+        try {
         // V3.2: when navigator says STUCK on step 0 with no movement evidence, the
         // skill should not yet trust it. Default to SOUTH (FF1 castle/town entries
         // are at south edges) and reroll. Only honor STUCK after STUCK_THRESHOLD
@@ -52,6 +56,13 @@ class WalkInteriorVision(
                 return SkillResult(true,
                     "exited interior to overworld at (${ramPre["worldX"]},${ramPre["worldY"]})",
                     totalFrames, ramPre)
+            }
+            // V5.9: record current interior tile as visited.
+            val mapIdPre = ramPre["currentMapId"] ?: -1
+            val partyXPre = ramPre["smPlayerX"] ?: 0
+            val partyYPre = ramPre["smPlayerY"] ?: 0
+            if (mapIdPre >= 0) {
+                interiorMemory?.record(mapIdPre, partyXPre, partyYPre, InteriorObservation.VISITED)
             }
 
             val frame = toolset.getState().frame
@@ -106,13 +117,29 @@ class WalkInteriorVision(
 
             lastBlocked = if (!moved && !transitioned) effectiveDir else null
             if (transitioned) {
+                // V5.9: record exit-confirmed at the pre-step tile + direction.
+                if (mapIdPre >= 0) {
+                    interiorMemory?.record(
+                        mapIdPre, partyXPre, partyYPre, InteriorObservation.EXIT_CONFIRMED,
+                        note = "exitDir=${effectiveDir.name}",
+                    )
+                }
                 return SkillResult(true,
                     "exited mid-loop at (${ramPost["worldX"]},${ramPost["worldY"]})",
                     totalFrames, ramPost)
+            }
+            // V5.9: record post-step interior tile as visited.
+            if (moved && mapIdPre >= 0) {
+                val partyXPost = ramPost["smPlayerX"] ?: partyXPre
+                val partyYPost = ramPost["smPlayerY"] ?: partyYPre
+                interiorMemory?.record(mapIdPre, partyXPost, partyYPost, InteriorObservation.VISITED)
             }
         }
 
         val ram = toolset.getState().ram
         return SkillResult(false, "walked $maxSteps steps without exit", totalFrames, ram)
+        } finally {
+            interiorMemory?.save()
+        }
     }
 }

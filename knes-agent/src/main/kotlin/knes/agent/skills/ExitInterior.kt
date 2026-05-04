@@ -1,6 +1,8 @@
 package knes.agent.skills
 
 import knes.agent.perception.FogOfWar
+import knes.agent.perception.InteriorMemory
+import knes.agent.perception.InteriorObservation
 import knes.agent.perception.MapSession
 import knes.agent.perception.TileType
 import knes.agent.pathfinding.InteriorPathfinder
@@ -24,6 +26,7 @@ class ExitInterior(
     private val fog: FogOfWar,
     private val pathfinder: Pathfinder = InteriorPathfinder(),
     private val toolCallLog: ToolCallLog? = null,
+    private val interiorMemory: InteriorMemory? = null,
 ) : Skill {
     override val id = "exit_interior"
     override val description =
@@ -44,6 +47,7 @@ class ExitInterior(
         var totalFrames = 0
         var stepsTaken = 0
 
+        try {
         while (stepsTaken < maxSteps) {
             val ram = toolset.getState().ram
             if ((ram["screenState"] ?: 0) == 0x68) {
@@ -68,6 +72,7 @@ class ExitInterior(
             // only worked when camera centered on party (broke at map edges).
             val partyX = ram["smPlayerX"] ?: 0
             val partyY = ram["smPlayerY"] ?: 0
+            interiorMemory?.record(mapId, partyX, partyY, InteriorObservation.VISITED)
             val viewport = mapSession.readFullMapView(partyX to partyY)
             fog.merge(viewport)
             val path = pathfinder.findPath(partyX to partyY, 0 to 0, viewport, fog)
@@ -101,16 +106,40 @@ class ExitInterior(
                 fog.markBlocked(partyX + nextDir.dx, partyY + nextDir.dy)
             }
 
+            // V5.9: detect transition out of interior, log EXIT_CONFIRMED with direction.
+            val transitioned1 = ((ram1["mapflags"] ?: 0) and 0x01) == 0
+            if (transitioned1) {
+                interiorMemory?.record(
+                    mapId, partyX, partyY, InteriorObservation.EXIT_CONFIRMED,
+                    note = "exitDir=${nextDir.name}",
+                )
+            }
+
             // If party landed on STAIRS / WARP, tap A to activate transition.
             if (mid1 == mapId && (partyX1 != partyX || partyY1 != partyY)) {
                 val tileNow = mapSession.currentMap?.classifyAt(partyX1, partyY1)
-                if (tileNow == TileType.STAIRS || tileNow == TileType.WARP) {
-                    toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 30)
+                interiorMemory?.record(mapId, partyX1, partyY1, InteriorObservation.VISITED)
+                when (tileNow) {
+                    TileType.STAIRS -> {
+                        interiorMemory?.record(mapId, partyX1, partyY1, InteriorObservation.POI_STAIRS)
+                        toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 30)
+                    }
+                    TileType.WARP -> {
+                        interiorMemory?.record(mapId, partyX1, partyY1, InteriorObservation.POI_WARP)
+                        toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 30)
+                    }
+                    TileType.DOOR -> {
+                        interiorMemory?.record(mapId, partyX1, partyY1, InteriorObservation.POI_DOOR)
+                    }
+                    else -> {}
                 }
             }
         }
 
         val ram = toolset.getState().ram
         return SkillResult(false, "did not exit interior in $maxSteps steps", totalFrames, ram)
+        } finally {
+            interiorMemory?.save()
+        }
     }
 }
