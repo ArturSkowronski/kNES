@@ -56,7 +56,7 @@ class ExecutorAgent(
         toolRegistry = registry,
         strategy = singleRunStrategy(),
         systemPrompt = systemPrompt,
-        maxIterations = 10,   // V5.23.1: dropped from 20→4 to enforce "one skill per turn" but Koog singleRunStrategy chains nodeStart → nodeLLM → nodeExecuteTool → nodeSendToolResult → nodeLLM → nodeFinish (≈6 nodes per tool call). Iter5 evidence: cap=4 fired ITERATION_CAP on every turn. 10 leaves headroom for one tool + retry of LLM response without enabling 6-tool chains.
+        maxIterations = 16,   // V5.23.2: 10 still hit ITERATION_CAP (iter6). Even single-tool calls in Koog 0.6.1 singleRunStrategy can take 8-10 nodes when tool result triggers extra LLM reasoning. Bumped to 16 — empirically below the 20-cap chain risk seen in V2-V5, while leaving room for legitimate single-tool flows. Tracking ITERATION_CAP rate across iterations.
     )
 
     suspend fun run(phase: FfPhase, input: String): String = try {
