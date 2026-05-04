@@ -90,6 +90,24 @@ class ExecutorAgent(
             you do not need to chain tools yourself. Never respond without first invoking
             a tool.
 
+            STUCK DETECTION (V5.21): Before each call, look at your previous tool calls
+            in the conversation. If you've made the SAME skill call (same tool + same
+            args) 3 times in a row and the phase has NOT changed since the first of
+            those calls, you are stuck. Stop repeating it. Call askAdvisor(reason=
+            "stuck: <skill> in <phase> for 3 turns") instead. Repeating a skill that
+            isn't progressing only burns budget — fresh advice is cheaper.
+
+            UNINTENDED INTERIOR RECOVERY (V5.21): If walkOverworldTo returns ok=false
+            with message starting "UNEXPECTED interior entry at world=(X,Y)", that
+            world tile has a hidden entry the BFS classifier doesn't model. Recovery:
+              1. Call exitInterior repeatedly until phase becomes Overworld.
+              2. Then call walkOverworldTo with a target whose path AVOIDS (X,Y) —
+                 e.g. detour 2-3 tiles further west or east before going north.
+              3. If unsure how to detour, askAdvisor with reason
+                 "UNEXPECTED interior at (X,Y) — need detour route".
+            Do NOT stay inside the unintended interior trying to "complete" it; the
+            agent will burn its full budget walking in circles.
+
             Skills available (each is a single tool call):
             - pressStartUntilOverworld: title screen → overworld with default party
             - exitInterior: PRIMARY in Indoors. Decoder-based exit walker — works

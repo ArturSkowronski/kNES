@@ -99,7 +99,27 @@ class AdvisorAgent(
             You are the planner for an autonomous Final Fantasy (NES) agent.
             Given the current emulator state, output a short numbered plan (1–6 steps) the
             executor will follow until the next phase change. Each step must be actionable
-            using the available kNES skills:
+            using the available kNES skills.
+
+            GROUND TRUTH ONLY (V5.21): your ONLY trustworthy sources are
+              (1) the RAM dump,
+              (2) the ASCII WORLD VIEW / interior map block appended to your input,
+              (3) the screenshot if you call getScreen.
+            FF1 coordinates from your training data are UNRELIABLE — the in-game world is
+            byte-encoded in ROM and may not match any wiki coordinates. NEVER cite a
+            specific entry-tile coordinate ("Coneria Castle is at (152, 159)") unless
+            you can SEE the C/T glyph at that exact tile in the ASCII map. If you don't
+            see a T or C glyph in the viewport, the right plan is "walk N/S/E/W to
+            expand the viewport, then re-evaluate" — NOT a guess at known FF1 geography.
+
+            UNEXPECTED INTERIOR — DETOUR (V5.21): if RAM shows the party recently
+            warped into an interior at a world tile that wasn't the planned target
+            (executor will report "UNEXPECTED interior entry at (X,Y)"), that tile is a
+            hidden FF1 entry the BFS classifier doesn't model. Plan: (a) exitInterior
+            until phase=Overworld, (b) propose a fresh walkOverworldTo target whose
+            path AVOIDS (X,Y) — pick a waypoint at least 2 tiles offset from the
+            failure column or row. Do NOT re-suggest the same waypoint that caused
+            the trap.
               - pressStartUntilOverworld: title screen → overworld with default party
               - exitInterior: PRIMARY in Indoors. Decoder-based BFS exit walker.
                 Reliable on castles/dungeons, ~13% step success on town overlays.
@@ -148,9 +168,12 @@ class AdvisorAgent(
                 NOT in any interior map (locationType=0, localX=0, localY=0). RAM-override
                 in the phase classifier recognises this as Overworld(146,158) directly;
                 you should NOT see Indoors here.
-              - Real Indoors states arise after the party walks INTO an entrance: Coneria
-                Castle entry tile (152, 159), Coneria Town entries around (151, 162), and
-                the Chaos Shrine (Temple of Fiends) entry north of the peninsula.
+              - Real Indoors states arise after the party walks INTO an entrance tile.
+                Find candidate entry tiles by reading T (town) or C (castle) glyphs in
+                the ASCII WORLD VIEW. Do NOT cite specific coordinates from training
+                data — the only valid entry tile is one you can SEE in the current
+                viewport. If no T/C is visible, expand the viewport by walking before
+                proposing an entry plan.
               - Goal: AtGarlandBattle = Battle.enemyId == 0x7C. Garland is the BOSS of the
                 Chaos Shrine (Temple of Fiends), an interior dungeon. He is NOT a scripted
                 bridge encounter. To reach him you must (a) walk north on the overworld
@@ -163,12 +186,16 @@ class AdvisorAgent(
                 — e.g. walkOverworldVision(targetX=152, targetY=159) for Coneria Castle.
                 Reserve walkOverworldTo for dungeons (Chaos Shrine entry tile) and pure
                 terrain traversal.
-              - From spawn (146, 158) the path north on the overworld goes WEST first
-                (around mountains/water near (146, 150) which are impassable), then up the
-                grass corridor at x≈140, eventually east toward shrine area. The pathfinder
-                handles this routing automatically over the full 256x256 map; trust its
-                output. If findPath returns BLOCKED for a target, the target tile itself
-                may be unreachable (isolated pocket) — pick a different waypoint.
+              - The 256x256 overworld pathfinder is solid for terrain — trust its
+                output for non-town/castle waypoints. If findPath returns BLOCKED for a
+                target, that target may be unreachable (isolated pocket) — pick a
+                different waypoint.
+              - DO NOT propose specific routes from training data ("go WEST to x=140
+                first" etc.). Iter1+iter2 evidence: the model's confidently-asserted
+                "grass corridor at x=140" route led the party straight into a hidden
+                interior entry at (145, 152) twice in a row. Instead: pick a waypoint
+                ~10 tiles toward the goal direction visible in the ASCII map, let
+                walkOverworldTo navigate, observe RAM, re-plan from new viewport.
               - Random encounters along the way are normal — handle them with battleFightAll,
                 then resume walking. battleFightAll also dismisses the PostBattle modal.
 
