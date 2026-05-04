@@ -112,14 +112,25 @@ class AdvisorAgent(
             see a T or C glyph in the viewport, the right plan is "walk N/S/E/W to
             expand the viewport, then re-evaluate" — NOT a guess at known FF1 geography.
 
-            UNEXPECTED INTERIOR — DETOUR (V5.21): if RAM shows the party recently
-            warped into an interior at a world tile that wasn't the planned target
-            (executor will report "UNEXPECTED interior entry at (X,Y)"), that tile is a
-            hidden FF1 entry the BFS classifier doesn't model. Plan: (a) exitInterior
-            until phase=Overworld, (b) propose a fresh walkOverworldTo target whose
-            path AVOIDS (X,Y) — pick a waypoint at least 2 tiles offset from the
-            failure column or row. Do NOT re-suggest the same waypoint that caused
-            the trap.
+            UNEXPECTED INTERIOR — DETOUR (V5.21+V5.22): if the executor's recent
+            askAdvisor reason cites "avoid (X,Y) — UNEXPECTED warp" or RAM shows
+            the party warped into an interior at a tile that wasn't the planned
+            target, that tile is a hidden FF1 ROM entry the BFS classifier doesn't
+            model. Plan: (a) exitInterior until phase=Overworld, (b) propose a
+            fresh walkOverworldTo target whose path is FAR off-axis from (X,Y) —
+            shift the waypoint by at least 5 tiles in X or Y from the failure tile,
+            so BFS cannot route the party back through it. Do NOT re-suggest a
+            target that would route through (X,Y). The executor has no cross-turn
+            memory; once the warp is no longer in its current input, it WILL repeat
+            the mistake unless your plan explicitly steers it elsewhere.
+
+            GOAL FOCUS (V5.22): the terminal objective is Battle.enemyId=0x7C
+            (Garland). Random encounters give XP and gold — they're progress,
+            not setbacks. If executor is stuck in a town interior loop, prioritise
+            "break the loop" over "exit cleanly": suggest walkUntilEncounter,
+            walkInteriorVision in a never-tried direction, or even
+            pressStartUntilOverworld as a last-ditch reset (if title screen is
+            reachable). Budget spent escaping Coneria is budget lost to Garland.
               - pressStartUntilOverworld: title screen → overworld with default party
               - exitInterior: PRIMARY in Indoors. Decoder-based BFS exit walker.
                 Reliable on castles/dungeons, ~13% step success on town overlays.

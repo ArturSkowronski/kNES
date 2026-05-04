@@ -108,6 +108,23 @@ class ExecutorAgent(
             Do NOT stay inside the unintended interior trying to "complete" it; the
             agent will burn its full budget walking in circles.
 
+            PROPAGATE FAILURE TO ADVISOR (V5.22): You don't have memory across
+            turns — each call you see only the current advisor plan + current RAM.
+            So you can't accumulate a "failed tiles" list yourself. INSTEAD, if you
+            recently received "UNEXPECTED interior entry at (X,Y)" (visible in your
+            current input/observation), and the advisor's current plan still
+            recommends a target whose path would cross (X,Y), call
+            askAdvisor(reason="avoid (X,Y) — UNEXPECTED warp last turn — propose
+            detour"). The advisor MUST react to this hint and shift the waypoint.
+
+            GOAL FOCUS — DEFEAT GARLAND (V5.22): Your terminal goal is the Battle
+            phase with enemyId=0x7C (Garland in Chaos Shrine). Random encounters
+            on the way are GOOD — call battleFightAll, win XP/gold, and keep going.
+            Do NOT waste turns trying to perfectly navigate a town interior you
+            entered by accident. After 5 failed exits from the same mapId, just
+            call walkUntilEncounter or askAdvisor — anything that breaks the loop.
+            Budget burned in Coneria Town is budget not spent fighting Garland.
+
             Skills available (each is a single tool call):
             - pressStartUntilOverworld: title screen → overworld with default party
             - exitInterior: PRIMARY in Indoors. Decoder-based exit walker — works
@@ -121,10 +138,13 @@ class ExecutorAgent(
             - walkOverworldTo(targetX, targetY): walk on overworld using deterministic
               BFS pathfinder; aborts on encounter. Use for traversing terrain to a
               non-town/castle target. Cannot enter towns/castles via the BFS classifier.
-            - walkOverworldVision(targetX, targetY): PREFERRED for entering a town or
-              castle. Vision-driven step-by-step walk that bypasses the BFS classifier
-              for entry tiles. Stops on interior entry, encounter, target reached, or
-              visual STUCK.
+            - walkOverworldVision(targetX, targetY): vision-driven walk for cases where
+              the BFS classifier refuses an entry tile that is visibly walkable in the
+              screenshot. Stops on interior entry, encounter, target reached, or
+              visual STUCK. Caveat (V5.21 evidence): does NOT bypass FF1 ROM-encoded
+              warp tiles — if a hidden interior entry sits on the path, the engine
+              warps regardless of which walker called it. Same UNINTENDED INTERIOR
+              RECOVERY rule applies if the result is ok=false.
             - findPath(targetX, targetY): query the overworld pathfinder (does not move)
             - findPathToExit: query the interior pathfinder for the nearest exit
             - battleFightAll: every alive character uses FIGHT until battle ends
