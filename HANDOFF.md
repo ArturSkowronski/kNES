@@ -1,8 +1,8 @@
-# FF1 Koog Agent — Handoff (V5.12 → next)
+# FF1 Koog Agent — Handoff (V5.18 → next)
 
 **Branch:** `ff1-agent-v2-4` of `/Users/askowronski/Priv/kNES-ff1-agent-v2`
-**HEAD:** `3460174` — V5.12 live integration smoke test for InteriorMemory stack
-**Required env:** `ANTHROPIC_API_KEY` (only for live agent runs; not for tests below)
+**HEAD:** `0cd19a1` — V5.18 vision-driven overworld walker
+**Required env:** `ANTHROPIC_API_KEY` (only for live agent runs; not for unit tests)
 
 ---
 
@@ -31,21 +31,32 @@
 
 ---
 
-## TL;DR — where we are (2026-05-04 evening, post-V5.12)
+## TL;DR — where we are (2026-05-04 late, post-V5.18)
 
 V5.6 fixed the foundation (sm_player_x/y vs scroll, mapflags vs locType).
 V5.7 added tap-precision movement and proved mapId=8 is Coneria CASTLE.
-**This evening (V5.8→V5.12) added the GPP-inspired InteriorMemory stack**
-— a persistent POI/visited layer that lets the pathfinder learn from past
-runs and lets the vision navigator know "explore unvisited area first".
-Empirically verified on a live ROM: agent autonomously discovered STAIRS
-at (12,18) in Coneria castle and persisted it across sessions, and a
-pre-populated POI overrode the south-edge fallback exactly as designed.
+**Single long session this day shipped V5.8 → V5.18, eleven commits**:
 
-A fresh blocker surfaced from the V5.12 evidence run: **POI_STAIRS in
-castles is sub-map navigation, not exit** — the agent reaches STAIRS,
-A-taps, transitions to a different sub-map, never to overworld. See
-`2026-05-04-v512-memory-stack-evidence.md` for three options to fix.
+- V5.8–V5.12: GPP-inspired InteriorMemory stack — persistent POI / VISITED /
+  EXIT_CONFIRMED per mapId, pathfinder priority, forced-exploration prompt,
+  live integration smoke (agent autonomously discovered STAIRS@(12,18)).
+- V5.13: POI_STAIRS = sub-map sighting; pathfinder no longer targets it as
+  exit (castle stairs are floor-nav, not way-out).
+- V5.14: Pathfinder richer feedback (closestReachable + targetPassable).
+  GPP lesson — never return bare "no path" boolean.
+- V5.15: WalkOverworldTo input-dead detection (initial Coneria8 patch).
+- V5.16: Empirical loadState diagnosis — DEBUNKS V5.6's "controller-state
+  gap" claim. Real cause: PPU vblank/cycle counter not synced after a cold
+  loadRom + loadState. CPU wedges at PC=0xfeba waiting for vblank flag.
+- V5.17: Coneria8 dropped fixture path → live boot. Partial fix; party
+  moves 3 tiles closer to target, then engine refuses TOWN entry from
+  non-canonical direction.
+- V5.18: VisionOverworldNavigator + WalkOverworldVision skill — vision-
+  driven, bypasses OverworldTileClassifier heuristics for towns/castles.
+
+Net: 59 unit tests + 5 live ROM tests green. Agent has full GPP-style
+memory + frontier hint + forced exploration interior loop. Overworld
+has both deterministic BFS (with richer feedback) AND vision walker.
 
 ### V5.6 (still standing) what was fixed
 
@@ -75,6 +86,13 @@ ConeriaTownEmpiricalDiscoveryTest both fail at WalkOverworldTo, not interior nav
 ## V5.x commits (2026-05-04)
 
 ```
+0cd19a1 V5.18 — vision-driven overworld walker (HANDOFF #4 path C)
+5dc14b0 V5.17 — Coneria8 dropped fixture path for live boot (partial fix)
+595d809 V5.16 — empirical loadState input diagnosis (debunks "controller-state gap")
+cf417d4 V5.15 — WalkOverworldTo input-dead detection (Coneria8 fail diagnosed)
+e182c12 V5.14 — overworld BFS richer feedback (closestReachable + targetPassable)
+1e198a1 V5.13 — POI_STAIRS dropped from pathfinder targets (sub-map sighting)
+3136b43 docs — V5.12 evidence note + handoff update
 3460174 V5.12 — live integration smoke test for V5.8→V5.10 stack (1/1 ✓)
 795c540 V5.11 — forced exploration prompt (GPP "uncover before exit")
 0da74db V5.10 — InteriorPathfinder POI priority (memory > viewport > south-edge)
@@ -156,28 +174,34 @@ Live measurement (`V58InteriorMemoryLiveTest`):
 
 ---
 
-## Open blockers (in priority order, post-V5.12)
+## Open blockers (in priority order, post-V5.18)
 
-### 1. POI_STAIRS in castles ≠ exit (NEW, surfaced 2026-05-04 evening)
+### 1. Live exercise of V5.18 vision overworld walker (NEW, top priority)
 
-V5.12 evidence: agent reached STAIRS@(12,18) in mapId=8, A-tapped, NO
-mapflags transition. STAIRS in castles navigates between sub-maps
-(floors), not to overworld. With V5.10 priority in place, the agent
-will keep routing to POI_STAIRS in castles forever, looping between
-sub-maps and never reaching overworld.
+V5.18 ships VisionOverworldNavigator + WalkOverworldVision but live
+verification was deliberately deferred (needs ANTHROPIC_API_KEY budget).
+First action next session: hook AnthropicVisionOverworldNavigator into
+ExecutorAgent (mirror the existing AnthropicVisionInteriorNavigator wire-
+up), run agent against the Coneria8 scenario, observe whether vision
+correctly approaches and enters Coneria Town. If it works, this is the
+HANDOFF #4 fix; we can deprecate WalkOverworldTo for town-entry use case.
 
-**Three options** (see `2026-05-04-v512-memory-stack-evidence.md`):
-1. Split enum: `POI_SUBMAP_STAIRS` (sighting only) vs `POI_EXIT_STAIRS`
-   (only after EXIT_CONFIRMED on this tile in the past). Cleanest.
-2. Per-tile boolean `confirmedLeadsOut`. Smallest delta.
-3. Track sub-map history via mapId-change-on-step events. Richest data.
+### 2. ExecutorAgent doesn't yet construct the vision overworld navigator
 
-Recommended: option (1). Lets V5.10 priority become
-`EXIT_CONFIRMED > POI_EXIT_STAIRS > POI_DOOR > POI_WARP > viewport >
-south-edge > POI_SUBMAP_STAIRS`. POI_SUBMAP_STAIRS still useful as
-"don't re-explore here" hint without misleading the pathfinder.
+`SkillRegistry` accepts a `visionOverworldNavigator: VisionOverworldNavigator?`
+parameter (default null), but `ExecutorAgent.kt` only constructs the
+interior one. Need to add overworld navigator construction analogous to
+the interior path. Trivial change once API key is in place.
 
-### 2. Live V5.11 forced-exploration verification
+### 3. ConeriaTownEmpiricalDiscoveryTest DFS limit
+
+Already uses live boot (line 49) but DFS exhausts at walkable<80 without
+finding mapId=8 entry. Either raise the limit or rewrite to use V5.18
+vision walker for the discovery loop.
+
+V5.13 dropped POI_STAIRS from pathfinder target buckets. Resolved.
+
+### 5. Live V5.11 forced-exploration verification
 
 V5.11 prompt path is built (`InteriorFrontier` + frontier hint + system
 prompt rule) but never exercised end-to-end with a real vision model.
@@ -189,7 +213,7 @@ interior, runs `WalkInteriorVision` with a real Anthropic navigator,
 captures the prompt to verify frontier hint is included, asserts agent
 visits at least N unique tiles.
 
-### 3. Find true mapId for Coneria TOWN (deprioritized)
+### 6. Find true mapId for Coneria TOWN (deprioritized)
 
 Per GPP research, knowing mapId is less critical now that we have
 POI persistence keyed by mapId — the true town mapId becomes just
@@ -200,19 +224,25 @@ Method (unchanged): extend `MapIdDiscoveryTest` to walk further on
 overworld looking for visible town huts, capture screenshot when vision
 says "town", read $48. Likely candidates: small mapIds near 0-5.
 
-### 4. Overworld nav blocked at Coneria area
+### 7. Overworld nav blocked at Coneria area (richer feedback delivered V5.14, full fix needs V5.18 live)
 
-`findPath (146,158) → (146,150)` returns `found=false` despite full-map BFS.
-Hard-impassable rule from V2.5.4 (TOWN/CASTLE blocked) plus terrain.
-This is why `Coneria8VisualDiffTest` fails — never reaches interior.
+V5.14 delivered the GPP "richer feedback" lesson:
+`PathResult.closestReachable` + `targetPassable`. ViewportPathfinder
+now always returns the BFS-closest tile + tells the caller whether
+the target itself was walkable. WalkOverworldTo follows partial paths.
 
-**Investigation hint**: byte 0x26 at (146, 151) is on the path; check
-`OverworldTileClassifier.classify(0x26)`. Also look at whether BFS treats
-the target tile as passable when it's hard-impassable (V2.5.4 had an
-escape clause for "target is itself a TOWN/CASTLE" — verify it fires).
-GPP-lesson applies: BFS should return richer "no path" feedback
-(closest reachable + frontier of unknowns) instead of bare boolean,
-to prevent agent assuming the tool is broken.
+V5.16 empirically debunked the "controller-state gap" hypothesis from
+V5.6. Real cause for fixture-loadState failures: PPU vblank/cycle
+counter not synced after cold loadRom + loadState, CPU wedges at
+PC=0xfeba.
+
+V5.17 dropped fixture path in Coneria8VisualDiffTest in favor of live
+boot. Party now reaches (149,159) — 3 tiles closer than pre-V5.17 —
+but engine then refuses TOWN entry from non-canonical direction
+(Entroper FF1 disasm: tileset_prop bit, not derivable from byte id).
+
+V5.18 ships the vision overworld walker as the proper fix. Pending
+live verification (blocker #1).
 
 ---
 
@@ -320,16 +350,15 @@ elsewhere** — original V2.6.6 DoD. Concrete sub-goals:
 
 ## First message to send to the next session
 
-> Resume FF1 Koog agent V5.12 from `HANDOFF.md`. V5.6 foundation
-> (sm_player_x/y + mapflags) holds. V5.8→V5.12 added the GPP-inspired
-> InteriorMemory stack (POI / VISITED / EXIT_CONFIRMED, persistent JSON,
-> POI-priority pathfinder, forced-exploration prompt) — 46/46 unit tests
-> green and live evidence in `2026-05-04-v512-memory-stack-evidence.md`.
-> Open blockers: (1) POI_STAIRS in castles is sub-map nav, not exit —
-> needs enum split (POI_SUBMAP_STAIRS vs POI_EXIT_STAIRS); (2) live V5.11
-> verification with real vision navigator (needs API key); (3) Coneria
-> Town mapId sweep (now lower priority); (4) overworld BFS blocker.
-> **Start with (1)** — read the V5.12 evidence note, pick option 1/2/3
-> from there, deterministic & no API key. Conversation in Polish; user
-> prefers short iterations, evidence-based conclusions, commits per
-> closed phase.
+> Resume FF1 Koog agent V5.18 from `HANDOFF.md`. V5.6 foundation holds.
+> Single long session 2026-05-04 shipped V5.8→V5.18 (11 commits,
+> ~1700 lines, 59 unit + 5 live ROM tests green): InteriorMemory stack
+> with POI/visited/exit_confirmed persistence, forced-exploration prompt,
+> POI_STAIRS sub-map fix, richer pathfinder feedback (closestReachable +
+> targetPassable), loadState empirical diagnosis (debunks "controller-
+> state gap" — real cause is PPU vblank desync), Coneria8 → live boot
+> partial fix, and finally VisionOverworldNavigator + WalkOverworldVision
+> skill as the proper fix for town/castle entry. Top-priority next step:
+> wire AnthropicVisionOverworldNavigator into ExecutorAgent and exercise
+> live (needs ANTHROPIC_API_KEY). Conversation in Polish; user prefers
+> short iterations, evidence-based conclusions, commits per closed phase.
