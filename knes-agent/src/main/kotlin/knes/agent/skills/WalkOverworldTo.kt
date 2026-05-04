@@ -36,6 +36,13 @@ class WalkOverworldTo(
 
         var totalFrames = 0
         var stepsTaken = 0
+        // V5.15: detect "input dead" (e.g. fixture loadState quirk) — if the
+        // party doesn't move for several consecutive iterations, abort with a
+        // diagnostic instead of pile-up fog.markBlocked, which self-poisons
+        // the BFS until every cardinal neighbour is "blocked" and the
+        // pathfinder reports closestReachable=start.
+        var consecutiveNoMove = 0
+        val INPUT_DEAD_THRESHOLD = 3
 
         while (stepsTaken < maxSteps) {
             val ram0 = toolset.getState().ram
@@ -107,6 +114,18 @@ class WalkOverworldTo(
                 (ram1["screenState"] ?: 0) != (ram0["screenState"] ?: 0)
             if (nx == cx && ny == cy && !transitioned) {
                 fog.markBlocked(cx + nextDir.dx, cy + nextDir.dy)
+                consecutiveNoMove++
+                if (consecutiveNoMove >= INPUT_DEAD_THRESHOLD) {
+                    val ram = toolset.getState().ram
+                    return SkillResult(false,
+                        "input not responding: $consecutiveNoMove consecutive non-moving steps " +
+                            "from ($cx,$cy) toward ($tx,$ty). " +
+                            "Likely cause: fixture loadState quirk (V5.2) or party physically " +
+                            "boxed in by terrain. Fog has been marked accordingly.",
+                        totalFrames, ram)
+                }
+            } else {
+                consecutiveNoMove = 0
             }
         }
         val ram = toolset.getState().ram
