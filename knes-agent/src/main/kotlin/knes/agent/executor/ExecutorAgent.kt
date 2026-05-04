@@ -56,7 +56,7 @@ class ExecutorAgent(
         toolRegistry = registry,
         strategy = singleRunStrategy(),
         systemPrompt = systemPrompt,
-        maxIterations = 4,   // V5.23: was 20. System prompt mandates "exactly one skill per turn", so the legitimate node sequence is think → tool → think-on-result → respond (≈4 nodes). The previous 20 ceiling silently allowed the model to chain 6-10 tools in one Koog run, defeating the per-turn observation loop. Caps at 4 force the runtime to drive the loop.
+        maxIterations = 10,   // V5.23.1: dropped from 20→4 to enforce "one skill per turn" but Koog singleRunStrategy chains nodeStart → nodeLLM → nodeExecuteTool → nodeSendToolResult → nodeLLM → nodeFinish (≈6 nodes per tool call). Iter5 evidence: cap=4 fired ITERATION_CAP on every turn. 10 leaves headroom for one tool + retry of LLM response without enabling 6-tool chains.
     )
 
     suspend fun run(phase: FfPhase, input: String): String = try {
