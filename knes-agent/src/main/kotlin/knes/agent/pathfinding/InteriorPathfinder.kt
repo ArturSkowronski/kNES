@@ -1,21 +1,45 @@
 package knes.agent.pathfinding
 
 import knes.agent.perception.FogOfWar
+import knes.agent.perception.InteriorMemory
+import knes.agent.perception.InteriorObservation
 import knes.agent.perception.TileType
 import knes.agent.perception.ViewportMap
 import java.util.ArrayDeque
 
 /**
- * BFS over the viewport from party position to the nearest tile that is either:
- *  - explicitly classified DOOR / STAIRS / WARP, or
- *  - a "south-edge implicit exit": a passable tile whose immediate SOUTH neighbour
- *    in the viewport is impassable/UNKNOWN (FF1 town/castle exits are implicit at
- *    the south boundary of the playable area — engine handles transition when
- *    party walks off).
+ * BFS over the viewport from party position to the nearest exit. Target
+ * priority (V5.13, post-V5.12 castle-stairs gotcha):
+ *   1. Memory-recorded `EXIT_CONFIRMED` (we walked through here and it
+ *      flipped mapflags bit 0 → 0 last time — definitely leads outside).
+ *   2. Memory-recorded `POI_DOOR` / `POI_WARP` (DOOR/WARP semantics
+ *      reliably mean "exit" in FF1 maps).
+ *   3. Viewport-classified `DOOR` / `STAIRS` / `WARP` (current frame
+ *      classifier — STAIRS here is dangerous in castles but worth one
+ *      attempt; the resulting EXIT_CONFIRMED or its absence will teach
+ *      the pathfinder).
+ *   4. South-edge implicit exit (V2.4–V5.7 fallback): a passable tile
+ *      whose immediate SOUTH neighbours within `SOUTH_EDGE_PROBE_DEPTH`
+ *      rows are impassable/UNKNOWN — i.e. the outer south boundary of
+ *      the playable area. FF1 engine transitions to the parent map when
+ *      the party walks SOUTH off this row.
  *
- * Goal is "any exit"; the `to` parameter of Pathfinder is ignored.
+ * **`POI_STAIRS` is NOT a target candidate.** V5.12 evidence (Coneria
+ * castle mapId=8): party reached STAIRS@(12,18), A-tap, no transition
+ * to overworld — STAIRS in castles is sub-map navigation (up/down
+ * floors), not exit. POI_STAIRS is still recorded by the wiring (useful
+ * as a "we've seen STAIRS here" diagnostic and for V5.11 frontier
+ * hints) but the pathfinder ignores it.
+ *
+ * Without memory, the behaviour is identical to V5.7 (categories 3 and
+ * 4 only). Goal is "any exit"; the `to` parameter of [Pathfinder] is
+ * ignored.
  */
-class InteriorPathfinder(private val maxSteps: Int = 64) : Pathfinder {
+class InteriorPathfinder(
+    private val maxSteps: Int = 64,
+    private val memory: InteriorMemory? = null,
+    private val mapIdProvider: (() -> Int)? = null,
+) : Pathfinder {
 
     override fun findPath(
         from: Pair<Int, Int>,
@@ -34,25 +58,43 @@ class InteriorPathfinder(private val maxSteps: Int = 64) : Pathfinder {
         q.add(start)
         visited[start.second][start.first] = true
 
+        val mapId = mapIdProvider?.invoke()
+        val mem = if (mapId != null) memory else null
+
+        // Per-category nearest-match (BFS poll order = distance order, so
+        // first non-null assignment is shortest path to that category).
+        var bestExitConfirmed: Pair<Int, Int>? = null
+        var bestMemoryPoi: Pair<Int, Int>? = null
+        var bestViewportExit: Pair<Int, Int>? = null
+        var bestSouthEdge: Pair<Int, Int>? = null
+
         while (q.isNotEmpty()) {
             val (cx, cy) = q.poll()
             val isStart = cx == start.first && cy == start.second
             val type = viewport.tiles[cy][cx]
             val (rwx, rwy) = viewport.localToWorld(cx, cy)
 
-            if (!isStart && (isExitTile(type) || isSouthEdgeExit(viewport, cx, cy))) {
-                // Check if this exit is blocked by fog
-                if (!fog.isBlocked(rwx, rwy)) {
-                    val steps = reconstruct(cx, cy, start, viaDir)
-                    if (steps.size > maxSteps) {
-                        val truncated = steps.take(maxSteps)
-                        return PathResult(true, truncated, reachedAfter(truncated, from),
-                            SearchSpace.LOCAL_MAP, partial = true,
-                            reason = "exit found but path exceeds $maxSteps steps")
+            if (!isStart && !fog.isBlocked(rwx, rwy)) {
+                if (mem != null && mapId != null) {
+                    when (mem.get(mapId, rwx, rwy)?.observation) {
+                        InteriorObservation.EXIT_CONFIRMED ->
+                            if (bestExitConfirmed == null) bestExitConfirmed = cx to cy
+                        InteriorObservation.POI_WARP,
+                        InteriorObservation.POI_DOOR ->
+                            if (bestMemoryPoi == null) bestMemoryPoi = cx to cy
+                        // POI_STAIRS is NOT a target — sub-map navigation, not exit.
+                        // VISITED is a sighting, not a destination.
+                        else -> {}
                     }
-                    return PathResult(true, steps, rwx to rwy, SearchSpace.LOCAL_MAP, partial = false)
                 }
-                // Exit is fogged; continue searching for unfogged exits
+                if (isExitTile(type)) {
+                    if (bestViewportExit == null) bestViewportExit = cx to cy
+                } else if (isSouthEdgeExit(viewport, cx, cy)) {
+                    if (bestSouthEdge == null) bestSouthEdge = cx to cy
+                }
+                // Once highest-priority bucket is found, BFS guarantees it's
+                // the shortest route — no later tile can beat it.
+                if (bestExitConfirmed != null) break
             }
 
             for (dir in Direction.values()) {
@@ -68,9 +110,26 @@ class InteriorPathfinder(private val maxSteps: Int = 64) : Pathfinder {
             }
         }
 
-        return PathResult.blocked(from,
-            "no exit (DOOR/STAIRS/WARP or south-edge) visible in viewport",
-            SearchSpace.LOCAL_MAP)
+        val target = bestExitConfirmed ?: bestMemoryPoi ?: bestViewportExit ?: bestSouthEdge
+            ?: return PathResult.blocked(
+                from,
+                "no exit (memory POI / DOOR / STAIRS / WARP / south-edge) reachable in viewport",
+                SearchSpace.LOCAL_MAP,
+            )
+
+        val (tx, ty) = target
+        val (rwx, rwy) = viewport.localToWorld(tx, ty)
+        val steps = reconstruct(tx, ty, start, viaDir)
+        return if (steps.size > maxSteps) {
+            val truncated = steps.take(maxSteps)
+            PathResult(
+                true, truncated, reachedAfter(truncated, from),
+                SearchSpace.LOCAL_MAP, partial = true,
+                reason = "exit found but path exceeds $maxSteps steps",
+            )
+        } else {
+            PathResult(true, steps, rwx to rwy, SearchSpace.LOCAL_MAP, partial = false)
+        }
     }
 
     private fun isExitTile(t: TileType): Boolean =
@@ -90,7 +149,7 @@ class InteriorPathfinder(private val maxSteps: Int = 64) : Pathfinder {
     private fun isSouthEdgeExit(viewport: ViewportMap, lx: Int, ly: Int): Boolean {
         val type = viewport.tiles[ly][lx]
         if (!type.isPassable()) return false
-        if (ly + 1 >= viewport.height) return false  // Reached map edge — no proof of outside
+        if (ly + 1 >= viewport.height) return false
         val end = minOf(ly + 1 + SOUTH_EDGE_PROBE_DEPTH, viewport.height)
         if (end <= ly + 1) return false
         for (sy in ly + 1 until end) {

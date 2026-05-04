@@ -33,7 +33,12 @@ class AdvisorAgent(
     private val viewportSource: ViewportSource? = null,  // overworld source, kept for backward-compat
     private val interiorSource: ViewportSource? = null,
     private val fog: FogOfWar? = null,
+    /** Mirror of ExecutorAgent.goalOverride — see that field's docstring. */
+    private val goalOverride: String? = null,
 ) {
+    private val effectiveSystemPrompt: String =
+        if (goalOverride == null) systemPrompt
+        else systemPrompt.replace(GOAL_PARAGRAPH, goalOverride)
     private val readOnlyTools = ReadOnlyToolset(toolset)
     private val registry = ToolRegistry { tools(readOnlyTools) }
 
@@ -42,7 +47,7 @@ class AdvisorAgent(
         llmModel = modelRouter.modelFor(phase, AgentRole.ADVISOR),
         toolRegistry = registry,
         strategy = singleRunStrategy(),
-        systemPrompt = systemPrompt,
+        systemPrompt = effectiveSystemPrompt,
         maxIterations = 8,   // Koog counts node executions; advisor may inspect state once + produce plan
     )
 
@@ -82,6 +87,14 @@ class AdvisorAgent(
     }
 
     companion object {
+        /** Goal paragraph in [systemPrompt] — see ExecutorAgent.GOAL_PARAGRAPH for the
+         *  pattern. Construct an [AdvisorAgent] with a non-null goalOverride to swap. */
+        val GOAL_PARAGRAPH: String = "  - Goal: AtGarlandBattle = Battle.enemyId == 0x7C. Garland is the BOSS of the\n" +
+            "    Chaos Shrine (Temple of Fiends), an interior dungeon. He is NOT a scripted\n" +
+            "    bridge encounter. To reach him you must (a) walk north on the overworld\n" +
+            "    from spawn to the Chaos Shrine entrance, (b) enter the shrine, (c) navigate\n" +
+            "    its dungeon, (d) defeat the shrine miniboss room."
+
         val systemPrompt: String = """
             You are the planner for an autonomous Final Fantasy (NES) agent.
             Given the current emulator state, output a short numbered plan (1–6 steps) the

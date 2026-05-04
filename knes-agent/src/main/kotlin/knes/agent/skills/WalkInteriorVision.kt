@@ -1,6 +1,10 @@
 package knes.agent.skills
 
+import knes.agent.perception.InteriorFrontier
+import knes.agent.perception.InteriorMemory
 import knes.agent.perception.InteriorMove
+import knes.agent.perception.InteriorObservation
+import knes.agent.perception.MapSession
 import knes.agent.perception.VisionInteriorNavigator
 import knes.agent.runtime.ToolCallLog
 import knes.agent.tools.EmulatorToolset
@@ -12,7 +16,7 @@ import knes.agent.tools.EmulatorToolset
  * town maps. See `docs/superpowers/DECISION-2026-05-03-v3-vision-first-interior.md`.
  *
  * Termination:
- *  - Exit: phase becomes Overworld (locationType==0 AND localX==0 AND localY==0).
+ *  - Exit: phase becomes Overworld (mapflags bit 0 cleared).
  *  - Encounter: returns ok=true with reason "encounter".
  *  - Vision STUCK / UNCLEAR: returns ok=false; outer loop should ask the advisor.
  *  - maxSteps reached without exit: returns ok=false.
@@ -21,6 +25,8 @@ class WalkInteriorVision(
     private val toolset: EmulatorToolset,
     private val navigator: VisionInteriorNavigator,
     private val toolCallLog: ToolCallLog? = null,
+    private val interiorMemory: InteriorMemory? = null,
+    private val mapSession: MapSession? = null,
     private val framesPerTile: Int = 48,  // matches V2.4.5 ExitInterior tuning
 ) : Skill {
     override val id = "walk_interior_vision"
@@ -33,6 +39,7 @@ class WalkInteriorVision(
         var stepsTaken = 0
         var lastBlocked: InteriorMove? = null
         var consecutiveStuck = 0
+        try {
         // V3.2: when navigator says STUCK on step 0 with no movement evidence, the
         // skill should not yet trust it. Default to SOUTH (FF1 castle/town entries
         // are at south edges) and reroll. Only honor STUCK after STUCK_THRESHOLD
@@ -46,17 +53,45 @@ class WalkInteriorVision(
                 return SkillResult(true,
                     "encounter triggered after $stepsTaken steps", totalFrames, ramPre)
             }
-            val onOverworld = (ramPre["locationType"] ?: 0) == 0 &&
-                (ramPre["localX"] ?: 0) == 0 && (ramPre["localY"] ?: 0) == 0
+            // V5.6: canonical 'on overworld' = mapflags bit 0 clear (Disch).
+            val onOverworld = ((ramPre["mapflags"] ?: 0) and 0x01) == 0
             if (onOverworld) {
                 return SkillResult(true,
                     "exited interior to overworld at (${ramPre["worldX"]},${ramPre["worldY"]})",
                     totalFrames, ramPre)
             }
+            // V5.9: record current interior tile as visited.
+            val mapIdPre = ramPre["currentMapId"] ?: -1
+            val partyXPre = ramPre["smPlayerX"] ?: 0
+            val partyYPre = ramPre["smPlayerY"] ?: 0
+            if (mapIdPre >= 0) {
+                interiorMemory?.record(mapIdPre, partyXPre, partyYPre, InteriorObservation.VISITED)
+            }
 
             val frame = toolset.getState().frame
             val shotB64 = toolset.getScreen().base64
-            val dir = navigator.nextDirection(shotB64, frame, lastBlocked)
+            // V5.11: compute frontier hint when memory + mapSession are available.
+            var frontierHint: InteriorMove? = null
+            var unvisitedReachable = 0
+            if (interiorMemory != null && mapSession != null && mapIdPre >= 0) {
+                mapSession.ensureCurrent(mapIdPre)
+                val viewport = mapSession.readFullMapView(partyXPre to partyYPre)
+                val visited = interiorMemory.visited(mapIdPre)
+                val frontier = InteriorFrontier.nearestUnvisited(
+                    viewport, visited, from = partyXPre to partyYPre,
+                )
+                if (frontier != null) {
+                    frontierHint = frontier.firstDirection
+                    // 1 = "at least one unvisited reachable tile remains"; vision model
+                    // only needs the binary signal, not an exact count.
+                    unvisitedReachable = 1
+                }
+            }
+            val dir = navigator.nextDirection(
+                shotB64, frame, lastBlocked,
+                frontierHint = frontierHint,
+                unvisitedReachable = unvisitedReachable,
+            )
             toolCallLog?.append("walkInteriorVision.dir",
                 "step=$stepsTaken dir=${dir.name}" +
                     (lastBlocked?.let { " hintBlocked=${it.name}" } ?: ""))
@@ -95,24 +130,40 @@ class WalkInteriorVision(
             stepsTaken++
 
             val ramPost = toolset.getState().ram
-            val moved = ramPost["localX"] != ramPre["localX"] ||
-                        ramPost["localY"] != ramPre["localY"]
-            val transitioned = (ramPost["locationType"] ?: 0) == 0 &&
-                               (ramPost["localX"] ?: 0) == 0 && (ramPost["localY"] ?: 0) == 0
+            // V5.6: party movement = $0068/$0069 (sm_player) change, not scroll.
+            val moved = ramPost["smPlayerX"] != ramPre["smPlayerX"] ||
+                        ramPost["smPlayerY"] != ramPre["smPlayerY"]
+            val transitioned = ((ramPost["mapflags"] ?: 0) and 0x01) == 0
             toolCallLog?.append("walkInteriorVision.step",
-                "from=(${ramPre["localX"]},${ramPre["localY"]}) " +
-                    "after=(${ramPost["localX"]},${ramPost["localY"]}) " +
+                "from=(${ramPre["smPlayerX"]},${ramPre["smPlayerY"]}) " +
+                    "after=(${ramPost["smPlayerX"]},${ramPost["smPlayerY"]}) " +
                     "moved=$moved transitioned=$transitioned")
 
             lastBlocked = if (!moved && !transitioned) effectiveDir else null
             if (transitioned) {
+                // V5.9: record exit-confirmed at the pre-step tile + direction.
+                if (mapIdPre >= 0) {
+                    interiorMemory?.record(
+                        mapIdPre, partyXPre, partyYPre, InteriorObservation.EXIT_CONFIRMED,
+                        note = "exitDir=${effectiveDir.name}",
+                    )
+                }
                 return SkillResult(true,
                     "exited mid-loop at (${ramPost["worldX"]},${ramPost["worldY"]})",
                     totalFrames, ramPost)
+            }
+            // V5.9: record post-step interior tile as visited.
+            if (moved && mapIdPre >= 0) {
+                val partyXPost = ramPost["smPlayerX"] ?: partyXPre
+                val partyYPost = ramPost["smPlayerY"] ?: partyYPre
+                interiorMemory?.record(mapIdPre, partyXPost, partyYPost, InteriorObservation.VISITED)
             }
         }
 
         val ram = toolset.getState().ram
         return SkillResult(false, "walked $maxSteps steps without exit", totalFrames, ram)
+        } finally {
+            interiorMemory?.save()
+        }
     }
 }

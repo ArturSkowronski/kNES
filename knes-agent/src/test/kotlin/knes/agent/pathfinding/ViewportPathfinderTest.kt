@@ -119,9 +119,15 @@ class ViewportPathfinderTest : FunSpec({
             tiles[6][8] = TileType.TOWN
         }
         val res = pf.findPath(from = 100 to 100, to = 100 to 96, viewport = vm, fog = FogOfWar())
-        // Pre-V2.5.4: would route through TOWN (cost 50). V2.5.4: hard-impassable
-        // when not destination, so the route is fully blocked.
-        res.found shouldBe false
-        res.steps shouldBe emptyList()
+        // V2.5.4: TOWN is hard-impassable when not the destination.
+        // V5.14: BFS still walks one step N onto the GRASS at local (8,7) and
+        // returns a partial path stopping there — the corridor goes no further
+        // because TOWN at (8,6) is impassable transit. Caller now sees the
+        // partial progress + the closest reachable instead of bare "blocked".
+        res.found shouldBe true
+        res.partial shouldBe true
+        res.targetPassable shouldBe true  // target itself is GRASS
+        res.steps shouldBe listOf(Direction.N)
+        res.closestReachable shouldBe (100 to 99)
     }
 })

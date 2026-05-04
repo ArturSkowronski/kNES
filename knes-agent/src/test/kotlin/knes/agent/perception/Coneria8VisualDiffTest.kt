@@ -2,8 +2,11 @@ package knes.agent.perception
 
 import io.kotest.core.spec.style.FunSpec
 import knes.agent.skills.PressStartUntilOverworld
+import knes.agent.skills.WalkOverworldTo
 import knes.agent.tools.EmulatorToolset
 import knes.api.EmulatorSession
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.io.File
 import java.util.Base64
 
@@ -37,58 +40,213 @@ class Coneria8VisualDiffTest : FunSpec({
     val canRun = File(romPath).exists()
 
     test("capture Coneria Town live frame + decoded mapId=8 ASCII for visual diff")
-        .config(enabled = false && canRun, timeout = kotlin.time.Duration.parse("2m")) {
+        .config(enabled = canRun, timeout = kotlin.time.Duration.parse("3m")) {
 
         val repoRoot = File(".").canonicalFile.let { if (it.name == "knes-agent") it.parentFile else it }
         val outDir = File(repoRoot, "docs/superpowers/notes/coneria8-diff-2026-05-03").also { it.mkdirs() }
+        val traceFile = File(outDir, "trace.jsonl")
+        traceFile.writeText("")
 
         val session = EmulatorSession()
         val toolset = EmulatorToolset(session)
         check(toolset.loadRom(romPath).ok)
         toolset.applyProfile("ff1")
-        check(PressStartUntilOverworld(toolset).invoke().ok)
 
-        // Reach mapId=$targetMapId via the V2.6.5-known route. From spawn (146, 158):
-        // walk roughly NW around mountain blocks, ending up on the south
-        // side of Coneria Town's invisible entry trigger, then step S to
-        // transition. Empirically tries cardinal sequences until mapId=$targetMapId
-        // is reached.
-        suspend fun tryReachMap8(): Boolean {
-            val seq = listOf(
-                "UP", "UP", "UP", "UP", "UP", "UP",      // approach (146,152)
-                "LEFT", "LEFT",                            // approach (144,152)
-                "DOWN", "DOWN", "DOWN", "DOWN",            // try entering town
-                "LEFT", "LEFT", "DOWN", "DOWN",
-                "RIGHT", "DOWN", "DOWN",
-                "RIGHT", "RIGHT", "DOWN",
+        // V5.17: V5.16 empirically proved that fixture loadState fails to
+        // resync PPU vblank/cycle counter when no live boot precedes it —
+        // CPU wedges at PC=0xfeba waiting for $2002 vblank flag that never
+        // sets, every WalkOverworldTo iteration produces no movement, and
+        // V5.15's fog markBlocked self-poisons the BFS. Drop the fixture
+        // path entirely: live boot is reliable (~12s) and produces a
+        // working overworld state for movement.
+        check(PressStartUntilOverworld(toolset).invoke().ok)
+        toolset.step(buttons = emptyList(), frames = 60)
+        val bootRam = toolset.getState().ram
+        println("[live-boot] post-boot state: world=(${bootRam["worldX"]},${bootRam["worldY"]}) " +
+            "locType=0x${(bootRam["locationType"]?:0).toString(16)}")
+
+        // V5.2 — ROM-scan + persistent memory probe.
+        //
+        // The OverworldTileClassifier marks ~11 tile bytes as TileType.TOWN, but FF1
+        // mechanics (per Entroper bank_0F.asm:1633) tell us teleport-into-town is a
+        // tileset_prop bit, NOT derivable from the tile byte alone. So some "TOWN"
+        // tiles are entry-triggers, others are decoration. We can't tell offline.
+        //
+        // Strategy: ROM-scan candidate TOWN tiles → for each one BFS-target → step →
+        // observe locType. Record outcome (ENTRY/DECOR/UNREACHABLE) in OverworldMemory
+        // (~/.knes/ff1-ow-memory.json). Future sessions load the memory and skip
+        // probing — straight BFS to a known ENTRY. Like a player exploring once and
+        // remembering the way next time.
+        val overworldMap = OverworldMap.fromRom(File(romPath))
+        val fog = FogOfWar()
+        val memory = OverworldMemory()
+
+        // Save spawn frame for manual review.
+        val spawnRam = toolset.getState().ram
+        val spawnB64 = toolset.getScreen().base64
+        File(outDir, "overworld-spawn.png").writeBytes(Base64.getDecoder().decode(spawnB64))
+        val spawnX = spawnRam["worldX"] ?: 146
+        val spawnY = spawnRam["worldY"] ?: 158
+        println("[diff] spawn world=($spawnX, $spawnY); scanning ROM for nearest TileType.TOWN")
+
+        // ROM scan: collect TOWN candidates within 20 tiles of spawn (sorted by Manhattan).
+        val candidates: List<Pair<Int, Int>> = run {
+            val list = mutableListOf<Triple<Int, Int, Int>>()
+            for (y in 0 until 256) for (x in 0 until 256) {
+                if (overworldMap.classifyAt(x, y) == TileType.TOWN) {
+                    val d = kotlin.math.abs(x - spawnX) + kotlin.math.abs(y - spawnY)
+                    if (d <= 20) list.add(Triple(x, y, d))
+                }
+            }
+            list.sortBy { it.third }
+            list.map { it.first to it.second }
+        }
+        println("[diff] ${candidates.size} TOWN candidates within 20 tiles of spawn; closest 8:")
+        for ((x, y) in candidates.take(8)) {
+            val mem = memory.get(x, y)
+            println("  ($x, $y) memory=${mem?.observation ?: "UNKNOWN"}" +
+                (mem?.enteredMapId?.let { " mapId=$it" } ?: ""))
+        }
+
+        // Memory shortcut: if any candidate is a known ENTRY for mapId=8, BFS straight there.
+        val cachedEntry = candidates.firstNotNullOfOrNull { (x, y) ->
+            memory.get(x, y)?.takeIf { it.observation == TileObservation.ENTRY && it.enteredMapId == 8 }
+        }
+
+        suspend fun walkBfs(tx: Int, ty: Int, maxSteps: Int = 60): Boolean {
+            // V5.17: fresh fog per call. Shared fog accumulates markBlocked
+            // entries from non-moving steps which V5.15's input-dead detection
+            // produces for tiles where the engine briefly refuses (e.g. mid-
+            // animation). Without reset, every new walkBfs target inherits
+            // those phantom blocks and BFS bails at closestReachable=start.
+            val freshFog = FogOfWar()
+            val r = WalkOverworldTo(toolset, overworldMap, freshFog).invoke(
+                mapOf("targetX" to "$tx", "targetY" to "$ty", "maxSteps" to "$maxSteps")
             )
-            for (dir in seq) {
-                toolset.step(buttons = listOf(dir), frames = 24)
-                val ram = toolset.getState().ram
-                val mid = ram["currentMapId"] ?: 0
-                val locType = ram["locationType"] ?: 0
-                if (mid == 8 && locType != 0) return true
-                // If we're indoors but not in mapId=$targetMapId, try walking south
-                // to exit, then continue the sequence.
-                if (locType != 0 && mid != 8) {
-                    repeat(15) { toolset.step(buttons = listOf("DOWN"), frames = 16) }
+            traceFile.appendText(buildJsonObject {
+                put("phase", "walk"); put("targetX", tx); put("targetY", ty)
+                put("ok", r.ok); put("message", r.message)
+            }.toString() + "\n")
+            return r.ok
+        }
+
+        var reachedMapId = -1
+        if (cachedEntry != null) {
+            println("[diff] memory hit — known ENTRY for mapId=8 at (${cachedEntry.worldX}, ${cachedEntry.worldY}); skipping probe")
+            walkBfs(cachedEntry.worldX, cachedEntry.worldY)
+            toolset.step(buttons = emptyList(), frames = 30)
+            val ram = toolset.getState().ram
+            if ((ram["locationType"] ?: 0) != 0) reachedMapId = ram["currentMapId"] ?: 0
+        } else {
+            println("[diff] no cached ENTRY — BFS to first town tile, then raw flood-fill across blob")
+            // Step 1: BFS to the closest TOWN candidate (BFS treats target TOWN as passable).
+            val (firstX, firstY) = candidates.first()
+            val firstOk = walkBfs(firstX, firstY)
+            if (!firstOk) {
+                memory.record(firstX, firstY, TileObservation.UNREACHABLE, note = "initial BFS failed")
+                memory.save()
+                error("could not BFS to first TOWN candidate ($firstX, $firstY) — ${candidates.size} candidates total")
+            }
+            toolset.step(buttons = emptyList(), frames = 30)
+
+            // Step 2: flood-fill raw cardinal stepping. After landing on first TOWN tile,
+            // BFS can no longer route to other TOWN tiles (hard-impassable for non-target).
+            // But the engine WILL let the player physically walk between adjacent TOWN tiles
+            // via direct button presses. We snake through the blob, recording each tile we
+            // land on, and break the moment locType flips (ENTRY found).
+            val candidateSet = candidates.toSet()
+            val visited = mutableSetOf<Pair<Int, Int>>()
+            val dirs = listOf(
+                "DOWN" to (0 to 1),
+                "RIGHT" to (1 to 0),
+                "UP" to (0 to -1),
+                "LEFT" to (-1 to 0),
+            )
+            fun curRam() = toolset.getState().ram
+            fun curPos(): Pair<Int, Int> {
+                val r = curRam()
+                return (r["worldX"] ?: -1) to (r["worldY"] ?: -1)
+            }
+            // Record the first tile we landed on.
+            val landed = curPos()
+            val landedRam = curRam()
+            val landedLoc = landedRam["locationType"] ?: 0
+            if (landedLoc != 0) {
+                val mapId = landedRam["currentMapId"] ?: 0
+                memory.record(landed.first, landed.second, TileObservation.ENTRY,
+                    enteredMapId = mapId, note = "first landing")
+                memory.save()
+                reachedMapId = mapId
+                if (mapId != 8) error("first-landing entered wrong mapId=$mapId at $landed")
+            } else {
+                memory.record(landed.first, landed.second, TileObservation.DECOR,
+                    note = "first landing, no teleport")
+                memory.save()
+                visited.add(landed)
+                println("[probe] landed at $landed → DECOR; flood-filling blob")
+
+                // Iterative flood: from current pos, try adjacent unvisited candidates.
+                var iter = 0
+                while (iter++ < 30 && reachedMapId == -1) {
+                    val cur = curPos()
+                    var moved = false
+                    for ((btn, dxy) in dirs) {
+                        val nx = cur.first + dxy.first
+                        val ny = cur.second + dxy.second
+                        if ((nx to ny) !in candidateSet) continue
+                        if ((nx to ny) in visited) continue
+                        toolset.step(buttons = listOf(btn), frames = 24)
+                        val newPos = curPos()
+                        val r = curRam()
+                        val locT = r["locationType"] ?: 0
+                        if (locT != 0) {
+                            val mapId = r["currentMapId"] ?: 0
+                            memory.record(nx, ny, TileObservation.ENTRY,
+                                enteredMapId = mapId, note = "flood-fill found ENTRY")
+                            memory.save()
+                            reachedMapId = mapId
+                            println("[probe] flood→$btn ($nx, $ny) → ENTRY locType=0x${locT.toString(16)} mapId=$mapId")
+                            break
+                        }
+                        if (newPos == (nx to ny)) {
+                            memory.record(nx, ny, TileObservation.DECOR, note = "flood-fill DECOR")
+                            memory.save()
+                            visited.add(nx to ny)
+                            println("[probe] flood→$btn ($nx, $ny) → DECOR")
+                            moved = true
+                            break
+                        } else {
+                            memory.record(nx, ny, TileObservation.UNREACHABLE,
+                                note = "tried $btn, party stayed at $cur")
+                            memory.save()
+                            println("[probe] flood→$btn ($nx, $ny) blocked (party at $cur)")
+                        }
+                    }
+                    if (!moved && reachedMapId == -1) {
+                        println("[probe] no unvisited adjacent candidate from $cur — flood-fill exhausted")
+                        break
+                    }
                 }
             }
-            return false
         }
-        var reachedTown = tryReachMap8()
-        if (!reachedTown) {
-            // Fallback: random cardinal walk for up to 200 attempts.
-            val cardinals = listOf("UP", "DOWN", "LEFT", "RIGHT")
-            for (i in 0 until 200) {
-                toolset.step(buttons = listOf(cardinals[i % 4]), frames = 24)
-                val ram = toolset.getState().ram
-                if ((ram["currentMapId"] ?: 0) == 8 && (ram["locationType"] ?: 0) != 0) {
-                    reachedTown = true
-                    break
-                }
+        traceFile.appendText(buildJsonObject {
+            put("phase", "memory-summary")
+            put("totalFacts", memory.all().size)
+            put("entries", memory.all().count { it.observation == TileObservation.ENTRY })
+            put("decor", memory.all().count { it.observation == TileObservation.DECOR })
+            put("reachedMapId", reachedMapId)
+        }.toString() + "\n")
+
+        val postRam = toolset.getState().ram
+        // Always save the final frame + RAM dump for diagnostics, regardless of outcome.
+        File(outDir, "final-frame.png").writeBytes(Base64.getDecoder().decode(toolset.getScreen().base64))
+        File(outDir, "final-ram.txt").writeText(buildString {
+            appendLine("=== Final RAM after BFS + cardinal probes ===")
+            for ((k, v) in postRam.entries.sortedBy { it.key }) {
+                appendLine("  $k = $v (0x${v.toString(16)})")
             }
-        }
+        })
+        val reachedTown = (postRam["currentMapId"] ?: 0) == 8 && (postRam["locationType"] ?: 0) != 0
         if (reachedTown) {
             val ram = toolset.getState().ram
             println("[diff] reached mapId=8 at " +

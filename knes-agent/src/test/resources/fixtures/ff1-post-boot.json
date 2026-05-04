@@ -1,0 +1,11 @@
+{
+  "description": "FF1 post-PressStartUntilOverworld snapshot",
+  "savestate_bytes": 397569,
+  "locationType": 0,
+  "currentMapId": 0,
+  "worldX": 146,
+  "worldY": 158,
+  "localX": 0,
+  "localY": 0,
+  "interpretation": "OVERWORLD worldX=146 worldY=158"
+}

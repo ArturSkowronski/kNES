@@ -4,9 +4,11 @@ import ai.koog.agents.core.tools.annotations.LLMDescription
 import ai.koog.agents.core.tools.annotations.Tool
 import ai.koog.agents.core.tools.reflect.ToolSet
 import knes.agent.perception.FogOfWar
+import knes.agent.perception.InteriorMemory
 import knes.agent.perception.MapSession
 import knes.agent.perception.OverworldMap
 import knes.agent.perception.VisionInteriorNavigator
+import knes.agent.perception.VisionOverworldNavigator
 import knes.agent.pathfinding.InteriorPathfinder
 import knes.agent.pathfinding.Pathfinder
 import knes.agent.pathfinding.ViewportPathfinder
@@ -25,16 +27,25 @@ class SkillRegistry(
     private val mapSession: MapSession,
     private val fog: FogOfWar,
     private val overworldPathfinder: Pathfinder = ViewportPathfinder(),
-    private val interiorPathfinder: Pathfinder = InteriorPathfinder(),
     private val toolCallLog: ToolCallLog = ToolCallLog(),
     private val visionInteriorNavigator: VisionInteriorNavigator? = null,
+    private val visionOverworldNavigator: VisionOverworldNavigator? = null,
+    private val interiorMemory: InteriorMemory = InteriorMemory(),
+    private val interiorPathfinder: Pathfinder = InteriorPathfinder(
+        memory = interiorMemory,
+        mapIdProvider = { toolset.getState().ram["currentMapId"] ?: -1 },
+    ),
 ) : ToolSet {
 
     private val pressStartSkill = PressStartUntilOverworld(toolset)
     private val walkSkill = WalkOverworldTo(toolset, overworldMap, fog, overworldPathfinder, toolCallLog)
-    private val exitInteriorSkill = ExitInterior(toolset, mapSession, fog, interiorPathfinder, toolCallLog)
+    private val exitInteriorSkill =
+        ExitInterior(toolset, mapSession, fog, interiorPathfinder, toolCallLog, interiorMemory)
     private val walkInteriorVisionSkill = visionInteriorNavigator?.let {
-        WalkInteriorVision(toolset, it, toolCallLog)
+        WalkInteriorVision(toolset, it, toolCallLog, interiorMemory, mapSession)
+    }
+    private val walkOverworldVisionSkill = visionOverworldNavigator?.let {
+        WalkOverworldVision(toolset, it, toolCallLog)
     }
 
     @Tool
@@ -108,6 +119,23 @@ class SkillRegistry(
 
     @Tool
     @LLMDescription(
+        "(V5.18) PREFERRED for entering towns/castles. Walk on the FF1 overworld toward " +
+            "(targetX, targetY) by asking a vision model for one direction at a time. " +
+            "Bypasses BFS classifier heuristics — useful when the deterministic pathfinder " +
+            "fails to enter a town because tile properties are ROM-encoded. Stops on " +
+            "interior entry, encounter, target reached, or visual STUCK."
+    )
+    suspend fun walkOverworldVision(targetX: Int, targetY: Int, maxSteps: Int = 24): SkillResult {
+        val skill = walkOverworldVisionSkill
+            ?: return SkillResult(false,
+                "vision overworld navigator not configured (ANTHROPIC_API_KEY missing?)", 0, emptyMap())
+        toolCallLog.append("walkOverworldVision",
+            "targetX=$targetX, targetY=$targetY, maxSteps=$maxSteps")
+        return skill.invoke(mapOf("targetX" to "$targetX", "targetY" to "$targetY", "maxSteps" to "$maxSteps"))
+    }
+
+    @Tool
+    @LLMDescription(
         "Find walkable path from current party position to target world coordinates within " +
             "the visible 16x16 overworld viewport."
     )
@@ -118,13 +146,19 @@ class SkillRegistry(
         val viewport = overworldMap.readFullMapView(from)
         fog.merge(viewport)
         val res = overworldPathfinder.findPath(from, targetX to targetY, viewport, fog)
+        // V5.14: surface closestReachable + targetPassable so the agent knows
+        // *why* a full path isn't available and where to aim instead.
+        val tail = buildString {
+            res.closestReachable?.let { append(" closestReachable=(${it.first},${it.second})") }
+            if (res.targetPassable == false) append(" targetPassable=false")
+        }
         return when {
             res.found && !res.partial ->
-                "PATH ${res.steps.size} steps: ${res.steps.joinToString(",") { it.name }}"
+                "PATH ${res.steps.size} steps: ${res.steps.joinToString(",") { it.name }}$tail"
             res.found && res.partial ->
                 "PARTIAL ${res.steps.size} steps to (${res.reachedTile.first},${res.reachedTile.second}); " +
-                    "first steps: ${res.steps.take(8).joinToString(",") { it.name }}"
-            else -> "BLOCKED. ${res.reason ?: "no path"}. Suggest askAdvisor."
+                    "first steps: ${res.steps.take(8).joinToString(",") { it.name }}$tail"
+            else -> "BLOCKED. ${res.reason ?: "no path"}.$tail Suggest askAdvisor or pick a reachable target."
         }
     }
 

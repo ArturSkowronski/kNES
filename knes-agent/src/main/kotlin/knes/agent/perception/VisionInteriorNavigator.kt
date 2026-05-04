@@ -53,12 +53,19 @@ interface VisionInteriorNavigator {
      * @param hintLastBlocked direction the most-recent step physically failed on, if any
      * @param entryDirection direction the party walked to ENTER this interior (i.e.
      *   the opposite is usually the way out). Optional bias for the prompt.
+     * @param frontierHint V5.11 forced-exploration: cardinal direction toward the nearest
+     *   reachable tile we have NOT yet visited in this interior. Soft bias the model
+     *   away from premature EXIT.
+     * @param unvisitedReachable V5.11: estimated count of reachable unvisited tiles. 0
+     *   means the map is fully covered — model is free to head for the exit.
      */
     suspend fun nextDirection(
         screenshotBase64: String,
         frame: Int,
         hintLastBlocked: InteriorMove? = null,
         entryDirection: InteriorMove? = null,
+        frontierHint: InteriorMove? = null,
+        unvisitedReachable: Int = 0,
     ): InteriorMove
 }
 
@@ -92,12 +99,16 @@ class AnthropicVisionInteriorNavigator(
         frame: Int,
         hintLastBlocked: InteriorMove?,
         entryDirection: InteriorMove?,
+        frontierHint: InteriorMove?,
+        unvisitedReachable: Int,
     ): InteriorMove {
-        val key = "$frame|${hintLastBlocked?.name}|${entryDirection?.name}"
+        val key = "$frame|${hintLastBlocked?.name}|${entryDirection?.name}" +
+            "|${frontierHint?.name}|$unvisitedReachable"
         if (frame == cachedFrame && key == cachedKey && cachedMove != InteriorMove.UNCLEAR) {
             return cachedMove
         }
-        val body = buildRequestBody(screenshotBase64, hintLastBlocked, entryDirection)
+        val body = buildRequestBody(screenshotBase64, hintLastBlocked, entryDirection,
+            frontierHint, unvisitedReachable)
         val resp = try {
             client.post(API_URL) {
                 header("x-api-key", apiKey)
@@ -124,6 +135,8 @@ class AnthropicVisionInteriorNavigator(
         b64: String,
         hintLastBlocked: InteriorMove?,
         entryDirection: InteriorMove?,
+        frontierHint: InteriorMove?,
+        unvisitedReachable: Int,
     ): String {
         val userText = buildString {
             append("Pick the next direction for the party. Return JSON only.")
@@ -142,6 +155,15 @@ class AnthropicVisionInteriorNavigator(
             }
             if (hintLastBlocked != null) {
                 append("\nLast attempt to go ${hintLastBlocked.name} was physically blocked — pick a different direction.")
+            }
+            if (unvisitedReachable > 0) {
+                append("\nExploration status: $unvisitedReachable reachable tile(s) still unvisited.")
+                if (frontierHint != null) {
+                    append(" Nearest unvisited area is to the ${frontierHint.name}.")
+                }
+                append(" PREFER exploring unvisited area over EXIT — uncover the map first.")
+            } else if (entryDirection == null && hintLastBlocked == null) {
+                // Map fully covered (no frontier) and no other context: silent.
             }
         }
         val obj = buildJsonObject {
@@ -214,6 +236,10 @@ class AnthropicVisionInteriorNavigator(
                 "Return STUCK ONLY if the party is fully surrounded by walls/water on all four cardinal " +
                 "tiles — i.e. there is genuinely no walkable adjacent tile. If even ONE direction shows " +
                 "walkable terrain, pick that direction even if the path looks long or winding. " +
+                "FORCED EXPLORATION (V5.11): when the user message says reachable tiles are still " +
+                "unvisited, treat covering the map as your TOP priority — even above seeking the exit. " +
+                "Pick the suggested explore direction (or any direction toward unvisited area) and " +
+                "return EXIT only when no unvisited tiles remain or the party is genuinely on the overworld. " +
                 "Output ONLY JSON: {\"direction\":\"N|S|E|W|EXIT|STUCK\",\"reason\":\"<<=80 chars\"}."
     }
 }

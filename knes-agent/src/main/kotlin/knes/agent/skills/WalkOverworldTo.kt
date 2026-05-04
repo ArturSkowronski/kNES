@@ -36,6 +36,13 @@ class WalkOverworldTo(
 
         var totalFrames = 0
         var stepsTaken = 0
+        // V5.15: detect "input dead" (e.g. fixture loadState quirk) — if the
+        // party doesn't move for several consecutive iterations, abort with a
+        // diagnostic instead of pile-up fog.markBlocked, which self-poisons
+        // the BFS until every cardinal neighbour is "blocked" and the
+        // pathfinder reports closestReachable=start.
+        var consecutiveNoMove = 0
+        val INPUT_DEAD_THRESHOLD = 3
 
         while (stepsTaken < maxSteps) {
             val ram0 = toolset.getState().ram
@@ -46,18 +53,19 @@ class WalkOverworldTo(
             // got transported into an interior map mid-walk, the overworld pathfinder is no
             // longer steering anything useful — return cleanly so outer loop can re-classify
             // phase and pick exitInterior.
-            val locType = ram0["locationType"] ?: 0
-            val lx = ram0["localX"] ?: 0
-            val ly = ram0["localY"] ?: 0
-            if (locType != 0 || lx != 0 || ly != 0) {
+            // V5.6: canonical 'in standard map' = mapflags ($2D) bit 0 per Disch.
+            val inStandardMap = ((ram0["mapflags"] ?: 0) and 0x01) != 0
+            if (inStandardMap) {
                 val cx0 = ram0["worldX"] ?: -1
                 val cy0 = ram0["worldY"] ?: -1
+                val px = ram0["smPlayerX"] ?: 0
+                val py = ram0["smPlayerY"] ?: 0
                 toolCallLog?.append("walkOverworldTo.aborted",
                     "entered interior after $stepsTaken steps; world=($cx0,$cy0) " +
-                        "mapId=${ram0["currentMapId"]} local=($lx,$ly) locType=$locType")
+                        "mapId=${ram0["currentMapId"]} party=($px,$py)")
                 return SkillResult(true,
                     "entered interior after $stepsTaken steps at world=($cx0,$cy0); " +
-                        "mapId=${ram0["currentMapId"]} local=($lx,$ly)",
+                        "mapId=${ram0["currentMapId"]} party=($px,$py)",
                     totalFrames, ram0)
             }
             val cx = ram0["worldX"] ?: return SkillResult(false, "worldX missing")
@@ -76,10 +84,19 @@ class WalkOverworldTo(
                 "from=($cx,$cy) found=${path.found} partial=${path.partial} " +
                     "len=${path.steps.size} dir=${path.steps.firstOrNull()?.name ?: "-"}" +
                     (if (!path.found || path.partial) " reason=${path.reason ?: "-"}" else ""))
-            if (!path.found || path.steps.isEmpty()) {
+            // V5.14: a partial path (found=true OR partial=true with steps) is
+            // still progress toward the closestReachable tile. Bail only when
+            // there are literally zero steps to take.
+            if (path.steps.isEmpty()) {
                 val ram = toolset.getState().ram
+                val targetUnreach = path.targetPassable == false
+                val reachedNote = path.closestReachable?.let { " (closest reachable: $it)" } ?: ""
+                val reason = if (targetUnreach)
+                    "target ($tx,$ty) is impassable terrain"
+                else
+                    path.reason ?: "no path"
                 return SkillResult(false,
-                    "blocked at ($cx,$cy): ${path.reason ?: "no path"}", totalFrames, ram)
+                    "stuck at ($cx,$cy): $reason$reachedNote", totalFrames, ram)
             }
             val nextDir = path.steps.first()
             val r = toolset.step(buttons = listOf(nextDir.button), frames = FRAMES_PER_TILE)
@@ -90,15 +107,25 @@ class WalkOverworldTo(
             val ny = ram1["worldY"] ?: cy
             // V2.5.9: only mark fog blocked when the step is genuinely "I tried to walk
             // there and the engine refused because terrain". If RAM signals a transition
-            // (locationType / localX/Y / screenState changed), the world coords are frozen
-            // by design — that tile is *passable*, we just got transported elsewhere.
-            // Marking it blocked poisons fog and ruins future pathfinding.
-            val transitioned = (ram1["locationType"] ?: 0) != (ram0["locationType"] ?: 0) ||
-                (ram1["localX"] ?: 0) != (ram0["localX"] ?: 0) ||
-                (ram1["localY"] ?: 0) != (ram0["localY"] ?: 0) ||
+            // (mapflags / screenState changed), the world coords are frozen by design —
+            // that tile is *passable*, we just got transported elsewhere.
+            // V5.6: use mapflags as canonical interior-entry signal (replaces locType+lx/ly).
+            val transitioned = ((ram1["mapflags"] ?: 0) and 0x01) != ((ram0["mapflags"] ?: 0) and 0x01) ||
                 (ram1["screenState"] ?: 0) != (ram0["screenState"] ?: 0)
             if (nx == cx && ny == cy && !transitioned) {
                 fog.markBlocked(cx + nextDir.dx, cy + nextDir.dy)
+                consecutiveNoMove++
+                if (consecutiveNoMove >= INPUT_DEAD_THRESHOLD) {
+                    val ram = toolset.getState().ram
+                    return SkillResult(false,
+                        "input not responding: $consecutiveNoMove consecutive non-moving steps " +
+                            "from ($cx,$cy) toward ($tx,$ty). " +
+                            "Likely cause: fixture loadState quirk (V5.2) or party physically " +
+                            "boxed in by terrain. Fog has been marked accordingly.",
+                        totalFrames, ram)
+                }
+            } else {
+                consecutiveNoMove = 0
             }
         }
         val ram = toolset.getState().ram
