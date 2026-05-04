@@ -12,7 +12,7 @@ import knes.agent.tools.EmulatorToolset
  * town maps. See `docs/superpowers/DECISION-2026-05-03-v3-vision-first-interior.md`.
  *
  * Termination:
- *  - Exit: phase becomes Overworld (locationType==0 AND localX==0 AND localY==0).
+ *  - Exit: phase becomes Overworld (mapflags bit 0 cleared).
  *  - Encounter: returns ok=true with reason "encounter".
  *  - Vision STUCK / UNCLEAR: returns ok=false; outer loop should ask the advisor.
  *  - maxSteps reached without exit: returns ok=false.
@@ -46,8 +46,8 @@ class WalkInteriorVision(
                 return SkillResult(true,
                     "encounter triggered after $stepsTaken steps", totalFrames, ramPre)
             }
-            val onOverworld = (ramPre["locationType"] ?: 0) == 0 &&
-                (ramPre["localX"] ?: 0) == 0 && (ramPre["localY"] ?: 0) == 0
+            // V5.6: canonical 'on overworld' = mapflags bit 0 clear (Disch).
+            val onOverworld = ((ramPre["mapflags"] ?: 0) and 0x01) == 0
             if (onOverworld) {
                 return SkillResult(true,
                     "exited interior to overworld at (${ramPre["worldX"]},${ramPre["worldY"]})",
@@ -95,13 +95,13 @@ class WalkInteriorVision(
             stepsTaken++
 
             val ramPost = toolset.getState().ram
-            val moved = ramPost["localX"] != ramPre["localX"] ||
-                        ramPost["localY"] != ramPre["localY"]
-            val transitioned = (ramPost["locationType"] ?: 0) == 0 &&
-                               (ramPost["localX"] ?: 0) == 0 && (ramPost["localY"] ?: 0) == 0
+            // V5.6: party movement = $0068/$0069 (sm_player) change, not scroll.
+            val moved = ramPost["smPlayerX"] != ramPre["smPlayerX"] ||
+                        ramPost["smPlayerY"] != ramPre["smPlayerY"]
+            val transitioned = ((ramPost["mapflags"] ?: 0) and 0x01) == 0
             toolCallLog?.append("walkInteriorVision.step",
-                "from=(${ramPre["localX"]},${ramPre["localY"]}) " +
-                    "after=(${ramPost["localX"]},${ramPost["localY"]}) " +
+                "from=(${ramPre["smPlayerX"]},${ramPre["smPlayerY"]}) " +
+                    "after=(${ramPost["smPlayerX"]},${ramPost["smPlayerY"]}) " +
                     "moved=$moved transitioned=$transitioned")
 
             lastBlocked = if (!moved && !transitioned) effectiveDir else null

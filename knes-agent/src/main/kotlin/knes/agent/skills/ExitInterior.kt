@@ -14,9 +14,9 @@ import knes.agent.tools.EmulatorToolset
  * transitions by reloading the map when currentMapId changes.
  *
  * Termination:
- *  - Success: phase becomes Overworld (locationType==0 AND localX==0 AND localY==0).
+ *  - Success: phase becomes Overworld (mapflags bit 0 cleared).
  *  - Encounter: returns ok=true with reason "encounter".
- *  - No path: returns ok=false with current (mapId, localX, localY).
+ *  - No path: returns ok=false with current (mapId, partyX, partyY).
  */
 class ExitInterior(
     private val toolset: EmulatorToolset,
@@ -32,12 +32,6 @@ class ExitInterior(
 
     private val FRAMES_PER_TILE = 48  // V2.4.5: 24 (overworld) still wasn't enough indoors. FF1 interior walk animation appears slower; 48 provides margin.
 
-    // V2.6.4: NES viewport is 16×15 tiles; party stays at center of screen.
-    // RAM localX/localY = top-left of viewport (scroll offset). Party's actual
-    // map tile = scroll + (8, 7).
-    private val VIEWPORT_PARTY_OFFSET_X = 8
-    private val VIEWPORT_PARTY_OFFSET_Y = 7
-
     override suspend fun invoke(args: Map<String, String>): SkillResult {
         val maxSteps = args["maxSteps"]?.toIntOrNull() ?: 64
         var totalFrames = 0
@@ -48,8 +42,8 @@ class ExitInterior(
             if ((ram["screenState"] ?: 0) == 0x68) {
                 return SkillResult(true, "encounter triggered after $stepsTaken steps", totalFrames, ram)
             }
-            val onOverworld = (ram["locationType"] ?: 0) == 0 &&
-                (ram["localX"] ?: 0) == 0 && (ram["localY"] ?: 0) == 0
+            // V5.6: canonical 'on overworld' = mapflags bit 0 clear.
+            val onOverworld = ((ram["mapflags"] ?: 0) and 0x01) == 0
             if (onOverworld) {
                 return SkillResult(
                     true,
@@ -62,14 +56,11 @@ class ExitInterior(
                 return SkillResult(false, "currentMapId unknown — RAM byte not configured", totalFrames, ram)
             }
             mapSession.ensureCurrent(mapId)
-            // V2.6.4: localX/localY in RAM are SCROLL OFFSET (top-left of 16×15 NES
-            // viewport), not the party's tile. Party stands at center of screen; its
-            // actual map tile = (localX + VIEWPORT_PARTY_OFFSET_X, localY + …Y).
-            // Verified against mapId=24 dump: RAM (3, 2) + (8, 7) = (11, 9) which is
-            // the throne-room corridor floor (byte 0x31 = passable). RAM (3, 2) raw
-            // landed on (3, 2) = 0x3c padding which is why pre-V2.6.4 BFS exhausted.
-            val partyX = (ram["localX"] ?: 0) + VIEWPORT_PARTY_OFFSET_X
-            val partyY = (ram["localY"] ?: 0) + VIEWPORT_PARTY_OFFSET_Y
+            // V5.6: party tile = ($0068, $0069) = sm_player_x/y per Disch disassembly.
+            // Replaces V2.6.4's static (+8, +7) offset hack on $0029/$002A scroll, which
+            // only worked when camera centered on party (broke at map edges).
+            val partyX = ram["smPlayerX"] ?: 0
+            val partyY = ram["smPlayerY"] ?: 0
             val viewport = mapSession.readFullMapView(partyX to partyY)
             fog.merge(viewport)
             val path = pathfinder.findPath(partyX to partyY, 0 to 0, viewport, fog)
@@ -88,10 +79,8 @@ class ExitInterior(
 
             val ram1 = toolset.getState().ram
             val mid1 = ram1["currentMapId"] ?: -1
-            val lx1 = ram1["localX"] ?: 0
-            val ly1 = ram1["localY"] ?: 0
-            val partyX1 = lx1 + VIEWPORT_PARTY_OFFSET_X
-            val partyY1 = ly1 + VIEWPORT_PARTY_OFFSET_Y
+            val partyX1 = ram1["smPlayerX"] ?: 0
+            val partyY1 = ram1["smPlayerY"] ?: 0
             // V2.6.5: per-step trace so we can verify whether step actually moved party.
             toolCallLog?.append("exitInterior.step",
                 "from=($partyX,$partyY) dir=${nextDir.name} → after=($partyX1,$partyY1) " +

@@ -65,8 +65,8 @@ class RamObserver(
             PhaseHint.OVERWORLD -> FfPhase.Overworld(ram["worldX"] ?: 0, ram["worldY"] ?: 0)
             PhaseHint.INDOORS -> FfPhase.Indoors(
                 mapId = ram["currentMapId"] ?: -1,
-                localX = ram["localX"] ?: 0,
-                localY = ram["localY"] ?: 0,
+                localX = ram["smPlayerX"] ?: 0,
+                localY = ram["smPlayerY"] ?: 0,
                 isTown = (ram["locationType"] ?: 0) != LOCATION_TYPE_INDOORS,
             )
             PhaseHint.TITLE -> FfPhase.TitleOrMenu
@@ -122,23 +122,24 @@ class RamObserver(
             if (charStatusKnown && !anyAlive && (ram["char1_hpLow"] ?: 0) != 0) return FfPhase.PartyDefeated
 
             val partyCreated = (ram["char1_hpLow"] ?: 0) != 0
-            val localX = ram["localX"] ?: 0
-            val localY = ram["localY"] ?: 0
-            val onLocalMap = localX != 0 || localY != 0
-            // V2.3.1: locationType==0xD1 is castle/dungeon interior. Town outdoor maps
-            // (e.g. Coneria) have locationType==0 but populate localX/localY anyway.
-            // Treat any non-zero local coords as Indoors — the exitBuilding skill (walks
-            // SOUTH until both worldX/Y and locationType reset) handles both castle exits
-            // AND town exits uniformly.
+            // V5.6: canonical 'in standard map' is mapflags ($2D) bit 0 per Disch FF1
+            // disassembly. Replaces V2.3.1 heuristic that conflated locationType=0xD1
+            // (only castle/dungeon room flag) with locType=0 + non-zero $29/$2A
+            // (which is sm_scroll, not party — see fix-b-research.md).
+            // Fallback: profiles without mapflags fall back to old heuristic.
+            val mapflags = ram["mapflags"]
             val locType = ram["locationType"] ?: 0
-            if (partyCreated && (locType == LOCATION_TYPE_INDOORS || onLocalMap)) {
-                // V5.4: distinguish town (locType=0) from castle/dungeon (locType=0xD1).
-                // Both share $48=mapId and $29/$2A=local coords, but use separate ROM
-                // pointer tables for map data — interior decoder must dispatch on isTown.
+            val sm29 = ram["localX"] ?: 0
+            val sm2A = ram["localY"] ?: 0
+            val inStandardMap = if (mapflags != null) (mapflags and 0x01) != 0
+                else (locType == LOCATION_TYPE_INDOORS || sm29 != 0 || sm2A != 0)
+            if (partyCreated && inStandardMap) {
                 return FfPhase.Indoors(
                     mapId = ram["currentMapId"] ?: -1,
-                    localX = localX,
-                    localY = localY,
+                    // V5.6: party tile from $0068/$0069 = sm_player_x/y. Falls back to
+                    // $0029/$002A only if smPlayerX/Y not in profile (old/test profiles).
+                    localX = ram["smPlayerX"] ?: sm29,
+                    localY = ram["smPlayerY"] ?: sm2A,
                     isTown = locType != LOCATION_TYPE_INDOORS,
                 )
             }
