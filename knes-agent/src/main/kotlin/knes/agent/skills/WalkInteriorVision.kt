@@ -1,8 +1,10 @@
 package knes.agent.skills
 
+import knes.agent.perception.InteriorFrontier
 import knes.agent.perception.InteriorMemory
 import knes.agent.perception.InteriorMove
 import knes.agent.perception.InteriorObservation
+import knes.agent.perception.MapSession
 import knes.agent.perception.VisionInteriorNavigator
 import knes.agent.runtime.ToolCallLog
 import knes.agent.tools.EmulatorToolset
@@ -24,6 +26,7 @@ class WalkInteriorVision(
     private val navigator: VisionInteriorNavigator,
     private val toolCallLog: ToolCallLog? = null,
     private val interiorMemory: InteriorMemory? = null,
+    private val mapSession: MapSession? = null,
     private val framesPerTile: Int = 48,  // matches V2.4.5 ExitInterior tuning
 ) : Skill {
     override val id = "walk_interior_vision"
@@ -67,7 +70,28 @@ class WalkInteriorVision(
 
             val frame = toolset.getState().frame
             val shotB64 = toolset.getScreen().base64
-            val dir = navigator.nextDirection(shotB64, frame, lastBlocked)
+            // V5.11: compute frontier hint when memory + mapSession are available.
+            var frontierHint: InteriorMove? = null
+            var unvisitedReachable = 0
+            if (interiorMemory != null && mapSession != null && mapIdPre >= 0) {
+                mapSession.ensureCurrent(mapIdPre)
+                val viewport = mapSession.readFullMapView(partyXPre to partyYPre)
+                val visited = interiorMemory.visited(mapIdPre)
+                val frontier = InteriorFrontier.nearestUnvisited(
+                    viewport, visited, from = partyXPre to partyYPre,
+                )
+                if (frontier != null) {
+                    frontierHint = frontier.firstDirection
+                    // 1 = "at least one unvisited reachable tile remains"; vision model
+                    // only needs the binary signal, not an exact count.
+                    unvisitedReachable = 1
+                }
+            }
+            val dir = navigator.nextDirection(
+                shotB64, frame, lastBlocked,
+                frontierHint = frontierHint,
+                unvisitedReachable = unvisitedReachable,
+            )
             toolCallLog?.append("walkInteriorVision.dir",
                 "step=$stepsTaken dir=${dir.name}" +
                     (lastBlocked?.let { " hintBlocked=${it.name}" } ?: ""))

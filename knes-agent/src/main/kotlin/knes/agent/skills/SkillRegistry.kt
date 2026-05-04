@@ -40,7 +40,7 @@ class SkillRegistry(
     private val exitInteriorSkill =
         ExitInterior(toolset, mapSession, fog, interiorPathfinder, toolCallLog, interiorMemory)
     private val walkInteriorVisionSkill = visionInteriorNavigator?.let {
-        WalkInteriorVision(toolset, it, toolCallLog, interiorMemory)
+        WalkInteriorVision(toolset, it, toolCallLog, interiorMemory, mapSession)
     }
 
     @Tool
