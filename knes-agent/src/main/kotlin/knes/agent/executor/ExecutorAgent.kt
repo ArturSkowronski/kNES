@@ -13,6 +13,7 @@ import knes.agent.perception.FogOfWar
 import knes.agent.perception.MapSession
 import knes.agent.perception.OverworldMap
 import knes.agent.perception.VisionInteriorNavigator
+import knes.agent.perception.VisionOverworldNavigator
 import knes.agent.runtime.ToolCallLog
 import knes.agent.skills.SkillRegistry
 import knes.agent.tools.EmulatorToolset
@@ -27,6 +28,7 @@ class ExecutorAgent(
     private val fog: FogOfWar,
     private val toolCallLog: ToolCallLog = ToolCallLog(),
     private val visionInteriorNavigator: VisionInteriorNavigator? = null,
+    private val visionOverworldNavigator: VisionOverworldNavigator? = null,
     /**
      * Optional override of the canonical "Goal: AtGarlandBattle" paragraph.
      * Use cases: fixture-builder tests targeting an intermediate state (entering
@@ -39,7 +41,9 @@ class ExecutorAgent(
         if (goalOverride == null) ff1ExecutorSystemPrompt
         else ff1ExecutorSystemPrompt.replace(GOAL_PARAGRAPH, goalOverride)
     private val skillRegistry = SkillRegistry(toolset, overworldMap, mapSession, fog,
-        toolCallLog = toolCallLog, visionInteriorNavigator = visionInteriorNavigator)
+        toolCallLog = toolCallLog,
+        visionInteriorNavigator = visionInteriorNavigator,
+        visionOverworldNavigator = visionOverworldNavigator)
     private val advisorTool = AdvisorToolset(advisor)
     private val registry = ToolRegistry {
         tools(skillRegistry)
@@ -97,7 +101,12 @@ class ExecutorAgent(
               the advisor explicitly recommends it. Single-frame vision oscillates
               in town overlays — do not call by default.
             - walkOverworldTo(targetX, targetY): walk on overworld using deterministic
-              BFS pathfinder; aborts on encounter
+              BFS pathfinder; aborts on encounter. Use for traversing terrain to a
+              non-town/castle target. Cannot enter towns/castles via the BFS classifier.
+            - walkOverworldVision(targetX, targetY): PREFERRED for entering a town or
+              castle. Vision-driven step-by-step walk that bypasses the BFS classifier
+              for entry tiles. Stops on interior entry, encounter, target reached, or
+              visual STUCK.
             - findPath(targetX, targetY): query the overworld pathfinder (does not move)
             - findPathToExit: query the interior pathfinder for the nearest exit
             - battleFightAll: every alive character uses FIGHT until battle ends
@@ -129,8 +138,11 @@ class ExecutorAgent(
               entry tile (use walkOverworldTo with the shrine's coords as target) →
               exitInterior repeatedly to navigate sub-maps → fight Garland.
             - V2.5.4 hard-impassable: TOWN/CASTLE tiles on the overworld are impassable
-              for walkOverworldTo UNLESS they are the explicit target. To enter a town or
-              castle, pass its exact tile as targetX/targetY.
+              for walkOverworldTo UNLESS they are the explicit target. Even with the
+              tile as target the BFS classifier may still refuse entry because tile
+              properties are ROM-encoded. For town/castle ENTRY use walkOverworldVision
+              instead (V5.18). For overworld traversal toward a non-town target,
+              walkOverworldTo is fine.
             - In Battle phase: call battleFightAll. It auto-fights every round AND
               dismisses the PostBattle (XP/rewards) modal automatically.
             - In PostBattle phase: call battleFightAll AGAIN — it dismisses the
