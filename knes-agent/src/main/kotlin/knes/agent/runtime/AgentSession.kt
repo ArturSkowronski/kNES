@@ -4,6 +4,7 @@ import knes.agent.advisor.AdvisorAgent
 import knes.agent.executor.ExecutorAgent
 import knes.agent.perception.FfPhase
 import knes.agent.perception.FogOfWar
+import knes.agent.perception.OverworldWarpMemory
 import knes.agent.perception.RamObserver
 import knes.agent.perception.ScreenshotPolicy
 import knes.agent.tools.EmulatorToolset
@@ -29,6 +30,12 @@ class AgentSession(
      * known warps. Optional for backward compat with tests.
      */
     private val fog: FogOfWar? = null,
+    /**
+     * V5.25: persistent overworld warp memory across runs. Default loads
+     * from ~/.knes/ff1-overworld-warps.json. Tests pass an in-memory file
+     * to keep the host filesystem clean.
+     */
+    private val warpMemory: OverworldWarpMemory = OverworldWarpMemory(),
     runDir: Path = Trace.newRunDir(),
     /**
      * Optional per-turn hook fired after each executor turn. Receives current
@@ -61,6 +68,23 @@ class AgentSession(
         // Match toolCallLog format: "entered interior after N steps; world=(X,Y) ... targeted=false"
         // (set by WalkOverworldTo.kt when an UNEXPECTED interior was entered mid-route).
         val failedRegex = Regex("""world=\((\d+),(\d+)\)[^|]*targeted=false""")
+        // V5.25: pre-seed from persistent memory so the very first walk in
+        // this run already knows about warps detected in earlier sessions.
+        // Both the LLM hint (text injection) and the deterministic fog block
+        // are armed before the agent moves.
+        val seededWarps = warpMemory.all()
+        if (seededWarps.isNotEmpty()) {
+            failedWarpTiles += seededWarps
+            println("[overworld-warp-memory] preloaded ${seededWarps.size} known warps: $seededWarps")
+            fog?.let { f ->
+                seededWarps.forEach { tile ->
+                    for (dy in -1..1) for (dx in -1..1) {
+                        f.markBlocked(tile.first + dx, tile.second + dy)
+                    }
+                }
+                println("[overworld-warp-memory] fog.markBlocked 3x3 around all preloaded warps")
+            }
+        }
 
         try {
             while (true) {
@@ -162,6 +186,11 @@ class AgentSession(
                                 }
                                 println("[session-memory] +fog.markBlocked 3x3 around $tile")
                             }
+                            // V5.25: persist for future sessions. Save immediately
+                            // so a crash mid-run doesn't lose the discovery.
+                            warpMemory.record(tile.first, tile.second,
+                                note = "auto-detected ${java.time.Instant.now()}")
+                            warpMemory.save()
                         }
                     }
                 }
