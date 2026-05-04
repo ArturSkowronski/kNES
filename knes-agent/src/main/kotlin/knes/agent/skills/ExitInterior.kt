@@ -30,7 +30,14 @@ class ExitInterior(
         "Walk to the nearest exit of the current FF1 interior map. Stops on map " +
             "transition, encounter, or arrival on overworld."
 
-    private val FRAMES_PER_TILE = 48  // V2.4.5: 24 (overworld) still wasn't enough indoors. FF1 interior walk animation appears slower; 48 provides margin.
+    // V5.7: tile-precise movement via tap (press+release) instead of step (button held).
+    // Holding a button for 48 frames lets the FF1 engine batch ~3 tiles per "step",
+    // overshooting south-edge exits and pathfinder targets (V5.6 measurement showed
+    // (11,32)→(8,32) in one iteration, missing exit at (9,32)). Tap pattern matches
+    // ConeriaTownEmpiricalDiscoveryTest: press 6 frames, release 14, settle 8.
+    private val PRESS_FRAMES = 6
+    private val GAP_FRAMES = 14
+    private val SETTLE_FRAMES = 8
 
     override suspend fun invoke(args: Map<String, String>): SkillResult {
         val maxSteps = args["maxSteps"]?.toIntOrNull() ?: 64
@@ -73,8 +80,13 @@ class ExitInterior(
                 )
             }
             val nextDir = path.steps.first()
-            val r = toolset.step(buttons = listOf(nextDir.button), frames = FRAMES_PER_TILE)
-            totalFrames += r.frame
+            // V5.7: tap (press+release) instead of step (held). 1 tile per iteration.
+            val tapResult = toolset.tap(
+                button = nextDir.button,
+                count = 1, pressFrames = PRESS_FRAMES, gapFrames = GAP_FRAMES,
+            )
+            val settleResult = toolset.step(buttons = emptyList(), frames = SETTLE_FRAMES)
+            totalFrames += tapResult.frame + settleResult.frame
             stepsTaken++
 
             val ram1 = toolset.getState().ram
