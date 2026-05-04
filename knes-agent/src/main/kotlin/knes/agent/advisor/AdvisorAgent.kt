@@ -108,7 +108,10 @@ class AdvisorAgent(
                 suggest after exitInterior failed twice on the same mapId AND the
                 screenshot reveals a clearly walkable direction the decoder missed.
               - walkOverworldTo(x, y): deterministic BFS walk to coords on the OVERWORLD;
-                aborts on encounter
+                aborts on encounter. Use for traversing terrain to a non-town/castle target.
+              - walkOverworldVision(x, y): PREFERRED for entering a town or castle on the
+                overworld (V5.18+). Vision-driven step-by-step walk that bypasses the BFS
+                classifier's hard-impassable rule for entry tiles.
               - walkUntilEncounter: walk randomly until a battle starts
               - battleFightAll: every alive character uses FIGHT until battle ends
 
@@ -154,10 +157,12 @@ class AdvisorAgent(
                 from spawn to the Chaos Shrine entrance, (b) enter the shrine, (c) navigate
                 its dungeon, (d) defeat the shrine miniboss room.
               - V2.5.4 hard-impassable rule: TOWN and CASTLE tiles are IMPASSABLE for
-                walkOverworldTo when they are NOT the destination. To enter Coneria Castle
-                set walkOverworldTo(targetX=152, targetY=159) — that exact tile becomes
-                walkable as the goal. Same for Chaos Shrine: pick the shrine's entry tile
-                as the explicit target.
+                walkOverworldTo when they are NOT the destination. Even with the tile as
+                target the BFS classifier may still refuse entry because tile properties
+                are ROM-encoded. For TOWN/CASTLE entry suggest walkOverworldVision(x, y)
+                — e.g. walkOverworldVision(targetX=152, targetY=159) for Coneria Castle.
+                Reserve walkOverworldTo for dungeons (Chaos Shrine entry tile) and pure
+                terrain traversal.
               - From spawn (146, 158) the path north on the overworld goes WEST first
                 (around mountains/water near (146, 150) which are impassable), then up the
                 grass corridor at x≈140, eventually east toward shrine area. The pathfinder

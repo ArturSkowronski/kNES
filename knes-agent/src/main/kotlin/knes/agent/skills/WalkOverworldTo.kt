@@ -60,13 +60,29 @@ class WalkOverworldTo(
                 val cy0 = ram0["worldY"] ?: -1
                 val px = ram0["smPlayerX"] ?: 0
                 val py = ram0["smPlayerY"] ?: 0
+                val mapId = ram0["currentMapId"]
+                // V5.20: distinguish targeted interior entry (success) from unexpected
+                // mid-route entry (failure). When the agent asked for (tx,ty) and we
+                // landed in an interior at exactly (tx,ty), that's the goal. When we
+                // landed in an interior elsewhere, it's a navigation accident and the
+                // executor needs to recover via exitInterior, not treat it as success.
+                val targeted = cx0 == tx && cy0 == ty
                 toolCallLog?.append("walkOverworldTo.aborted",
                     "entered interior after $stepsTaken steps; world=($cx0,$cy0) " +
-                        "mapId=${ram0["currentMapId"]} party=($px,$py)")
-                return SkillResult(true,
-                    "entered interior after $stepsTaken steps at world=($cx0,$cy0); " +
-                        "mapId=${ram0["currentMapId"]} party=($px,$py)",
-                    totalFrames, ram0)
+                        "mapId=$mapId party=($px,$py) targeted=$targeted")
+                return if (targeted) {
+                    SkillResult(true,
+                        "reached target interior at world=($cx0,$cy0) in $stepsTaken steps; " +
+                            "mapId=$mapId party=($px,$py)",
+                        totalFrames, ram0)
+                } else {
+                    SkillResult(false,
+                        "UNEXPECTED interior entry at world=($cx0,$cy0) after $stepsTaken steps " +
+                            "(target was ($tx,$ty)); mapId=$mapId party=($px,$py). " +
+                            "Recover by calling exitInterior repeatedly to return to the overworld, " +
+                            "then re-route around this tile.",
+                        totalFrames, ram0)
+                }
             }
             val cx = ram0["worldX"] ?: return SkillResult(false, "worldX missing")
             val cy = ram0["worldY"] ?: return SkillResult(false, "worldY missing")
