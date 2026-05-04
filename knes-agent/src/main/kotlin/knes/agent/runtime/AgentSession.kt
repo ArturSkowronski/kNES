@@ -3,6 +3,7 @@ package knes.agent.runtime
 import knes.agent.advisor.AdvisorAgent
 import knes.agent.executor.ExecutorAgent
 import knes.agent.perception.FfPhase
+import knes.agent.perception.FogOfWar
 import knes.agent.perception.RamObserver
 import knes.agent.perception.ScreenshotPolicy
 import knes.agent.tools.EmulatorToolset
@@ -22,6 +23,12 @@ class AgentSession(
     private val advisor: AdvisorAgent,
     private val toolCallLog: ToolCallLog = ToolCallLog(),
     private val budget: Budget = Budget(),
+    /**
+     * V5.24: shared FogOfWar so the session can mark warp tiles blocked.
+     * BFS pathfinder honors fog blocks → deterministic reroute around
+     * known warps. Optional for backward compat with tests.
+     */
+    private val fog: FogOfWar? = null,
     runDir: Path = Trace.newRunDir(),
     /**
      * Optional per-turn hook fired after each executor turn. Receives current
@@ -142,6 +149,19 @@ class AgentSession(
                         val tile = m.groupValues[1].toInt() to m.groupValues[2].toInt()
                         if (failedWarpTiles.add(tile)) {
                             println("[session-memory] +failedWarpTile=$tile (total=${failedWarpTiles.size})")
+                            // V5.24: deterministic reroute. FF1 warps occupy a single
+                            // tile but BFS routing via the same column/row often picks
+                            // an immediate neighbour that is also a warp (entry tiles
+                            // sometimes occupy a 2x1 or 1x2 footprint). Mark the 3x3
+                            // zone as blocked in fog so the BFS pathfinder steers
+                            // around the warp on the very next walkOverworldTo call —
+                            // independent of whether the LLM honoured the prompt rule.
+                            fog?.let { f ->
+                                for (dy in -1..1) for (dx in -1..1) {
+                                    f.markBlocked(tile.first + dx, tile.second + dy)
+                                }
+                                println("[session-memory] +fog.markBlocked 3x3 around $tile")
+                            }
                         }
                     }
                 }

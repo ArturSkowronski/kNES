@@ -59,6 +59,7 @@ fun main(args: Array<String>) {
                 advisor = advisor,
                 toolCallLog = toolCallLog,
                 budget = Budget(maxSkillInvocations = maxSkills, costCapUsd = costCap, wallClockCapSeconds = wallCap),
+                fog = fog,
             ).run()
         }
     }
