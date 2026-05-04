@@ -52,24 +52,18 @@ class Coneria8VisualDiffTest : FunSpec({
         check(toolset.loadRom(romPath).ok)
         toolset.applyProfile("ff1")
 
-        // V5.2 fixture path: load post-boot savestate instead of replaying boot
-        // (~10s saved per run, deterministic resume point at overworld 146,158).
-        // Falls back to PressStartUntilOverworld if fixture missing — first run
-        // must rebuild fixture via REBUILD_FIXTURE=true PostBootFixtureBuilderTest.
-        val fixture = File("src/test/resources/fixtures/ff1-post-boot.savestate")
-        if (fixture.exists()) {
-            check(session.loadState(fixture.readBytes())) { "fixture loadState failed" }
-            // After loadState, ready-buffer reflects pre-save frame; step 1 frame
-            // so PPU produces a fresh visible frame.
-            toolset.step(buttons = emptyList(), frames = 1)
-            val ram = toolset.getState().ram
-            println("[fixture] loaded post-boot state: world=(${ram["worldX"]},${ram["worldY"]}) " +
-                "locType=0x${(ram["locationType"]?:0).toString(16)}")
-        } else {
-            println("[fixture] not found at ${fixture.path} — running PressStartUntilOverworld " +
-                "(slow path; rebuild fixture with REBUILD_FIXTURE=true)")
-            check(PressStartUntilOverworld(toolset).invoke().ok)
-        }
+        // V5.17: V5.16 empirically proved that fixture loadState fails to
+        // resync PPU vblank/cycle counter when no live boot precedes it —
+        // CPU wedges at PC=0xfeba waiting for $2002 vblank flag that never
+        // sets, every WalkOverworldTo iteration produces no movement, and
+        // V5.15's fog markBlocked self-poisons the BFS. Drop the fixture
+        // path entirely: live boot is reliable (~12s) and produces a
+        // working overworld state for movement.
+        check(PressStartUntilOverworld(toolset).invoke().ok)
+        toolset.step(buttons = emptyList(), frames = 60)
+        val bootRam = toolset.getState().ram
+        println("[live-boot] post-boot state: world=(${bootRam["worldX"]},${bootRam["worldY"]}) " +
+            "locType=0x${(bootRam["locationType"]?:0).toString(16)}")
 
         // V5.2 — ROM-scan + persistent memory probe.
         //
@@ -120,7 +114,13 @@ class Coneria8VisualDiffTest : FunSpec({
         }
 
         suspend fun walkBfs(tx: Int, ty: Int, maxSteps: Int = 60): Boolean {
-            val r = WalkOverworldTo(toolset, overworldMap, fog).invoke(
+            // V5.17: fresh fog per call. Shared fog accumulates markBlocked
+            // entries from non-moving steps which V5.15's input-dead detection
+            // produces for tiles where the engine briefly refuses (e.g. mid-
+            // animation). Without reset, every new walkBfs target inherits
+            // those phantom blocks and BFS bails at closestReachable=start.
+            val freshFog = FogOfWar()
+            val r = WalkOverworldTo(toolset, overworldMap, freshFog).invoke(
                 mapOf("targetX" to "$tx", "targetY" to "$ty", "maxSteps" to "$maxSteps")
             )
             traceFile.appendText(buildJsonObject {
