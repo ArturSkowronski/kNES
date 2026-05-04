@@ -124,27 +124,25 @@ class AdvisorAgent(
             memory; once the warp is no longer in its current input, it WILL repeat
             the mistake unless your plan explicitly steers it elsewhere.
 
-            GOAL FOCUS (V5.22): the terminal objective is Battle.enemyId=0x7C
-            (Garland). Random encounters give XP and gold — they're progress,
-            not setbacks. If executor is stuck in a town interior loop, prioritise
-            "break the loop" over "exit cleanly": suggest walkUntilEncounter,
-            walkInteriorVision in a never-tried direction, or even
-            pressStartUntilOverworld as a last-ditch reset (if title screen is
-            reachable). Budget spent escaping Coneria is budget lost to Garland.
+            GOAL FOCUS (V5.22+V5.26): the terminal objective is Battle.enemyId
+            =0x7C (Garland). Random encounters give XP and gold — they're
+            progress, not setbacks. If executor is stuck in a town interior
+            loop, suggest exitInterior repeatedly with maxSteps bumped (e.g.
+            128), or recommend a different sub-map target if the screenshot
+            shows one. Budget spent escaping Coneria is budget lost to
+            Garland — at some point declare the run unsalvageable and accept it.
+            Skill repertoire (V5.26 — INTENT-LEVEL only, deterministic):
               - pressStartUntilOverworld: title screen → overworld with default party
-              - exitInterior: PRIMARY in Indoors. Decoder-based BFS exit walker.
-                Reliable on castles/dungeons, ~13% step success on town overlays.
-                Suggest this first for any Indoors phase.
-              - walkInteriorVision: ESCALATION. Single-frame vision navigator. Only
-                suggest after exitInterior failed twice on the same mapId AND the
-                screenshot reveals a clearly walkable direction the decoder missed.
-              - walkOverworldTo(x, y): deterministic BFS walk to coords on the OVERWORLD;
-                aborts on encounter. Use for traversing terrain to a non-town/castle target.
-              - walkOverworldVision(x, y): PREFERRED for entering a town or castle on the
-                overworld (V5.18+). Vision-driven step-by-step walk that bypasses the BFS
-                classifier's hard-impassable rule for entry tiles.
-              - walkUntilEncounter: walk randomly until a battle starts
-              - battleFightAll: every alive character uses FIGHT until battle ends
+              - exitInterior: deterministic BFS to nearest interior exit. PRIMARY
+                Indoors action; handles sub-map transitions automatically. Bump
+                maxSteps to 128+ for stubborn town overlays.
+              - walkOverworldTo(x, y): deterministic BFS on overworld toward (X, Y),
+                aborts on encounter, honors fog blocks (failed warp tiles auto-
+                blocked). Reserved for terrain traversal — town/castle entry tiles
+                are hard-impassable unless they ARE the target.
+              - battleFightAll: scripted FIGHT loop until battle ends; also
+                dismisses PostBattle modal.
+              - findPath / findPathToExit: read-only path queries.
 
             FF1 KNOWLEDGE — use this to plan, not your training-data memory of the game:
               - Phases you may see: TitleOrMenu, Overworld(x, y),
@@ -161,14 +159,13 @@ class AdvisorAgent(
                 Use this map to plan waypoints — DO NOT trust your training-data memory of
                 FF1 geography. The executor has a deterministic findPath(x,y) tool that BFS-
                 searches this same viewport; suggest waypoints reachable per the map.
-              - V4 hybrid: interior navigation defaults to the DECODER (exitInterior).
-                When called with reason "stuck in interior" you have a screenshot
-                available via getScreen — INSPECT IT and give the executor a single
-                clear cardinal hint: "walk SOUTH from here", "try EAST 3 tiles",
-                etc. Phrase as a numbered plan step the executor will follow with
-                walkUntilEncounter or by tapping cardinal buttons via the existing
-                walk skills. Only after two such hints fail should you escalate to
-                walkInteriorVision.
+              - V5.26: interior navigation is exitInterior-only. The executor
+                no longer has vision-step skills. When asked about a stuck
+                Indoors phase, INSPECT the screenshot and decide between:
+                (a) bump exitInterior maxSteps and retry, (b) declare the
+                interior unsalvageable and route elsewhere when the agent
+                escapes, (c) accept the run as lost. Do not invent skills the
+                executor doesn't have.
               - For the overworld you may continue to propose (worldX, worldY)
                 waypoints; that pathfinder is solid.
               - You may also receive an ASCII map of the interior; cross-reference
@@ -190,13 +187,12 @@ class AdvisorAgent(
                 bridge encounter. To reach him you must (a) walk north on the overworld
                 from spawn to the Chaos Shrine entrance, (b) enter the shrine, (c) navigate
                 its dungeon, (d) defeat the shrine miniboss room.
-              - V2.5.4 hard-impassable rule: TOWN and CASTLE tiles are IMPASSABLE for
-                walkOverworldTo when they are NOT the destination. Even with the tile as
-                target the BFS classifier may still refuse entry because tile properties
-                are ROM-encoded. For TOWN/CASTLE entry suggest walkOverworldVision(x, y)
-                — e.g. walkOverworldVision(targetX=152, targetY=159) for Coneria Castle.
-                Reserve walkOverworldTo for dungeons (Chaos Shrine entry tile) and pure
-                terrain traversal.
+              - V2.5.4 hard-impassable rule: TOWN/CASTLE tiles are IMPASSABLE
+                for walkOverworldTo when they are not the destination. Even
+                with the tile as target the BFS may refuse entry because tile
+                properties are ROM-encoded. V5.26 has no vision-step
+                alternative; if entering a specific building is required, ask
+                the user / leave a note rather than guessing.
               - The 256x256 overworld pathfinder is solid for terrain — trust its
                 output for non-town/castle waypoints. If findPath returns BLOCKED for a
                 target, that target may be unreachable (isolated pocket) — pick a

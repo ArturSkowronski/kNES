@@ -58,13 +58,9 @@ class SkillRegistry(
         return pressStartSkill.invoke(mapOf("maxAttempts" to "$maxAttempts"))
     }
 
-    @Tool
-    @LLMDescription(
-        "PREFERRED for Indoors phase. Walk inside the current FF1 interior map by " +
-            "asking a vision model for one direction at a time. Each step looks at " +
-            "the screen, picks N/S/E/W, taps the button, verifies movement via RAM. " +
-            "Stops on exit-to-overworld, encounter, or visual STUCK. maxSteps default 24."
-    )
+    // V5.26: removed @Tool annotation. Per-step vision navigation is anti-pattern
+    // (LLM driving directions). Method retained in case a future fallback needs
+    // direct invocation, but it is no longer offered to the planner LLM.
     suspend fun walkInteriorVision(maxSteps: Int = 24): SkillResult {
         val skill = walkInteriorVisionSkill
             ?: return SkillResult(false,
@@ -117,14 +113,7 @@ class SkillRegistry(
         return walkSkill.invoke(mapOf("targetX" to "$targetX", "targetY" to "$targetY", "maxSteps" to "$maxSteps"))
     }
 
-    @Tool
-    @LLMDescription(
-        "(V5.18) PREFERRED for entering towns/castles. Walk on the FF1 overworld toward " +
-            "(targetX, targetY) by asking a vision model for one direction at a time. " +
-            "Bypasses BFS classifier heuristics — useful when the deterministic pathfinder " +
-            "fails to enter a town because tile properties are ROM-encoded. Stops on " +
-            "interior entry, encounter, target reached, or visual STUCK."
-    )
+    // V5.26: removed @Tool annotation. See walkInteriorVision for rationale.
     suspend fun walkOverworldVision(targetX: Int, targetY: Int, maxSteps: Int = 24): SkillResult {
         val skill = walkOverworldVisionSkill
             ?: return SkillResult(false,
@@ -169,8 +158,11 @@ class SkillRegistry(
         return toolset.executeAction(profileId = "ff1", actionId = "battle_fight_all")
     }
 
-    @Tool
-    @LLMDescription("Run the registered FF1 walk_until_encounter action.")
+    // V5.26: removed @Tool. Random-walk-until-encounter ignores fog blocks and
+    // session memory, which iter8 evidence showed leads the agent into known
+    // warp tiles even after pre-seeded warp memory was loaded. The legitimate
+    // grinding use case is rare and can be re-introduced later as
+    // grindEncounters(targetXp) with proper safe-tile gating.
     suspend fun walkUntilEncounter(): ActionToolResult {
         toolCallLog.appendNoArgs("walkUntilEncounter")
         return toolset.executeAction(profileId = "ff1", actionId = "walk_until_encounter")

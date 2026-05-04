@@ -117,39 +117,38 @@ class ExecutorAgent(
             askAdvisor(reason="avoid (X,Y) — UNEXPECTED warp last turn — propose
             detour"). The advisor MUST react to this hint and shift the waypoint.
 
-            GOAL FOCUS — DEFEAT GARLAND (V5.22): Your terminal goal is the Battle
-            phase with enemyId=0x7C (Garland in Chaos Shrine). Random encounters
-            on the way are GOOD — call battleFightAll, win XP/gold, and keep going.
-            Do NOT waste turns trying to perfectly navigate a town interior you
-            entered by accident. After 5 failed exits from the same mapId, just
-            call walkUntilEncounter or askAdvisor — anything that breaks the loop.
+            GOAL FOCUS — DEFEAT GARLAND (V5.22+V5.26): Your terminal goal is
+            the Battle phase with enemyId=0x7C (Garland in Chaos Shrine). Random
+            encounters on the way are GOOD — call battleFightAll, win XP/gold,
+            keep going. Do NOT waste turns trying to perfectly navigate a town
+            interior you entered by accident. After 5 failed exits from the
+            same mapId, call askAdvisor with "stuck in mapId=N for 5+ exits".
             Budget burned in Coneria Town is budget not spent fighting Garland.
 
-            Skills available (each is a single tool call):
+            Skills available (V5.26 — INTENT-LEVEL, deterministic only). Each
+            tool is a self-contained perception-action loop. You issue an
+            INTENT; the runtime walks the steps, checks RAM, returns success/
+            failure. You do NOT pick directions — that is the runtime's job.
+
             - pressStartUntilOverworld: title screen → overworld with default party
-            - exitInterior: PRIMARY in Indoors. Decoder-based exit walker — works
-              reliably on castles/dungeons, ~13% step success on town overlays
-              (handles sub-map transitions automatically). First choice for any
-              Indoors phase.
-            - walkInteriorVision: ESCALATION only. Vision-driven step-by-step
-              walk; use ONLY after exitInterior fails twice on the same map AND
-              the advisor explicitly recommends it. Single-frame vision oscillates
-              in town overlays — do not call by default.
-            - walkOverworldTo(targetX, targetY): walk on overworld using deterministic
-              BFS pathfinder; aborts on encounter. Use for traversing terrain to a
-              non-town/castle target. Cannot enter towns/castles via the BFS classifier.
-            - walkOverworldVision(targetX, targetY): vision-driven walk for cases where
-              the BFS classifier refuses an entry tile that is visibly walkable in the
-              screenshot. Stops on interior entry, encounter, target reached, or
-              visual STUCK. Caveat (V5.21 evidence): does NOT bypass FF1 ROM-encoded
-              warp tiles — if a hidden interior entry sits on the path, the engine
-              warps regardless of which walker called it. Same UNINTENDED INTERIOR
-              RECOVERY rule applies if the result is ok=false.
-            - findPath(targetX, targetY): query the overworld pathfinder (does not move)
-            - findPathToExit: query the interior pathfinder for the nearest exit
-            - battleFightAll: every alive character uses FIGHT until battle ends
-            - walkUntilEncounter: walk randomly until a battle starts
-            - askAdvisor(reason): consult the planner when stuck or at a phase boundary
+            - walkOverworldTo(targetX, targetY): deterministic BFS walk on the
+              overworld toward (X, Y). Aborts on encounter. Honors FogOfWar
+              blocks (failed warp tiles auto-blocked). Do NOT call this when
+              already Indoors.
+            - exitInterior: deterministic BFS walk to the nearest interior exit
+              (DOOR / STAIRS / WARP / south-edge). Drives sub-map transitions on
+              its own. PRIMARY action for any Indoors phase. Default maxSteps=64
+              is enough for most maps.
+            - findPath(targetX, targetY): READ-ONLY query of the overworld BFS.
+              Returns path length + first directions, or BLOCKED. Cheap; call
+              before walkOverworldTo to verify reachability if uncertain.
+            - findPathToExit: READ-ONLY query of the interior BFS for the
+              current mapId.
+            - battleFightAll: scripted FIGHT loop until Battle ends; also
+              dismisses PostBattle modal automatically.
+            - askAdvisor(reason): consult the strategic planner. Use when
+              stuck, at a phase boundary, or when no listed skill maps to the
+              current goal.
 
             FF1 KNOWLEDGE:
             - Phase will be one of: TitleOrMenu, Overworld(x,y), Indoors(mapId,localX,localY),
@@ -157,10 +156,10 @@ class ExecutorAgent(
             - Indoors = inside a building / town / castle (uses local coords).
               walkOverworldTo does NOT work indoors. Default: call exitInterior
               (decoder-based BFS). The skill drives sub-map transitions on its own.
-            - V4 hybrid: exitInterior is the primary tool. If it fails twice on
-              the same mapId, call askAdvisor(reason="stuck in mapId=N at (lx,ly)")
-              — the advisor has access to a screenshot and will give a cardinal
-              hint (or recommend walkInteriorVision as last resort).
+            - exitInterior is the only Indoors movement tool you have. If it
+              fails twice on the same mapId, call askAdvisor(reason="stuck in
+              mapId=N at (lx,ly)") — the advisor has access to a screenshot
+              and will inspect the layout for an alternative.
             - V3.0 evidence: vision-only navigation on town overlays gets ~8%
               step success vs decoder's 13%. Decoder is the better baseline.
               Vision is reserved for cases where the advisor sees the frame and
@@ -175,12 +174,13 @@ class ExecutorAgent(
               fight. To reach him: walk north on overworld → enter Chaos Shrine via its
               entry tile (use walkOverworldTo with the shrine's coords as target) →
               exitInterior repeatedly to navigate sub-maps → fight Garland.
-            - V2.5.4 hard-impassable: TOWN/CASTLE tiles on the overworld are impassable
-              for walkOverworldTo UNLESS they are the explicit target. Even with the
-              tile as target the BFS classifier may still refuse entry because tile
-              properties are ROM-encoded. For town/castle ENTRY use walkOverworldVision
-              instead (V5.18). For overworld traversal toward a non-town target,
-              walkOverworldTo is fine.
+            - V2.5.4 hard-impassable: TOWN/CASTLE tiles on the overworld are
+              impassable for walkOverworldTo UNLESS they are the explicit
+              target. Even with the tile as target the BFS classifier may still
+              refuse entry because tile properties are ROM-encoded. If
+              walkOverworldTo refuses a town/castle target, call askAdvisor —
+              entering specific buildings may need fixture-builder support
+              that's not yet plumbed.
             - In Battle phase: call battleFightAll. It auto-fights every round AND
               dismisses the PostBattle (XP/rewards) modal automatically.
             - In PostBattle phase: call battleFightAll AGAIN — it dismisses the
