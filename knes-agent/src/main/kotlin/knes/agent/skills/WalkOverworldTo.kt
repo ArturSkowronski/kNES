@@ -77,10 +77,19 @@ class WalkOverworldTo(
                 "from=($cx,$cy) found=${path.found} partial=${path.partial} " +
                     "len=${path.steps.size} dir=${path.steps.firstOrNull()?.name ?: "-"}" +
                     (if (!path.found || path.partial) " reason=${path.reason ?: "-"}" else ""))
-            if (!path.found || path.steps.isEmpty()) {
+            // V5.14: a partial path (found=true OR partial=true with steps) is
+            // still progress toward the closestReachable tile. Bail only when
+            // there are literally zero steps to take.
+            if (path.steps.isEmpty()) {
                 val ram = toolset.getState().ram
+                val targetUnreach = path.targetPassable == false
+                val reachedNote = path.closestReachable?.let { " (closest reachable: $it)" } ?: ""
+                val reason = if (targetUnreach)
+                    "target ($tx,$ty) is impassable terrain"
+                else
+                    path.reason ?: "no path"
                 return SkillResult(false,
-                    "blocked at ($cx,$cy): ${path.reason ?: "no path"}", totalFrames, ram)
+                    "stuck at ($cx,$cy): $reason$reachedNote", totalFrames, ram)
             }
             val nextDir = path.steps.first()
             val r = toolset.step(buttons = listOf(nextDir.button), frames = FRAMES_PER_TILE)

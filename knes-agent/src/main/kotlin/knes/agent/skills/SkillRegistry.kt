@@ -124,13 +124,19 @@ class SkillRegistry(
         val viewport = overworldMap.readFullMapView(from)
         fog.merge(viewport)
         val res = overworldPathfinder.findPath(from, targetX to targetY, viewport, fog)
+        // V5.14: surface closestReachable + targetPassable so the agent knows
+        // *why* a full path isn't available and where to aim instead.
+        val tail = buildString {
+            res.closestReachable?.let { append(" closestReachable=(${it.first},${it.second})") }
+            if (res.targetPassable == false) append(" targetPassable=false")
+        }
         return when {
             res.found && !res.partial ->
-                "PATH ${res.steps.size} steps: ${res.steps.joinToString(",") { it.name }}"
+                "PATH ${res.steps.size} steps: ${res.steps.joinToString(",") { it.name }}$tail"
             res.found && res.partial ->
                 "PARTIAL ${res.steps.size} steps to (${res.reachedTile.first},${res.reachedTile.second}); " +
-                    "first steps: ${res.steps.take(8).joinToString(",") { it.name }}"
-            else -> "BLOCKED. ${res.reason ?: "no path"}. Suggest askAdvisor."
+                    "first steps: ${res.steps.take(8).joinToString(",") { it.name }}$tail"
+            else -> "BLOCKED. ${res.reason ?: "no path"}.$tail Suggest askAdvisor or pick a reachable target."
         }
     }
 

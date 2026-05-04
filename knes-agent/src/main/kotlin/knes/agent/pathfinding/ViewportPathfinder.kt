@@ -19,6 +19,12 @@ class ViewportPathfinder(private val maxSteps: Int = 32) : Pathfinder {
         val targetLocal = viewport.worldToLocal(to.first, to.second)
         val w = viewport.width
         val h = viewport.height
+        // V5.14: classify the target's passability up-front so callers can
+        // distinguish "WATER / MOUNTAIN at target" from "blocked by terrain
+        // between us and a walkable target".
+        val targetPassable: Boolean? = targetLocal?.let { (tx, ty) ->
+            viewport.tiles[ty][tx].isPassable()
+        }
         val INF = Int.MAX_VALUE
         val dist = Array(h) { IntArray(w) { INF } }
         val viaDir = Array(h) { Array<Direction?>(w) { null } }
@@ -40,9 +46,12 @@ class ViewportPathfinder(private val maxSteps: Int = 32) : Pathfinder {
                 if (steps.size > maxSteps) {
                     val truncated = steps.take(maxSteps)
                     return PathResult(true, truncated, reachedAfter(truncated, from),
-                        SearchSpace.VIEWPORT, partial = true, reason = "path exceeds $maxSteps steps")
+                        SearchSpace.VIEWPORT, partial = true,
+                        reason = "path exceeds $maxSteps steps",
+                        targetPassable = targetPassable)
                 }
-                return PathResult(true, steps, to, SearchSpace.VIEWPORT, partial = false)
+                return PathResult(true, steps, to, SearchSpace.VIEWPORT, partial = false,
+                    targetPassable = targetPassable)
             }
             val candTargetLocal = targetLocal ?: edgeTarget
             val d = distSq(cx to cy, candTargetLocal)
@@ -74,13 +83,41 @@ class ViewportPathfinder(private val maxSteps: Int = 32) : Pathfinder {
             }
         }
 
-        if (targetLocal == null && bestReachable != start) {
+        // V5.14: if BFS found ANY tile closer to the target than our start,
+        // return a partial path leading there — even when the target itself
+        // is in viewport but unreachable (e.g. WATER target from FOREST start).
+        // GPP lesson: callers should never see a bare "no path" boolean when
+        // there's still progress to be made toward the goal.
+        val (closestWX, closestWY) = viewport.localToWorld(bestReachable.first, bestReachable.second)
+        if (bestReachable != start) {
             val steps = reconstruct(bestReachable.first, bestReachable.second, start, viaDir).take(maxSteps)
-            val (rwx, rwy) = viewport.localToWorld(bestReachable.first, bestReachable.second)
-            return PathResult(true, steps, rwx to rwy, SearchSpace.VIEWPORT, partial = true,
-                reason = "target outside viewport; walked toward it")
+            val reason = when {
+                targetLocal == null -> "target outside viewport; walked toward it"
+                targetPassable == false ->
+                    "target tile is impassable; closest reachable at ($closestWX,$closestWY)"
+                else -> "no full path; closest reachable at ($closestWX,$closestWY)"
+            }
+            return PathResult(
+                true, steps, closestWX to closestWY, SearchSpace.VIEWPORT,
+                partial = true,
+                reason = reason,
+                closestReachable = closestWX to closestWY,
+                targetPassable = targetPassable,
+            )
         }
-        return PathResult.blocked(from, "no path within viewport")
+        // BFS made no progress — every neighbour of `from` is impassable or
+        // blocked by fog. Distinguish target-impassable in the reason so the
+        // agent can choose a different goal instead of retrying.
+        val reason = when (targetPassable) {
+            false -> "target tile is impassable (e.g. WATER/MOUNTAIN); no movement possible"
+            else -> "no path within viewport"
+        }
+        val (fwx, fwy) = viewport.localToWorld(start.first, start.second)
+        return PathResult.blocked(
+            from, reason, SearchSpace.VIEWPORT,
+            closestReachable = fwx to fwy,
+            targetPassable = targetPassable,
+        )
     }
 
     private fun targetEdge(vm: ViewportMap, target: Pair<Int, Int>): Pair<Int, Int> {
