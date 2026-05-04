@@ -67,6 +67,7 @@ class RamObserver(
                 mapId = ram["currentMapId"] ?: -1,
                 localX = ram["localX"] ?: 0,
                 localY = ram["localY"] ?: 0,
+                isTown = (ram["locationType"] ?: 0) != LOCATION_TYPE_INDOORS,
             )
             PhaseHint.TITLE -> FfPhase.TitleOrMenu
             PhaseHint.UNKNOWN -> classify(ram)  // vision failed → fall back
@@ -129,14 +130,16 @@ class RamObserver(
             // Treat any non-zero local coords as Indoors — the exitBuilding skill (walks
             // SOUTH until both worldX/Y and locationType reset) handles both castle exits
             // AND town exits uniformly.
-            if (partyCreated && (
-                    (ram["locationType"] ?: 0) == LOCATION_TYPE_INDOORS ||
-                    onLocalMap
-                )) {
+            val locType = ram["locationType"] ?: 0
+            if (partyCreated && (locType == LOCATION_TYPE_INDOORS || onLocalMap)) {
+                // V5.4: distinguish town (locType=0) from castle/dungeon (locType=0xD1).
+                // Both share $48=mapId and $29/$2A=local coords, but use separate ROM
+                // pointer tables for map data — interior decoder must dispatch on isTown.
                 return FfPhase.Indoors(
                     mapId = ram["currentMapId"] ?: -1,
                     localX = localX,
                     localY = localY,
+                    isTown = locType != LOCATION_TYPE_INDOORS,
                 )
             }
 

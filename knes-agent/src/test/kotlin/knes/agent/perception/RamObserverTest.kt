@@ -105,6 +105,25 @@ class RamObserverTest : FunSpec({
             "char1_hpLow" to 35,
         )
 
-        RamObserver.classify(ram) shouldBe FfPhase.Indoors(mapId = -1, localX = 4, localY = 9)
+        RamObserver.classify(ram) shouldBe FfPhase.Indoors(mapId = -1, localX = 4, localY = 9, isTown = false)
+    }
+
+    test("town — locationType=0, local non-zero, $48=mapId → Indoors(isTown=true)") {
+        // V5.4: FF1 towns (Coneria etc.) are outdoor maps with NPCs. Engine signals:
+        // locationType=0x00 (NOT 0xD1), worldX/Y frozen at last overworld tile,
+        // localX/localY populated, $0048=town-id. Distinct from castles which set
+        // locationType=0xD1. Without isTown, town vs castle look identical to consumers.
+        val ram = mapOf(
+            "screenState" to 0,
+            "locationType" to 0,
+            "worldX" to 146,
+            "worldY" to 152,
+            "localX" to 4,
+            "localY" to 25,
+            "currentMapId" to 8,
+            "char1_hpLow" to 35,
+        )
+
+        RamObserver.classify(ram) shouldBe FfPhase.Indoors(mapId = 8, localX = 4, localY = 25, isTown = true)
     }
 })
