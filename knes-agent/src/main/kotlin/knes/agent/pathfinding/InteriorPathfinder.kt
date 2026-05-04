@@ -9,19 +9,31 @@ import java.util.ArrayDeque
 
 /**
  * BFS over the viewport from party position to the nearest exit. Target
- * priority (V5.10, GPP "Map Markers"-style):
+ * priority (V5.13, post-V5.12 castle-stairs gotcha):
  *   1. Memory-recorded `EXIT_CONFIRMED` (we walked through here and it
- *      flipped mapflags last time).
- *   2. Memory-recorded `POI_STAIRS` / `POI_WARP` / `POI_DOOR`.
- *   3. Viewport-classified `DOOR` / `STAIRS` / `WARP`.
- *   4. South-edge implicit exit (V2.4–V5.7 fallback): a passable tile whose
- *      immediate SOUTH neighbours within `SOUTH_EDGE_PROBE_DEPTH` rows are
- *      impassable/UNKNOWN — i.e. the outer south boundary of the playable
- *      area. FF1 engine transitions to the parent map when the party walks
- *      SOUTH off this row.
+ *      flipped mapflags bit 0 → 0 last time — definitely leads outside).
+ *   2. Memory-recorded `POI_DOOR` / `POI_WARP` (DOOR/WARP semantics
+ *      reliably mean "exit" in FF1 maps).
+ *   3. Viewport-classified `DOOR` / `STAIRS` / `WARP` (current frame
+ *      classifier — STAIRS here is dangerous in castles but worth one
+ *      attempt; the resulting EXIT_CONFIRMED or its absence will teach
+ *      the pathfinder).
+ *   4. South-edge implicit exit (V2.4–V5.7 fallback): a passable tile
+ *      whose immediate SOUTH neighbours within `SOUTH_EDGE_PROBE_DEPTH`
+ *      rows are impassable/UNKNOWN — i.e. the outer south boundary of
+ *      the playable area. FF1 engine transitions to the parent map when
+ *      the party walks SOUTH off this row.
  *
- * Without memory, the behaviour is identical to V5.7 (categories 3 and 4
- * only). Goal is "any exit"; the `to` parameter of [Pathfinder] is ignored.
+ * **`POI_STAIRS` is NOT a target candidate.** V5.12 evidence (Coneria
+ * castle mapId=8): party reached STAIRS@(12,18), A-tap, no transition
+ * to overworld — STAIRS in castles is sub-map navigation (up/down
+ * floors), not exit. POI_STAIRS is still recorded by the wiring (useful
+ * as a "we've seen STAIRS here" diagnostic and for V5.11 frontier
+ * hints) but the pathfinder ignores it.
+ *
+ * Without memory, the behaviour is identical to V5.7 (categories 3 and
+ * 4 only). Goal is "any exit"; the `to` parameter of [Pathfinder] is
+ * ignored.
  */
 class InteriorPathfinder(
     private val maxSteps: Int = 64,
@@ -67,10 +79,11 @@ class InteriorPathfinder(
                     when (mem.get(mapId, rwx, rwy)?.observation) {
                         InteriorObservation.EXIT_CONFIRMED ->
                             if (bestExitConfirmed == null) bestExitConfirmed = cx to cy
-                        InteriorObservation.POI_STAIRS,
                         InteriorObservation.POI_WARP,
                         InteriorObservation.POI_DOOR ->
                             if (bestMemoryPoi == null) bestMemoryPoi = cx to cy
+                        // POI_STAIRS is NOT a target — sub-map navigation, not exit.
+                        // VISITED is a sighting, not a destination.
                         else -> {}
                     }
                 }

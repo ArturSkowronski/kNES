@@ -31,12 +31,26 @@ import java.io.File
 enum class InteriorObservation {
     /** Party tile stood here at least once. */
     VISITED,
+
+    /**
+     * Tile classified as STAIRS (0x44 in FF1 interiors) — SIGHTING ONLY.
+     *
+     * V5.12 evidence: in FF1 castles, STAIRS triggers a sub-map transition
+     * (going up/down floors), NOT an exit to the overworld. Recording the
+     * observation is still useful (for `InteriorFrontier` frontier hints and
+     * "I've been here" diagnostics) but [InteriorPathfinder] explicitly does
+     * NOT target POI_STAIRS as an exit candidate (V5.13). Promotion to a
+     * confirmed exit happens only via the per-tile [EXIT_CONFIRMED] record
+     * after we observe `mapflags bit 0 → 0` post-step.
+     */
+    POI_STAIRS,
+
     /** Tile classified by [InteriorTileClassifier] (or analogue) as DOOR. */
     POI_DOOR,
+
     /** Tile classified as WARP. */
     POI_WARP,
-    /** Tile classified as STAIRS (0x44 in FF1 interiors). */
-    POI_STAIRS,
+
     /** Stepping onto this tile flipped mapflags bit 0 → 0 (transitioned out). */
     EXIT_CONFIRMED,
 }

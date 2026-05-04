@@ -130,17 +130,19 @@ class V58InteriorMemoryLiveTest : FunSpec({
             return@config
         }
         val poiTile = frontier.frontier
-        println("[v58-live] phase C: pre-populating POI_STAIRS at $poiTile (1 step ${frontier.firstDirection})")
+        // V5.13: POI_STAIRS is no longer a target (sub-map nav, not exit).
+        // Use POI_DOOR which IS targeted, to demonstrate memory-driven priority.
+        println("[v58-live] phase C: pre-populating POI_DOOR at $poiTile (1 step ${frontier.firstDirection})")
 
         val memWithPoi = InteriorMemory(File.createTempFile("v58-poi-", ".json").apply { delete() })
-        memWithPoi.record(mapIdNow, poiTile.first, poiTile.second, InteriorObservation.POI_STAIRS)
+        memWithPoi.record(mapIdNow, poiTile.first, poiTile.second, InteriorObservation.POI_DOOR)
         val pfWithMem = InteriorPathfinder(
             memory = memWithPoi, mapIdProvider = { mapIdNow },
         )
         val resWithMem = pfWithMem.findPath(partyXNow to partyYNow, 0 to 0, viewport, FogOfWar())
         println("[v58-live] phase C withMem: found=${resWithMem.found} reached=${resWithMem.reachedTile} steps=${resWithMem.steps.size}")
 
-        withClue("Memory-driven pathfinder should reach the pre-populated POI_STAIRS") {
+        withClue("Memory-driven pathfinder should reach the pre-populated POI_DOOR") {
             resWithMem.found shouldBe true
             resWithMem.reachedTile shouldBe poiTile
         }
@@ -148,5 +150,17 @@ class V58InteriorMemoryLiveTest : FunSpec({
             resWithMem.steps.size shouldBe frontier.distance
         }
         resWithMem.steps.shouldNotBeEmpty()
+
+        // V5.13: prove POI_STAIRS is NOT targeted on the same live viewport.
+        val memWithStairs = InteriorMemory(File.createTempFile("v58-stairs-", ".json").apply { delete() })
+        memWithStairs.record(mapIdNow, poiTile.first, poiTile.second, InteriorObservation.POI_STAIRS)
+        val pfWithStairs = InteriorPathfinder(
+            memory = memWithStairs, mapIdProvider = { mapIdNow },
+        )
+        val resWithStairs = pfWithStairs.findPath(partyXNow to partyYNow, 0 to 0, viewport, FogOfWar())
+        println("[v58-live] phase C+ POI_STAIRS only: found=${resWithStairs.found} reached=${resWithStairs.reachedTile} steps=${resWithStairs.steps.size}")
+        withClue("V5.13: POI_STAIRS must NOT redirect the pathfinder; result should equal noMem fallback") {
+            resWithStairs.reachedTile shouldBe resNoMem.reachedTile
+        }
     }
 })

@@ -27,19 +27,51 @@ private fun freshMemory(): InteriorMemory {
 }
 
 /**
- * V5.10: InteriorPathfinder with InteriorMemory should prefer (in order):
+ * V5.13: InteriorPathfinder with InteriorMemory targets in this order:
  *   1. EXIT_CONFIRMED memory tile
- *   2. POI_STAIRS / POI_WARP / POI_DOOR memory tile
+ *   2. POI_WARP / POI_DOOR memory tile (POI_STAIRS deliberately excluded
+ *      after V5.12 castle-stairs evidence)
  *   3. Viewport-classified DOOR / STAIRS / WARP
- *   4. South-edge implicit exit (existing fallback)
+ *   4. South-edge implicit exit (V5.7 fallback)
  *
  * Without memory, behavior MUST equal V5.7 InteriorPathfinder.
  */
 class InteriorPathfinderMemoryTest : FunSpec({
 
-    test("memory POI_STAIRS preferred over south-edge fallback") {
+    test("memory POI_DOOR preferred over south-edge fallback") {
         // South-edge implicit exit at (8, 14) (6 SOUTH steps).
-        // POI_STAIRS recorded at world (10, 8) i.e. local (10, 8) — 2 EAST steps.
+        // POI_DOOR recorded at world (10, 8) — 2 EAST steps.
+        val vp = emptyViewport(fill = TileType.GRASS) { tiles ->
+            for (x in 0 until 16) tiles[15][x] = TileType.UNKNOWN
+        }
+        val mem = freshMemory()
+        mem.record(8, 10, 8, InteriorObservation.POI_DOOR)
+        val pf = InteriorPathfinder(memory = mem, mapIdProvider = { 8 })
+        val res = pf.findPath(8 to 8, 0 to 0, vp, FogOfWar())
+        res.found shouldBe true
+        res.steps.size shouldBe 2
+        res.reachedTile shouldBe (10 to 8)
+    }
+
+    test("memory EXIT_CONFIRMED preferred over POI_DOOR even if farther") {
+        // POI_DOOR at (10, 8) — 2 EAST steps.
+        // EXIT_CONFIRMED at (8, 12) — 4 SOUTH steps. Farther but higher priority.
+        val vp = emptyViewport(fill = TileType.GRASS)
+        val mem = freshMemory()
+        mem.record(8, 10, 8, InteriorObservation.POI_DOOR)
+        mem.record(8, 8, 12, InteriorObservation.EXIT_CONFIRMED)
+        val pf = InteriorPathfinder(memory = mem, mapIdProvider = { 8 })
+        val res = pf.findPath(8 to 8, 0 to 0, vp, FogOfWar())
+        res.found shouldBe true
+        res.reachedTile shouldBe (8 to 12)
+        res.steps.size shouldBe 4
+    }
+
+    test("V5.13 POI_STAIRS is NOT targeted as exit; falls through to south-edge") {
+        // South-edge at (8, 14) (6 SOUTH steps).
+        // POI_STAIRS at (10, 8) — 2 EAST steps. With V5.10 it would have won;
+        // with V5.13 POI_STAIRS is excluded from targets and pathfinder falls
+        // through to south-edge.
         val vp = emptyViewport(fill = TileType.GRASS) { tiles ->
             for (x in 0 until 16) tiles[15][x] = TileType.UNKNOWN
         }
@@ -48,17 +80,19 @@ class InteriorPathfinderMemoryTest : FunSpec({
         val pf = InteriorPathfinder(memory = mem, mapIdProvider = { 8 })
         val res = pf.findPath(8 to 8, 0 to 0, vp, FogOfWar())
         res.found shouldBe true
-        res.steps.size shouldBe 2
-        res.reachedTile shouldBe (10 to 8)
+        res.steps.size shouldBe 6
+        // South-edge implicit exit is at (8, 14).
+        res.reachedTile shouldBe (8 to 14)
     }
 
-    test("memory EXIT_CONFIRMED preferred over POI_STAIRS even if farther") {
-        // POI_STAIRS at (10, 8) — 2 EAST steps.
-        // EXIT_CONFIRMED at (8, 12) — 4 SOUTH steps. Farther but higher priority.
+    test("V5.13 POI_STAIRS does not block POI_DOOR target") {
+        // POI_DOOR at (8, 12) — 4 SOUTH steps.
+        // POI_STAIRS at (10, 8) — 2 EAST steps but ignored.
+        // Pathfinder must pick POI_DOOR.
         val vp = emptyViewport(fill = TileType.GRASS)
         val mem = freshMemory()
-        mem.record(8, 10, 8, InteriorObservation.POI_STAIRS)
-        mem.record(8, 8, 12, InteriorObservation.EXIT_CONFIRMED)
+        mem.record(8, 10, 8, InteriorObservation.POI_STAIRS)  // closer but ignored
+        mem.record(8, 8, 12, InteriorObservation.POI_DOOR)    // farther, wins
         val pf = InteriorPathfinder(memory = mem, mapIdProvider = { 8 })
         val res = pf.findPath(8 to 8, 0 to 0, vp, FogOfWar())
         res.found shouldBe true
