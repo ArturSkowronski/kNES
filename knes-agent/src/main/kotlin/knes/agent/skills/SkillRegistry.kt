@@ -8,6 +8,7 @@ import knes.agent.perception.InteriorMemory
 import knes.agent.perception.MapSession
 import knes.agent.perception.OverworldMap
 import knes.agent.perception.VisionInteriorNavigator
+import knes.agent.perception.VisionOverworldNavigator
 import knes.agent.pathfinding.InteriorPathfinder
 import knes.agent.pathfinding.Pathfinder
 import knes.agent.pathfinding.ViewportPathfinder
@@ -28,6 +29,7 @@ class SkillRegistry(
     private val overworldPathfinder: Pathfinder = ViewportPathfinder(),
     private val toolCallLog: ToolCallLog = ToolCallLog(),
     private val visionInteriorNavigator: VisionInteriorNavigator? = null,
+    private val visionOverworldNavigator: VisionOverworldNavigator? = null,
     private val interiorMemory: InteriorMemory = InteriorMemory(),
     private val interiorPathfinder: Pathfinder = InteriorPathfinder(
         memory = interiorMemory,
@@ -41,6 +43,9 @@ class SkillRegistry(
         ExitInterior(toolset, mapSession, fog, interiorPathfinder, toolCallLog, interiorMemory)
     private val walkInteriorVisionSkill = visionInteriorNavigator?.let {
         WalkInteriorVision(toolset, it, toolCallLog, interiorMemory, mapSession)
+    }
+    private val walkOverworldVisionSkill = visionOverworldNavigator?.let {
+        WalkOverworldVision(toolset, it, toolCallLog)
     }
 
     @Tool
@@ -110,6 +115,23 @@ class SkillRegistry(
     suspend fun walkOverworldTo(targetX: Int, targetY: Int, maxSteps: Int = 32): SkillResult {
         toolCallLog.append("walkOverworldTo", "targetX=$targetX, targetY=$targetY, maxSteps=$maxSteps")
         return walkSkill.invoke(mapOf("targetX" to "$targetX", "targetY" to "$targetY", "maxSteps" to "$maxSteps"))
+    }
+
+    @Tool
+    @LLMDescription(
+        "(V5.18) PREFERRED for entering towns/castles. Walk on the FF1 overworld toward " +
+            "(targetX, targetY) by asking a vision model for one direction at a time. " +
+            "Bypasses BFS classifier heuristics — useful when the deterministic pathfinder " +
+            "fails to enter a town because tile properties are ROM-encoded. Stops on " +
+            "interior entry, encounter, target reached, or visual STUCK."
+    )
+    suspend fun walkOverworldVision(targetX: Int, targetY: Int, maxSteps: Int = 24): SkillResult {
+        val skill = walkOverworldVisionSkill
+            ?: return SkillResult(false,
+                "vision overworld navigator not configured (ANTHROPIC_API_KEY missing?)", 0, emptyMap())
+        toolCallLog.append("walkOverworldVision",
+            "targetX=$targetX, targetY=$targetY, maxSteps=$maxSteps")
+        return skill.invoke(mapOf("targetX" to "$targetX", "targetY" to "$targetY", "maxSteps" to "$maxSteps"))
     }
 
     @Tool
