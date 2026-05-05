@@ -77,12 +77,13 @@ class AgentSession(
             failedWarpTiles += seededWarps
             println("[overworld-warp-memory] preloaded ${seededWarps.size} known warps: $seededWarps")
             fog?.let { f ->
-                seededWarps.forEach { tile ->
-                    for (dy in -1..1) for (dx in -1..1) {
-                        f.markBlocked(tile.first + dx, tile.second + dy)
-                    }
-                }
-                println("[overworld-warp-memory] fog.markBlocked 3x3 around all preloaded warps")
+                // V5.28: 1x1 block per warp tile. 3x3 (V5.24) was too aggressive
+                // — iter11 evidence: overlapping 3x3 zones around (145,152) and
+                // (147,153) sealed the agent into a 1-tile pocket at (145,153).
+                // Warps are confirmed 1x1 (each ROM-encoded entry tile is a
+                // separate trigger); siblings get auto-detected if also warps.
+                seededWarps.forEach { tile -> f.markBlocked(tile.first, tile.second) }
+                println("[overworld-warp-memory] fog.markBlocked exact tiles only (1x1)")
             }
         }
 
@@ -173,18 +174,14 @@ class AgentSession(
                         val tile = m.groupValues[1].toInt() to m.groupValues[2].toInt()
                         if (failedWarpTiles.add(tile)) {
                             println("[session-memory] +failedWarpTile=$tile (total=${failedWarpTiles.size})")
-                            // V5.24: deterministic reroute. FF1 warps occupy a single
-                            // tile but BFS routing via the same column/row often picks
-                            // an immediate neighbour that is also a warp (entry tiles
-                            // sometimes occupy a 2x1 or 1x2 footprint). Mark the 3x3
-                            // zone as blocked in fog so the BFS pathfinder steers
-                            // around the warp on the very next walkOverworldTo call —
-                            // independent of whether the LLM honoured the prompt rule.
+                            // V5.28: 1x1 block. Was 3x3 in V5.24 on the assumption
+                            // FF1 warps could span 2x1, but iter10/iter11 evidence
+                            // says each entry tile is a separate trigger. 3x3
+                            // overlap sealed a 1-tile pocket at (145,153). Sibling
+                            // warps auto-detected on subsequent steps.
                             fog?.let { f ->
-                                for (dy in -1..1) for (dx in -1..1) {
-                                    f.markBlocked(tile.first + dx, tile.second + dy)
-                                }
-                                println("[session-memory] +fog.markBlocked 3x3 around $tile")
+                                f.markBlocked(tile.first, tile.second)
+                                println("[session-memory] +fog.markBlocked exact $tile")
                             }
                             // V5.25: persist for future sessions. Save immediately
                             // so a crash mid-run doesn't lose the discovery.
