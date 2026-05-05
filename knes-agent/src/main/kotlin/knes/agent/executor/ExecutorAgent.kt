@@ -137,8 +137,16 @@ class ExecutorAgent(
               already Indoors.
             - exitInterior: deterministic BFS walk to the nearest interior exit
               (DOOR / STAIRS / WARP / south-edge). Drives sub-map transitions on
-              its own. PRIMARY action for any Indoors phase. Default maxSteps=64
-              is enough for most maps.
+              its own. FIRST CHOICE for castles/dungeons. ~13% step success on
+              town overlays — if it fails twice on the same mapId, switch to
+              exploreInteriorFrontier.
+            - exploreInteriorFrontier (V5.29): deterministic frontier explorer.
+              Walks the party toward the nearest UNVISITED reachable tile in
+              the current interior, persisting visited tiles across runs in
+              InteriorMemory. Use when exitInterior fails on town overlays —
+              full map coverage exposes exits as side effects. Stops on
+              phase=Overworld, encounter, fully-explored map, or repeated
+              blocked direction.
             - findPath(targetX, targetY): READ-ONLY query of the overworld BFS.
               Returns path length + first directions, or BLOCKED. Cheap; call
               before walkOverworldTo to verify reachability if uncertain.

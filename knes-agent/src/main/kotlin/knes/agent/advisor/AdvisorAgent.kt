@@ -133,9 +133,13 @@ class AdvisorAgent(
             Garland — at some point declare the run unsalvageable and accept it.
             Skill repertoire (V5.26 — INTENT-LEVEL only, deterministic):
               - pressStartUntilOverworld: title screen → overworld with default party
-              - exitInterior: deterministic BFS to nearest interior exit. PRIMARY
-                Indoors action; handles sub-map transitions automatically. Bump
-                maxSteps to 128+ for stubborn town overlays.
+              - exitInterior: deterministic BFS to nearest interior exit. FIRST
+                CHOICE for castles/dungeons. ~13% step success on town overlays.
+              - exploreInteriorFrontier (V5.29): deterministic frontier explorer.
+                Walks toward the nearest UNVISITED reachable tile, persisting
+                visited tiles in InteriorMemory. Use when exitInterior fails
+                twice on a town overlay; full map coverage exposes exits as
+                side effects.
               - walkOverworldTo(x, y): deterministic BFS on overworld toward (X, Y),
                 aborts on encounter, honors fog blocks (failed warp tiles auto-
                 blocked). Reserved for terrain traversal — town/castle entry tiles
@@ -159,13 +163,12 @@ class AdvisorAgent(
                 Use this map to plan waypoints — DO NOT trust your training-data memory of
                 FF1 geography. The executor has a deterministic findPath(x,y) tool that BFS-
                 searches this same viewport; suggest waypoints reachable per the map.
-              - V5.26: interior navigation is exitInterior-only. The executor
-                no longer has vision-step skills. When asked about a stuck
-                Indoors phase, INSPECT the screenshot and decide between:
-                (a) bump exitInterior maxSteps and retry, (b) declare the
-                interior unsalvageable and route elsewhere when the agent
-                escapes, (c) accept the run as lost. Do not invent skills the
-                executor doesn't have.
+              - V5.26+V5.29: interior navigation has exactly two tools —
+                exitInterior (BFS to exit, fast on castles) and
+                exploreInteriorFrontier (BFS to unvisited tile, robust on town
+                overlays). Default escalation: exitInterior twice → if both
+                fail, call exploreInteriorFrontier with maxSteps=64. Town
+                exits typically emerge once the map is mostly covered.
               - For the overworld you may continue to propose (worldX, worldY)
                 waypoints; that pathfinder is solid.
               - You may also receive an ASCII map of the interior; cross-reference

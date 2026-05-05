@@ -47,6 +47,8 @@ class SkillRegistry(
     private val walkOverworldVisionSkill = visionOverworldNavigator?.let {
         WalkOverworldVision(toolset, it, toolCallLog)
     }
+    private val exploreInteriorFrontierSkill =
+        ExploreInteriorFrontier(toolset, mapSession, interiorMemory, toolCallLog)
 
     @Tool
     @LLMDescription(
@@ -71,14 +73,29 @@ class SkillRegistry(
 
     @Tool
     @LLMDescription(
-        "(DEPRECATED on towns; ~13% step success) Walk to the nearest interior exit " +
-            "using the offline ROM-decoder pathfinder. Kept as fallback only — prefer " +
-            "walkInteriorVision in Indoors. Stops on sub-map transition, encounter, " +
+        "Walk to the nearest interior exit using the offline ROM-decoder pathfinder. " +
+            "Reliable on castles/dungeons; ~13% step success on town overlays — if " +
+            "exitInterior fails twice in the same Indoors phase, switch to " +
+            "exploreInteriorFrontier instead. Stops on sub-map transition, encounter, " +
             "or arrival on overworld."
     )
     suspend fun exitInterior(maxSteps: Int = 64): SkillResult {
         toolCallLog.append("exitInterior", "maxSteps=$maxSteps")
         return exitInteriorSkill.invoke(mapOf("maxSteps" to "$maxSteps"))
+    }
+
+    @Tool
+    @LLMDescription(
+        "(V5.29) Deterministic interior explorer. Walks the party tile-by-tile " +
+            "toward the nearest UNVISITED reachable tile in the current FF1 " +
+            "interior map, persisting visited tiles in InteriorMemory. Use this " +
+            "when exitInterior fails on a town overlay — full map coverage exposes " +
+            "exits as side effects. Stops on phase=Overworld, encounter, " +
+            "fully-explored map, or repeated blocked direction. maxSteps default 64."
+    )
+    suspend fun exploreInteriorFrontier(maxSteps: Int = 64): SkillResult {
+        toolCallLog.append("exploreInteriorFrontier", "maxSteps=$maxSteps")
+        return exploreInteriorFrontierSkill.invoke(mapOf("maxSteps" to "$maxSteps"))
     }
 
     @Tool
