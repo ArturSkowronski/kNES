@@ -94,6 +94,76 @@ class SalienceStrategyTest : FunSpec({
         target shouldBe (180 to 180)
     }
 
+    test("priority 5 wander skips recently-failed tile (no infinite re-target loop)") {
+        // All grass viewport — priority 5 row-major scan would return local (0,0) =
+        // world (138,150) for spawn (146,158). Mark it recently failed; expect a
+        // different walkable tile.
+        val tiles = Array(16) { Array(16) { TileType.GRASS } }
+        val vm = ViewportMap(tiles, partyLocalXY = 8 to 8, partyWorldXY = 146 to 158)
+        val blockages = BlockageMemory(file = tmp("b"))
+        blockages.record(runId = "r", from = 146 to 158, attemptedTo = "138,150",
+            result = "stuck at (146,158): no path within viewport")
+        // Also mark the priority-4 cardinal candidates (E/N/S/W from currentXY by 8) as
+        // recently failed so we deterministically fall through to priority 5.
+        for ((d, p) in listOf("N" to (146 to 150), "E" to (154 to 158),
+                "S" to (146 to 166), "W" to (138 to 158))) {
+            blockages.record(runId = "r", from = 146 to 158,
+                attemptedTo = "${p.first},${p.second}",
+                result = "stuck: $d")
+            blockages.recordRunStartDirection("seed-$d", d)
+        }
+        val strategy = SalienceStrategy(
+            terrainMemory = OverworldTerrainMemory(file = tmp("t")),
+            landmarkMemory = LandmarkMemory(file = tmp("l")),
+            blockageMemory = blockages,
+            fog = FogOfWar(),
+        )
+        val target = strategy.pickOverworldTarget(currentXY = 146 to 158, viewport = vm)
+        // Should NOT be (138,150) (priority 5 row-major first match), since it's recently failed.
+        (target == 138 to 150) shouldBe false
+        // Should also not be currentXY (degenerate).
+        (target == 146 to 158) shouldBe false
+    }
+
+    test("priority 4 diversify skips cardinal candidate that's recently failed") {
+        val vm = viewportAllGrass(146 to 158)
+        val blockages = BlockageMemory(file = tmp("b"))
+        // Mark "N" cardinal (146,150) as recently failed.
+        blockages.record(runId = "r", from = 146 to 158, attemptedTo = "146,150",
+            result = "impassable terrain")
+        val strategy = SalienceStrategy(
+            terrainMemory = OverworldTerrainMemory(file = tmp("t")),
+            landmarkMemory = LandmarkMemory(file = tmp("l")),
+            blockageMemory = blockages,
+            fog = FogOfWar(),
+        )
+        // No landmarks, no salient tiles, no terrain frontier → fall through to priority 4.
+        // Priority 4 must skip "N" → (146,150) and pick another cardinal.
+        val target = strategy.pickOverworldTarget(currentXY = 146 to 158, viewport = vm)
+        (target == 146 to 150) shouldBe false
+    }
+
+    test("recently-failed viewport tile is NOT re-picked by priority 2") {
+        val tiles = Array(16) { Array(16) { TileType.GRASS } }
+        tiles[5][5] = TileType.CASTLE  // local (5,5) → world (143,155) for spawn (146,158)
+        val vm = ViewportMap(tiles, partyLocalXY = 8 to 8, partyWorldXY = 146 to 158)
+
+        val blockages = BlockageMemory(file = tmp("b"))
+        // Simulate prior iteration's failure on (143,155).
+        blockages.record(runId = "run-1", from = 146 to 158, attemptedTo = "143,155",
+            result = "stuck at (146,158): target (143,155) is impassable terrain")
+        val strategy = SalienceStrategy(
+            terrainMemory = OverworldTerrainMemory(file = tmp("t")),
+            landmarkMemory = LandmarkMemory(file = tmp("l")),
+            blockageMemory = blockages,
+            fog = FogOfWar(),
+        )
+        val target = strategy.pickOverworldTarget(currentXY = 146 to 158, viewport = vm)
+        // recentlyFailed includes (143,155) → priority 2 must skip it. Falls through to
+        // priority 4 (diversify) which picks a cardinal — currentXY ± 8.
+        (target == 143 to 155) shouldBe false
+    }
+
     test("priority 2: TOWN tile in viewport beats unmapped frontier when no landmark exists") {
         val tiles = Array(16) { Array(16) { TileType.GRASS } }
         tiles[5][5] = TileType.TOWN  // local (5,5)

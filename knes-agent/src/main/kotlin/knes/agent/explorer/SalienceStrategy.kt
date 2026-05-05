@@ -80,16 +80,24 @@ class SalienceStrategy(
         // Priority 4: diversify
         val recent = blockageMemory.pathTriedRecentDirections(k = 3).toSet()
         val cardinals = listOf("N" to (0 to -1), "E" to (1 to 0), "S" to (0 to 1), "W" to (-1 to 0))
-        cardinals.firstOrNull { it.first !in recent }?.let { (_, delta) ->
+        cardinals.firstOrNull { (dirName, delta) ->
+            val candidate = currentXY.first + delta.first * 8 to currentXY.second + delta.second * 8
+            dirName !in recent && asKey(candidate) !in recentlyFailed
+        }?.let { (_, delta) ->
             return currentXY.first + delta.first * 8 to currentXY.second + delta.second * 8
         }
 
-        // Priority 5: wander — first walkable tile in viewport
+        // Priority 5: wander — first walkable tile in viewport that hasn't recently failed.
+        // Without the recentlyFailed filter this row-major scan deterministically returns
+        // the same isPassable()-but-pathfinder-impassable tile every iteration (e.g. world
+        // (146,150) for spawn (146,158)) → infinite re-target loop until idle cap fires.
         for (ly in 0 until viewport.height) {
             for (lx in 0 until viewport.width) {
-                if (viewport.tiles[ly][lx].isPassable()) {
-                    return viewport.localToWorld(lx, ly)
-                }
+                if (!viewport.tiles[ly][lx].isPassable()) continue
+                val world = viewport.localToWorld(lx, ly)
+                if (asKey(world) in recentlyFailed) continue
+                if (world == currentXY) continue
+                return world
             }
         }
         return currentXY  // truly degenerate
