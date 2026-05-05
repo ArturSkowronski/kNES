@@ -108,6 +108,21 @@ class LandmarkMemory(
     fun atLocation(worldX: Int, worldY: Int): Landmark? =
         byId.values.firstOrNull { it.worldX == worldX && it.worldY == worldY }
 
+    /** Remove all tile-tagged candidates (mapIdInterior == null) at exact world coords.
+     *  Confirmed entries (mapIdInterior != null) are preserved.
+     *
+     *  Used by `SingleRun` to purge salience priority-2 misclassifications when the
+     *  pathfinder reports the target as impassable terrain or no-path-within-viewport.
+     *  Without this, every run picks the same bogus landmark again and idles out. */
+    fun removeTileTaggedAt(worldX: Int, worldY: Int): Boolean {
+        val toRemove = byId.values.filter {
+            it.worldX == worldX && it.worldY == worldY && it.mapIdInterior == null
+        }
+        if (toRemove.isEmpty()) return false
+        toRemove.forEach { byId.remove(it.id) }
+        return true
+    }
+
     fun markVisited(id: String) {
         byId[id]?.let { byId[id] = it.copy(visited = true) }
     }

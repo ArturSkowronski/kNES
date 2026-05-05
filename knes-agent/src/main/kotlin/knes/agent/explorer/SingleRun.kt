@@ -189,6 +189,16 @@ class SingleRun(
                     blockageMemory.record(runId, from = cx to cy,
                         attemptedTo = "${target.first},${target.second}",
                         result = res.message)
+                    // Pathfinder rejected the target as impassable / no-path. Salience
+                    // priority 2 records ANY TOWN/CASTLE-typed viewport tile as a Landmark,
+                    // but the OverworldTileClassifier conflates entry tiles with wall
+                    // decoration. When BFS confirms the tile isn't actually walkable, drop
+                    // the bogus tile-tagged landmark so the next salience pick doesn't
+                    // re-target the same dead end. Confirmed entries (mapIdInterior != null)
+                    // are preserved.
+                    if (looksUnreachable(res.message)) {
+                        landmarkMemory.removeTileTaggedAt(target.first, target.second)
+                    }
                 }
             }
             is FfPhase.Indoors -> skillRegistry.exploreInteriorFrontier()
@@ -207,6 +217,12 @@ class SingleRun(
     }
 
     companion object {
+        /** Pathfinder messages indicating the target is unreachable from current position.
+         *  Used to purge bogus tile-tagged landmarks that the OverworldTileClassifier
+         *  misidentified as TOWN/CASTLE entries. Visible-for-test. */
+        fun looksUnreachable(message: String): Boolean =
+            "impassable terrain" in message || "no path within viewport" in message
+
         /** Per-run novelty trigger detector. Pure function — no side effects.
          *  Caller adds the mapId to its `novelMapIdsThisRun` set after firing.
          *  Replaces the previous `interiorMemory.hasMapBeenSeen` gating which

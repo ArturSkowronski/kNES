@@ -79,4 +79,22 @@ class SingleRunDetectTriggerTest : FunSpec({
         )
         trigger shouldBe null
     }
+
+    test("looksUnreachable detects 'impassable terrain' message") {
+        SingleRun.looksUnreachable(
+            "stuck at (146,158): target (146,150) is impassable terrain (closest reachable: (146, 158))"
+        ) shouldBe true
+    }
+
+    test("looksUnreachable detects 'no path within viewport' message") {
+        SingleRun.looksUnreachable(
+            "stuck at (146,158): no path within viewport (closest reachable: (146, 158))"
+        ) shouldBe true
+    }
+
+    test("looksUnreachable returns false for unrelated abort messages") {
+        SingleRun.looksUnreachable("encounter triggered after 5 steps") shouldBe false
+        SingleRun.looksUnreachable("UNEXPECTED interior entry at world=(145,152) ...") shouldBe false
+        SingleRun.looksUnreachable("did not reach (X,Y) in 32 steps") shouldBe false
+    }
 })

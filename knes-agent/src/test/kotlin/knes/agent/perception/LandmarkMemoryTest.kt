@@ -77,6 +77,36 @@ class LandmarkMemoryTest : FunSpec({
         merged.discoveredRunId shouldBe "run-1"
     }
 
+    test("removeTileTaggedAt drops only tile-tagged candidates at coords (mapIdInterior == null)") {
+        val tmp = Files.createTempFile("landmarks", ".json").toFile().apply { deleteOnExit() }
+        val mem = LandmarkMemory(file = tmp)
+        // tile-tagged castle decoration misclassified at (146,150)
+        mem.record(Landmark(id = "tagged_146_150", kind = LandmarkKind.CASTLE_ENTRY,
+            worldX = 146, worldY = 150, visited = false))
+        // confirmed entry at SAME coords — must NOT be removed
+        mem.record(Landmark(id = "confirmed_146_150", kind = LandmarkKind.CASTLE_ENTRY,
+            worldX = 146, worldY = 150, mapIdInterior = 1, visited = true))
+        // tile-tagged at different coords — must NOT be removed
+        mem.record(Landmark(id = "tagged_147_154", kind = LandmarkKind.TOWN_ENTRY,
+            worldX = 147, worldY = 154, visited = false))
+
+        mem.removeTileTaggedAt(146, 150) shouldBe true
+        // confirmed remains; tagged elsewhere remains
+        mem.findByKind(LandmarkKind.CASTLE_ENTRY) shouldHaveSize 1
+        mem.findByKind(LandmarkKind.CASTLE_ENTRY).first().mapIdInterior shouldBe 1
+        mem.findByKind(LandmarkKind.TOWN_ENTRY) shouldHaveSize 1
+    }
+
+    test("removeTileTaggedAt returns false when nothing matches") {
+        val tmp = Files.createTempFile("landmarks", ".json").toFile().apply { deleteOnExit() }
+        val mem = LandmarkMemory(file = tmp)
+        mem.record(Landmark(id = "t", kind = LandmarkKind.TOWN_ENTRY,
+            worldX = 100, worldY = 100, mapIdInterior = 8))
+        mem.removeTileTaggedAt(100, 100) shouldBe false  // confirmed, not tile-tagged
+        mem.removeTileTaggedAt(0, 0) shouldBe false       // nothing at coords
+        mem.findByKind(LandmarkKind.TOWN_ENTRY) shouldHaveSize 1
+    }
+
     test("recordIfNew upgrade is monotonic — never weakens visited or unsets mapIdInterior") {
         val tmp = Files.createTempFile("landmarks", ".json").toFile().apply { deleteOnExit() }
         val mem = LandmarkMemory(file = tmp)
