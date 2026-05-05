@@ -23,6 +23,8 @@ sealed interface Trigger {
     object BattleEntered : Trigger
 }
 
+data class ClassifyDecision(val mapIdToUse: Int)
+
 class SingleRun(
     private val runId: String,
     private val toolset: EmulatorToolset,
@@ -78,7 +80,8 @@ class SingleRun(
             when (trigger) {
                 is Trigger.NewInteriorEntered -> {
                     novelMapIdsThisRun += trigger.mapId
-                    handleNewInterior(trigger)
+                    val effective = handleNewInterior(trigger)
+                    if (effective != null) novelMapIdsThisRun += effective
                 }
                 Trigger.DialogBoxVisible -> handleDialog()
                 Trigger.BattleEntered -> handleBattle()
@@ -113,27 +116,41 @@ class SingleRun(
         return false
     }
 
-    private suspend fun handleNewInterior(t: Trigger.NewInteriorEntered) {
+    /** Returns the effective mapId actually classified, which may differ from
+     *  the trigger mapId if the engine completed a multi-stage warp transition
+     *  between trigger fire and snapshot, or null if classification was skipped
+     *  (party wiped or returned to overworld during the 80-step explore). */
+    private suspend fun handleNewInterior(t: Trigger.NewInteriorEntered): Int? {
         val ram = observer.ramSnapshot()
-        // Pre-record the entry as a TOWN/CASTLE/DUNGEON_ENTRY landmark (visited=true).
+        // Use RAM-stable mapId rather than trigger mapId for the entry landmark.
+        // FF1 warp transitions briefly expose a transient currentMapId during the
+        // engine handoff (e.g. (145,152) Coneria warp shows mapId=8 outer overlay
+        // before settling on mapId=24 inner). By the time we read RAM here the
+        // value has stabilised. Fall back to trigger.mapId if RAM is unreadable.
         val cx = ram["worldX"] ?: 0; val cy = ram["worldY"] ?: 0
+        val entryMapId = ram["currentMapId"]?.takeIf { it >= 0 } ?: t.mapId
         landmarkMemory.recordIfNew(Landmark(
-            id = "interior_entry_${t.mapId}_${cx}_${cy}",
-            kind = guessEntryKind(t.mapId),
+            id = "interior_entry_${entryMapId}_${cx}_${cy}",
+            kind = guessEntryKind(entryMapId),
             worldX = cx, worldY = cy,
-            mapIdInterior = t.mapId,
+            mapIdInterior = entryMapId,
             visited = true,
             discoveredRunId = runId,
         ))
-        // Run the deterministic interior explorer.
         skillRegistry.exploreInteriorFrontier(maxSteps = 80)
-        // Post-explore: ask Haiku to classify what we saw.
-        val visited = interiorMemory.visited(t.mapId)
+        // PartyWipe during exploration would cause `getScreen()` to return the
+        // game-over / title-screen frame, and a sub-map transition would leave
+        // the screenshot showing a different interior than the entry landmark.
+        // decideClassification gates both cases.
+        val ramAfter = observer.ramSnapshot()
+        val decision = decideClassification(entryMapId, ramAfter) ?: return entryMapId
+        val visited = interiorMemory.visited(decision.mapIdToUse)
         val b64 = runCatching { toolset.getScreen().base64 }.getOrNull()
         val classification = haikuConsult.classifyInterior(
-            mapId = t.mapId, visitedTileCount = visited.size, screenshotBase64 = b64, runId = runId,
+            mapId = decision.mapIdToUse, visitedTileCount = visited.size, screenshotBase64 = b64, runId = runId,
         )
         haikuCostUsd += applyInteriorClassification(landmarkMemory, classification)
+        return decision.mapIdToUse
     }
 
     private suspend fun handleDialog() {
@@ -247,6 +264,25 @@ class SingleRun(
         ): Double {
             classification.landmarks.forEach { landmarkMemory.recordIfNew(it) }
             return classification.costUsd
+        }
+
+        /** Decides whether the post-explore Haiku call should run, and which
+         *  mapId to tag its landmarks with. Returns null to skip — either the
+         *  party died (HP=0, screenshot would be game-over) or the engine left
+         *  the interior (mapflags=0, screenshot would be the overworld). When
+         *  RAM still reports an interior, prefers the live mapId over the
+         *  trigger mapId so multi-stage warps are tagged with the inner map. */
+        fun decideClassification(
+            triggerMapId: Int,
+            ramAfterExplore: Map<String, Int>,
+        ): ClassifyDecision? {
+            val mapflags = (ramAfterExplore["mapflags"] ?: 0) and 0x01
+            val hpSum = (1..4).sumOf { ramAfterExplore["char${it}_hpLow"] ?: 0 }
+            if (hpSum == 0) return null
+            if (mapflags != 1) return null
+            val ramMapId = ramAfterExplore["currentMapId"] ?: -1
+            val effective = if (ramMapId >= 0) ramMapId else triggerMapId
+            return ClassifyDecision(mapIdToUse = effective)
         }
 
         fun checkRestart(
