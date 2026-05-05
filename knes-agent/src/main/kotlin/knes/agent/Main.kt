@@ -6,6 +6,7 @@ import knes.agent.llm.AnthropicSession
 import knes.agent.llm.ModelRouter
 import knes.agent.perception.FogOfWar
 import knes.agent.perception.InteriorMapLoader
+import knes.agent.perception.LandmarkMemory
 import knes.agent.perception.MapSession
 import knes.agent.perception.OverworldMap
 import knes.agent.perception.AnthropicVisionInteriorNavigator
@@ -60,6 +61,7 @@ fun main(args: Array<String>) {
                 toolCallLog = toolCallLog,
                 budget = Budget(maxSkillInvocations = maxSkills, costCapUsd = costCap, wallClockCapSeconds = wallCap),
                 fog = fog,
+                landmarkMemory = LandmarkMemory(),
             ).run()
         }
     }
