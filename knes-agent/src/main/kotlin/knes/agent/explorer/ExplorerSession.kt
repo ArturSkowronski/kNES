@@ -92,6 +92,13 @@ class ExplorerSession(
             check(emulatorSession.loadState(savedState)) {
                 "loadState failed for $runId — savedState may be corrupt or version-incompatible"
             }
+            // V5.2 loadState quirk: emulator drops a few input frames after loadState.
+            // Without warm-up the first walkOverworldTo step doesn't move the party
+            // (3 consecutive non-moving steps trip the "input not responding" guard),
+            // every warp the agent targets fails on iteration 1, idle threshold fires
+            // before recovery, every overworld campaign plateaus at 0 entries.
+            // 30 NOOP frames (~0.5s) bridge the threshold.
+            toolset.step(buttons = emptyList(), frames = WARMUP_FRAMES)
             val before = snapshotCoverage()
             println("[campaign] starting $runId; coverage=$before")
 
@@ -130,6 +137,11 @@ class ExplorerSession(
     private fun elapsedMin(startMs: Long) = (System.currentTimeMillis() - startMs) / 60_000.0
 
     companion object {
+        /** Frames to advance with no input held after each loadState. Bridges the
+         *  V5.2 "input not responding" quirk where the emulator drops input frames
+         *  during the first ~0.3s of resumed emulation. 30 frames ≈ 0.5s @ 60Hz. */
+        const val WARMUP_FRAMES = 30
+
         fun goalsAchieved(landmarkMemory: LandmarkMemory): Boolean {
             val king = landmarkMemory.findByKind(LandmarkKind.NPC_KING).any { it.visited }
             val shop = landmarkMemory.findByKind(LandmarkKind.NPC_SHOPKEEPER).any { it.visited }
