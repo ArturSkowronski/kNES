@@ -1,7 +1,6 @@
 package knes.agent.explorer
 
 import kotlinx.coroutines.runBlocking
-import knes.agent.llm.AnthropicSession
 import knes.agent.perception.BlockageMemory
 import knes.agent.perception.FogOfWar
 import knes.agent.perception.InteriorMapLoader
@@ -54,18 +53,15 @@ fun main() {
     )
 
     val haiku: HaikuConsult = try {
-        // ANTHROPIC_API_KEY env var required by AnthropicSession.
-        // If absent, fall back to no-op fake so the campaign still runs and
-        // accumulates terrain/warp/blockage memory without NPC classification.
         val apiKey = System.getenv("ANTHROPIC_API_KEY")
         if (apiKey.isNullOrBlank()) {
             System.err.println("[explorer] no ANTHROPIC_API_KEY — using FakeHaikuConsult (zero classification)")
             FakeHaikuConsult()
         } else {
-            AnthropicHaikuConsult(AnthropicSession(apiKey = apiKey))
+            AnthropicHaikuConsult(apiKey = apiKey)
         }
     } catch (e: Exception) {
-        System.err.println("[explorer] AnthropicSession init failed (${e.message}) — using FakeHaikuConsult")
+        System.err.println("[explorer] Haiku init failed (${e.message}) — using FakeHaikuConsult")
         FakeHaikuConsult()
     }
 
