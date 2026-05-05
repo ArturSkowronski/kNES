@@ -53,10 +53,29 @@ class SkillRegistry(
     @Tool
     @LLMDescription(
         "Advance from the FF1 title screen through NEW GAME / class select / name entry into " +
-            "the overworld. Mashes START then A. Termination: char1_hpLow != 0 OR worldX != 0."
+            "the overworld. Mashes START then A. Termination: char1_hpLow != 0 OR worldX != 0. " +
+            "Valid ONLY from pre-game phases (Boot/TitleOrMenu/NewGameMenu/NameEntry); not a " +
+            "panic reset from Overworld/Indoors/Battle — guard rejects with REJECTED."
     )
     suspend fun pressStartUntilOverworld(maxAttempts: Int = 60): SkillResult {
         toolCallLog.append("pressStartUntilOverworld", "maxAttempts=$maxAttempts")
+        // V5.31 panic-reset guard. iter14 evidence: agent called this from Indoors
+        // as a panic move, mashing START+A through the in-game menu and wiping the
+        // run. Reject unless we are still pre-party-creation (same termination
+        // markers the skill itself uses, inverted).
+        val ram = toolset.getState().ram
+        val alreadyInGame = (ram["char1_hpLow"] ?: 0) != 0 || (ram["worldX"] ?: 0) != 0
+        if (alreadyInGame) {
+            return SkillResult(
+                ok = false,
+                message = "REJECTED: party already created (worldX=0x${(ram["worldX"] ?: 0).toString(16)}, " +
+                    "char1_hp=0x${(ram["char1_hpLow"] ?: 0).toString(16)}). pressStartUntilOverworld " +
+                    "is only valid from the title/menu — do NOT use as a panic reset. Use " +
+                    "exitInterior or exploreInteriorFrontier from Indoors.",
+                framesElapsed = 0,
+                ramAfter = ram,
+            )
+        }
         return pressStartSkill.invoke(mapOf("maxAttempts" to "$maxAttempts"))
     }
 
