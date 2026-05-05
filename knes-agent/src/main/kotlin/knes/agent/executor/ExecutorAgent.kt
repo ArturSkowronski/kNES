@@ -176,11 +176,21 @@ class ExecutorAgent(
               exitInterior repeatedly to navigate sub-maps → fight Garland.
             - V2.5.4 hard-impassable: TOWN/CASTLE tiles on the overworld are
               impassable for walkOverworldTo UNLESS they are the explicit
-              target. Even with the tile as target the BFS classifier may still
-              refuse entry because tile properties are ROM-encoded. If
-              walkOverworldTo refuses a town/castle target, call askAdvisor —
-              entering specific buildings may need fixture-builder support
-              that's not yet plumbed.
+              target. Even with the tile as target the BFS may refuse because
+              tile properties are ROM-encoded.
+
+            T/C ENTRY IS LEGITIMATE PROGRESSION (V5.27): the BFS rule above
+            often makes the world look "walled in" — at e.g. (152, 151) the
+            agent reports "trapped, surrounded by town/castle tiles". This is
+            wrong framing. In FF1, walking INTO a town or castle is normal
+            traversal, not a failure mode. If walkOverworldTo to a far target
+            returns BLOCKED and your ASCII WORLD VIEW shows T or C glyphs in
+            cardinal neighbours, pick one of those T/C tiles as the explicit
+            target. The agent will enter that interior; you can then
+            exitInterior to land on the OTHER side of it — which is the
+            point. Do NOT confuse a visible-on-the-map T/C glyph with a
+            hidden warp tile (those are tracked in session memory and look
+            like grass on the map).
             - In Battle phase: call battleFightAll. It auto-fights every round AND
               dismisses the PostBattle (XP/rewards) modal automatically.
             - In PostBattle phase: call battleFightAll AGAIN — it dismisses the

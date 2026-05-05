@@ -187,12 +187,18 @@ class AdvisorAgent(
                 bridge encounter. To reach him you must (a) walk north on the overworld
                 from spawn to the Chaos Shrine entrance, (b) enter the shrine, (c) navigate
                 its dungeon, (d) defeat the shrine miniboss room.
-              - V2.5.4 hard-impassable rule: TOWN/CASTLE tiles are IMPASSABLE
-                for walkOverworldTo when they are not the destination. Even
-                with the tile as target the BFS may refuse entry because tile
-                properties are ROM-encoded. V5.26 has no vision-step
-                alternative; if entering a specific building is required, ask
-                the user / leave a note rather than guessing.
+              - V2.5.4 hard-impassable rule: T/C tiles are IMPASSABLE for
+                walkOverworldTo unless they ARE the destination.
+              - V5.27 corollary: when the executor reports "trapped, surrounded
+                by town/castle tiles", the right plan is to PICK ONE of those
+                T/C tiles as the next walkOverworldTo target. Walking into a
+                town or castle is legitimate FF1 traversal — the party enters,
+                the agent calls exitInterior, and lands on the OTHER side.
+                Distinguish visible T/C glyphs in the ASCII map (legit entries)
+                from hidden warp tiles in session memory (those look like
+                grass and are auto-blocked in fog). If multiple T/C neighbours
+                are visible, pick one closer to the goal direction (north
+                toward Chaos Shrine).
               - The 256x256 overworld pathfinder is solid for terrain — trust its
                 output for non-town/castle waypoints. If findPath returns BLOCKED for a
                 target, that target may be unreachable (isolated pocket) — pick a
