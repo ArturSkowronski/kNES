@@ -62,7 +62,16 @@ class LandmarkMemory(
     fun record(l: Landmark) { byId[l.id] = l }
 
     /** Records iff no existing landmark matches on (kind + world coords) for overworld
-     *  or (kind + mapId + local coords) for interior. Returns true if added. */
+     *  or (kind + mapId + local coords) for interior. Returns true if added.
+     *
+     *  When a duplicate exists, fields on the existing record are upgraded
+     *  monotonically with stronger info from the new record: visited flag
+     *  becomes true if either is true; mapIdInterior fills in if previously
+     *  null; note + discoveredRunId fill in if previously blank. This prevents
+     *  the case where SalienceStrategy auto-records a tile-tagged candidate
+     *  (visited=false, mapIdInterior=null), then later handleNewInterior
+     *  records the confirmed entry (visited=true, mapIdInterior=N) and the
+     *  stronger record was discarded. */
     fun recordIfNew(l: Landmark): Boolean {
         val isOverworld = l.worldX != null && l.worldY != null
         val isInterior = l.mapId != null && l.localX != null && l.localY != null
@@ -78,7 +87,17 @@ class LandmarkMemory(
                 else -> false  // coord-less landmarks are never deduped
             }
         }
-        if (dup != null) return false
+        if (dup != null) {
+            val upgraded = dup.copy(
+                visited = dup.visited || l.visited,
+                mapIdInterior = dup.mapIdInterior ?: l.mapIdInterior,
+                note = if (dup.note.isBlank() && l.note.isNotBlank()) l.note else dup.note,
+                discoveredRunId = if (dup.discoveredRunId.isBlank() && l.discoveredRunId.isNotBlank())
+                    l.discoveredRunId else dup.discoveredRunId,
+            )
+            if (upgraded != dup) byId[dup.id] = upgraded
+            return false
+        }
         byId[l.id] = l
         return true
     }
