@@ -53,6 +53,9 @@ class SingleRun(
      *  classification ever firing on previously-seen maps across sessions. Now bounded
      *  by ~3-5 maps per run; each run gets one classification per visited interior. */
     private val novelMapIdsThisRun: MutableSet<Int> = mutableSetOf()
+    /** Per-run set of overworld warp tiles already entered. Drives SalienceStrategy
+     *  priority 0 — once we've taken a warp this run, target the next nearest one. */
+    private val enteredWarpsThisRun: MutableSet<Pair<Int, Int>> = mutableSetOf()
 
     suspend fun execute(): RunResult {
         var stepsTaken = 0
@@ -128,6 +131,7 @@ class SingleRun(
         // before settling on mapId=24 inner). By the time we read RAM here the
         // value has stabilised. Fall back to trigger.mapId if RAM is unreadable.
         val cx = ram["worldX"] ?: 0; val cy = ram["worldY"] ?: 0
+        enteredWarpsThisRun += (cx to cy)
         val entryMapId = ram["currentMapId"]?.takeIf { it >= 0 } ?: t.mapId
         landmarkMemory.recordIfNew(Landmark(
             id = "interior_entry_${entryMapId}_${cx}_${cy}",
@@ -200,7 +204,10 @@ class SingleRun(
                     firstStartDirection = pickInitialCardinal(cx to cy, viewport)
                     blockageMemory.recordRunStartDirection(runId, firstStartDirection ?: "?")
                 }
-                val target = salience.pickOverworldTarget(currentXY = cx to cy, viewport = viewport)
+                val target = salience.pickOverworldTarget(
+                    currentXY = cx to cy, viewport = viewport,
+                    enteredWarpsThisRun = enteredWarpsThisRun,
+                )
                 val res = skillRegistry.exploreOverworldFrontier(target.first, target.second)
                 if (!res.ok) {
                     blockageMemory.record(runId, from = cx to cy,

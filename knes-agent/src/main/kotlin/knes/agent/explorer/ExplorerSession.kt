@@ -73,7 +73,7 @@ class ExplorerSession(
     private val savedState: ByteArray,
     private val budget: CampaignBudget = CampaignBudget(),
 ) {
-    private val salience = SalienceStrategy(terrainMemory, landmarkMemory, blockageMemory, fog)
+    private val salience = SalienceStrategy(terrainMemory, landmarkMemory, blockageMemory, fog, warpMemory)
 
     suspend fun run(): CampaignResult {
         var runs = 0
