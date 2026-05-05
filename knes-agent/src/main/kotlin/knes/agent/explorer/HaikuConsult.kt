@@ -27,13 +27,14 @@ interface HaikuConsult {
     suspend fun classifyInterior(
         mapId: Int,
         visitedTileCount: Int,
-        screenshotPng: ByteArray?,
+        screenshotBase64: String?,
+        runId: String = "",
     ): InteriorClassification
 
     /** Called when a dialog box is open. Implementation should read the dialog text
      *  (may press A across pages) and return a summary plus optional landmark hint. */
     suspend fun readDialog(
-        screenshotPng: ByteArray?,
+        screenshotBase64: String?,
     ): DialogReading
 }
 
@@ -46,7 +47,7 @@ class FakeHaikuConsult(
     var dialogCalls: Int = 0; private set
 
     override suspend fun classifyInterior(
-        mapId: Int, visitedTileCount: Int, screenshotPng: ByteArray?,
+        mapId: Int, visitedTileCount: Int, screenshotBase64: String?, runId: String,
     ): HaikuConsult.InteriorClassification {
         val res = interiorClassifications.getOrNull(interiorCalls)
             ?: HaikuConsult.InteriorClassification(emptyList(), 0.0)
@@ -54,7 +55,7 @@ class FakeHaikuConsult(
         return res
     }
 
-    override suspend fun readDialog(screenshotPng: ByteArray?): HaikuConsult.DialogReading {
+    override suspend fun readDialog(screenshotBase64: String?): HaikuConsult.DialogReading {
         val res = dialogReadings.getOrNull(dialogCalls)
             ?: HaikuConsult.DialogReading("", null, 0.0)
         dialogCalls++

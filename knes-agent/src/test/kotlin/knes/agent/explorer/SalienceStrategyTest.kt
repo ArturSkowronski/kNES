@@ -21,10 +21,11 @@ class SalienceStrategyTest : FunSpec({
             partyWorldXY = centerWorld)
     }
 
-    test("priority 1: unvisited landmark is chosen even when far") {
+    test("priority 1A: confirmed entry (mapIdInterior set) is chosen even when far") {
         val landmarks = LandmarkMemory(file = tmp("l"))
+        // mapIdInterior=8 means handleNewInterior recorded an actual entry → confirmed.
         landmarks.record(Landmark(id = "town", kind = LandmarkKind.TOWN_ENTRY,
-            worldX = 200, worldY = 200, visited = false))
+            worldX = 200, worldY = 200, mapIdInterior = 8, visited = false))
         val strategy = SalienceStrategy(
             terrainMemory = OverworldTerrainMemory(file = tmp("t")),
             landmarkMemory = landmarks,
@@ -34,6 +35,63 @@ class SalienceStrategyTest : FunSpec({
         val target = strategy.pickOverworldTarget(currentXY = 146 to 158,
             viewport = viewportAllGrass(146 to 158))
         target shouldBe (200 to 200)
+    }
+
+    test("priority 1B: tile-tagged candidate beyond distance limit is ignored, falls through") {
+        val landmarks = LandmarkMemory(file = tmp("l"))
+        // Same far coords (200,200) but no mapIdInterior — auto-recorded, never entered.
+        landmarks.record(Landmark(id = "stale", kind = LandmarkKind.CASTLE_ENTRY,
+            worldX = 200, worldY = 200, visited = false))
+        val terrain = OverworldTerrainMemory(file = tmp("t"))
+        // Provide a frontier so priority 3 has something to return.
+        terrain.record(146, 158, TileType.GRASS)
+        terrain.record(147, 158, TileType.GRASS)
+        val strategy = SalienceStrategy(
+            terrainMemory = terrain,
+            landmarkMemory = landmarks,
+            blockageMemory = BlockageMemory(file = tmp("b")),
+            fog = FogOfWar(),
+        )
+        val target = strategy.pickOverworldTarget(currentXY = 146 to 158,
+            viewport = viewportAllGrass(146 to 158))
+        // Should NOT pick (200,200) — distance 96 exceeds tileTaggedDistanceLimit=40.
+        // Falls through to priority 3 (frontier) — accepts any local tile, not (200,200).
+        (target == 200 to 200) shouldBe false
+    }
+
+    test("priority 1B: tile-tagged candidate WITHIN distance limit is still chosen") {
+        val landmarks = LandmarkMemory(file = tmp("l"))
+        // (160,170) is manhattan distance 14+12=26 from (146,158) — within default limit 40.
+        landmarks.record(Landmark(id = "near", kind = LandmarkKind.TOWN_ENTRY,
+            worldX = 160, worldY = 170, visited = false))
+        val strategy = SalienceStrategy(
+            terrainMemory = OverworldTerrainMemory(file = tmp("t")),
+            landmarkMemory = landmarks,
+            blockageMemory = BlockageMemory(file = tmp("b")),
+            fog = FogOfWar(),
+        )
+        val target = strategy.pickOverworldTarget(currentXY = 146 to 158,
+            viewport = viewportAllGrass(146 to 158))
+        target shouldBe (160 to 170)
+    }
+
+    test("priority 1A confirmed entry beats priority 1B local candidate when both exist") {
+        val landmarks = LandmarkMemory(file = tmp("l"))
+        // Local tile-tag at (150,160) — distance 6, would normally win on distance.
+        landmarks.record(Landmark(id = "tagged", kind = LandmarkKind.TOWN_ENTRY,
+            worldX = 150, worldY = 160, visited = false))
+        // Far confirmed entry at (180,180) — distance 56, but has mapIdInterior.
+        landmarks.record(Landmark(id = "confirmed", kind = LandmarkKind.CASTLE_ENTRY,
+            worldX = 180, worldY = 180, mapIdInterior = 1, visited = false))
+        val strategy = SalienceStrategy(
+            terrainMemory = OverworldTerrainMemory(file = tmp("t")),
+            landmarkMemory = landmarks,
+            blockageMemory = BlockageMemory(file = tmp("b")),
+            fog = FogOfWar(),
+        )
+        val target = strategy.pickOverworldTarget(currentXY = 146 to 158,
+            viewport = viewportAllGrass(146 to 158))
+        target shouldBe (180 to 180)
     }
 
     test("priority 2: TOWN tile in viewport beats unmapped frontier when no landmark exists") {

@@ -129,13 +129,9 @@ class SingleRun(
         skillRegistry.exploreInteriorFrontier(maxSteps = 80)
         // Post-explore: ask Haiku to classify what we saw.
         val visited = interiorMemory.visited(t.mapId)
-        val screenshot: ByteArray? = runCatching {
-            // Implementation note: real screenshot acquisition is via toolset.getState() or a
-            // dedicated call. Pass null if not yet wired — the explorer handles cost=0.0.
-            null
-        }.getOrNull()
+        val b64 = runCatching { toolset.getScreen().base64 }.getOrNull()
         val classification = haikuConsult.classifyInterior(
-            mapId = t.mapId, visitedTileCount = visited.size, screenshotPng = screenshot,
+            mapId = t.mapId, visitedTileCount = visited.size, screenshotBase64 = b64, runId = runId,
         )
         haikuCostUsd += applyInteriorClassification(landmarkMemory, classification)
     }
@@ -143,7 +139,8 @@ class SingleRun(
     private suspend fun handleDialog() {
         // Press A once to advance, take screenshot, ask Haiku to read.
         toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 30)
-        val reading = haikuConsult.readDialog(screenshotPng = null)
+        val b64 = runCatching { toolset.getScreen().base64 }.getOrNull()
+        val reading = haikuConsult.readDialog(screenshotBase64 = b64)
         haikuCostUsd += reading.costUsd
         if (reading.landmarkHint != null) {
             val ram = observer.ramSnapshot()

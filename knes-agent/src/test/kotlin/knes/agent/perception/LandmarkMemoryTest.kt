@@ -57,4 +57,36 @@ class LandmarkMemoryTest : FunSpec({
         mem.recordIfNew(Landmark(id = "g2", kind = LandmarkKind.NPC_GENERIC)) shouldBe true
         mem.findByKind(LandmarkKind.NPC_GENERIC) shouldHaveSize 2
     }
+
+    test("recordIfNew upgrades existing record with stronger info on duplicate (visited + mapIdInterior)") {
+        val tmp = Files.createTempFile("landmarks", ".json").toFile().apply { deleteOnExit() }
+        val mem = LandmarkMemory(file = tmp)
+        // First: SalienceStrategy auto-records a tile-tagged candidate (no entry yet).
+        mem.recordIfNew(Landmark(id = "tagged_147_154", kind = LandmarkKind.TOWN_ENTRY,
+            worldX = 147, worldY = 154, visited = false)) shouldBe true
+        // Then: handleNewInterior records the confirmed entry at the same coords.
+        mem.recordIfNew(Landmark(id = "interior_entry_8_147_154", kind = LandmarkKind.TOWN_ENTRY,
+            worldX = 147, worldY = 154, mapIdInterior = 8, visited = true,
+            note = "first entry", discoveredRunId = "run-1")) shouldBe false  // dedup'd
+        // The existing record must now reflect visited=true, mapIdInterior=8, note + runId filled.
+        mem.findByKind(LandmarkKind.TOWN_ENTRY) shouldHaveSize 1
+        val merged = mem.findByKind(LandmarkKind.TOWN_ENTRY).first()
+        merged.visited shouldBe true
+        merged.mapIdInterior shouldBe 8
+        merged.note shouldBe "first entry"
+        merged.discoveredRunId shouldBe "run-1"
+    }
+
+    test("recordIfNew upgrade is monotonic — never weakens visited or unsets mapIdInterior") {
+        val tmp = Files.createTempFile("landmarks", ".json").toFile().apply { deleteOnExit() }
+        val mem = LandmarkMemory(file = tmp)
+        mem.recordIfNew(Landmark(id = "strong", kind = LandmarkKind.CASTLE_ENTRY,
+            worldX = 152, worldY = 151, mapIdInterior = 1, visited = true, note = "throne"))
+        mem.recordIfNew(Landmark(id = "weaker", kind = LandmarkKind.CASTLE_ENTRY,
+            worldX = 152, worldY = 151, mapIdInterior = null, visited = false, note = ""))
+        val res = mem.findByKind(LandmarkKind.CASTLE_ENTRY).first()
+        res.visited shouldBe true
+        res.mapIdInterior shouldBe 1
+        res.note shouldBe "throne"
+    }
 })

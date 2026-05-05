@@ -4,6 +4,7 @@ import knes.agent.advisor.AdvisorAgent
 import knes.agent.executor.ExecutorAgent
 import knes.agent.perception.FfPhase
 import knes.agent.perception.FogOfWar
+import knes.agent.perception.LandmarkMemory
 import knes.agent.perception.OverworldWarpMemory
 import knes.agent.perception.RamObserver
 import knes.agent.perception.ScreenshotPolicy
@@ -36,6 +37,13 @@ class AgentSession(
      * to keep the host filesystem clean.
      */
     private val warpMemory: OverworldWarpMemory = OverworldWarpMemory(),
+    /**
+     * Phase 2: persistent landmark catalog populated by the explorer phase
+     * (towns, castles, dungeons, NPCs). Injected into both advisor and
+     * executor observations so the planner can route to known points of
+     * interest without rediscovery. Default loads from ~/.knes/ff1-landmarks.json.
+     */
+    private val landmarkMemory: LandmarkMemory = LandmarkMemory(),
     runDir: Path = Trace.newRunDir(),
     /**
      * Optional per-turn hook fired after each executor turn. Receives current
@@ -87,6 +95,11 @@ class AgentSession(
             }
         }
 
+        val landmarkContext: String? = LandmarkContext.render(landmarkMemory)
+        if (landmarkContext != null) {
+            println("[landmark-memory] preloaded ${landmarkMemory.all().size} landmarks (advisor + executor injection)")
+        }
+
         try {
             while (true) {
                 val phase = observer.observeWithVision()
@@ -136,6 +149,10 @@ class AgentSession(
                             append(failedWarpTiles.joinToString(", ") { "(${it.first},${it.second})" })
                             append('\n')
                         }
+                        if (landmarkContext != null) {
+                            append(landmarkContext)
+                            append('\n')
+                        }
                         append("Reason: $reason")
                     }
                     println("[advisor #$advisorCalls] phase=$phase")
@@ -157,6 +174,10 @@ class AgentSession(
                         append("\nSession memory — known FF1 warp tiles to avoid as targets " +
                             "or route-throughs: ")
                         append(failedWarpTiles.joinToString(", ") { "(${it.first},${it.second})" })
+                    }
+                    if (landmarkContext != null) {
+                        append('\n')
+                        append(landmarkContext)
                     }
                 }
                 println("[executor turn=$skillsInvoked] phase=$phase idle=$idleTurns")

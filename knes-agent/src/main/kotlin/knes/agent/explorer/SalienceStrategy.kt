@@ -23,16 +23,35 @@ class SalienceStrategy(
     private val fog: FogOfWar,
     private val recentFailureWindow: Duration = Duration.ofMinutes(10),
     private val frontierRadius: Int = 20,
+    /** Distance ceiling for tile-tagged landmark candidates (mapIdInterior == null).
+     *  Confirmed entries (mapIdInterior != null) ignore this. Default 2 × frontierRadius. */
+    private val tileTaggedDistanceLimit: Int = 40,
 ) {
     fun pickOverworldTarget(currentXY: Pair<Int, Int>, viewport: ViewportMap): Pair<Int, Int> {
         val recentlyFailed = blockageMemory.recentlyFailedTargets(recentFailureWindow)
         val asKey: (Pair<Int, Int>) -> String = { "${it.first},${it.second}" }
 
-        // Priority 1: unvisited landmarks
-        landmarkMemory.findByKind(LandmarkKind.TOWN_ENTRY, LandmarkKind.CASTLE_ENTRY, LandmarkKind.DUNGEON_ENTRY)
+        val unvisited = landmarkMemory.findByKind(
+                LandmarkKind.TOWN_ENTRY, LandmarkKind.CASTLE_ENTRY, LandmarkKind.DUNGEON_ENTRY,
+            )
             .filter { !it.visited }
             .filter { it.worldX != null && it.worldY != null }
             .filter { (it.worldX!! to it.worldY!!).let { p -> asKey(p) !in recentlyFailed } }
+
+        // Priority 1A: confirmed entries — Landmark.mapIdInterior set by handleNewInterior
+        // on a prior run, proving the tile actually leads to an interior. No distance limit.
+        unvisited
+            .filter { it.mapIdInterior != null }
+            .minByOrNull { manhattan(currentXY, it.worldX!! to it.worldY!!) }
+            ?.let { return it.worldX!! to it.worldY!! }
+
+        // Priority 1B: tile-tagged candidates — auto-recorded by priority 2 in some prior
+        // run; never actually entered. Many may be unreachable from the current zone (other
+        // continent, water-locked, etc.). Limit to manhattan ≤ tileTaggedDistanceLimit so
+        // stale records on the far side of the world don't starve local exploration.
+        unvisited
+            .filter { it.mapIdInterior == null }
+            .filter { manhattan(currentXY, it.worldX!! to it.worldY!!) <= tileTaggedDistanceLimit }
             .minByOrNull { manhattan(currentXY, it.worldX!! to it.worldY!!) }
             ?.let { return it.worldX!! to it.worldY!! }
 

@@ -26,7 +26,7 @@ class SingleRunHandleNewInteriorTest : FunSpec({
 
         // Direct call into the helper without spinning up full SingleRun.
         val classification = runBlocking {
-            fake.classifyInterior(mapId = 1, visitedTileCount = 30, screenshotPng = null)
+            fake.classifyInterior(mapId = 1, visitedTileCount = 30, screenshotBase64 = null)
         }
         val cost = SingleRun.applyInteriorClassification(landmarks, classification)
         cost shouldBe 0.012
