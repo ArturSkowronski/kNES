@@ -46,6 +46,11 @@ class SingleRun(
     private var haikuCostUsd = 0.0
     private val coverageDeltaWindow: ArrayDeque<Int> = ArrayDeque()
     private var firstStartDirection: String? = null
+    /** Per-run set of mapIds for which `NewInteriorEntered` has already fired this run.
+     *  Replaces persistent `interiorMemory.hasMapBeenSeen` gating — that prevented Haiku
+     *  classification ever firing on previously-seen maps across sessions. Now bounded
+     *  by ~3-5 maps per run; each run gets one classification per visited interior. */
+    private val novelMapIdsThisRun: MutableSet<Int> = mutableSetOf()
 
     suspend fun execute(): RunResult {
         var stepsTaken = 0
@@ -69,9 +74,12 @@ class SingleRun(
                 return RunResult(reason, haikuCostUsd, stepsTaken)
             }
 
-            val trigger = detectTrigger(phase, ram)
+            val trigger = detectTrigger(phase, ram, novelMapIdsThisRun, ::isDialogBoxOpen)
             when (trigger) {
-                is Trigger.NewInteriorEntered -> handleNewInterior(trigger)
+                is Trigger.NewInteriorEntered -> {
+                    novelMapIdsThisRun += trigger.mapId
+                    handleNewInterior(trigger)
+                }
                 Trigger.DialogBoxVisible -> handleDialog()
                 Trigger.BattleEntered -> handleBattle()
                 null -> deterministicStep(phase, ram)
@@ -94,14 +102,6 @@ class SingleRun(
         coverageDeltaWindow.addLast(delta)
         while (coverageDeltaWindow.size > coverageWindow) coverageDeltaWindow.removeFirst()
         if (delta > 0) idleTurns = 0
-    }
-
-    private fun detectTrigger(phase: FfPhase, ram: Map<String, Int>): Trigger? = when {
-        phase is FfPhase.Indoors && !interiorMemory.hasMapBeenSeen(phase.mapId) ->
-            Trigger.NewInteriorEntered(phase.mapId)
-        phase is FfPhase.Battle -> Trigger.BattleEntered
-        isDialogBoxOpen(ram) -> Trigger.DialogBoxVisible
-        else -> null
     }
 
     /** Heuristic: dialog typically blocks input; FF1 sets specific screen-state bits.
@@ -207,6 +207,23 @@ class SingleRun(
     }
 
     companion object {
+        /** Per-run novelty trigger detector. Pure function — no side effects.
+         *  Caller adds the mapId to its `novelMapIdsThisRun` set after firing.
+         *  Replaces the previous `interiorMemory.hasMapBeenSeen` gating which
+         *  was persistent across sessions and starved Haiku classification. */
+        fun detectTrigger(
+            phase: FfPhase,
+            ram: Map<String, Int>,
+            novelMapIdsThisRun: Set<Int>,
+            isDialogBoxOpen: (Map<String, Int>) -> Boolean = { false },
+        ): Trigger? = when {
+            phase is FfPhase.Indoors && phase.mapId !in novelMapIdsThisRun ->
+                Trigger.NewInteriorEntered(phase.mapId)
+            phase is FfPhase.Battle -> Trigger.BattleEntered
+            isDialogBoxOpen(ram) -> Trigger.DialogBoxVisible
+            else -> null
+        }
+
         /** Pure helper used by handleNewInterior; testable in isolation. */
         fun applyInteriorClassification(
             landmarkMemory: LandmarkMemory,
