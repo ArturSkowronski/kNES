@@ -1,339 +1,243 @@
-# FF1 Koog Agent — Handoff (V5.30, session close 2026-05-05)
+# FF1 Koog Agent — Handoff (Phase 1.5 + Phase 2 closed, 2026-05-05)
 
-**Branch:** `ff1-agent-v2-4` of `/Users/askowronski/Priv/kNES-ff1-agent-v2`
-**HEAD:** `5dbc08a` — V5.30 fog destination-OK + deliberate-warp-entry prompt
+**Master HEAD:** `f13bd98` — PR #102 merged
 **Required env:** `ANTHROPIC_API_KEY` (live runs only; tests run without it)
 
 ---
 
-## TL;DR — where we are (2026-05-05, session close after iter14)
+## TL;DR — where we are
 
-V5.6 foundation (sm_player_x/y, mapflags) holds since previous session.
-**This session shipped V5.19 → V5.30, fourteen commits, plus 14 live
-iterations (iter1 → iter14) on the Coneria → Garland scenario.**
-Goal (Garland battle) not reached; every run still OutOfBudget around
-south Coneria. But the architectural picture is clean and the pieces
-needed for the next attempt are in place.
-
-Bottleneck migration log:
-  - iter1-iter5  burn budget on vision-step skills inside mapId=24
-  - iter6-iter8  agent uses panic-skills (`walkUntilEncounter`,
-                 `pressStartUntilOverworld`) that bypass guardrails
-  - iter9        V5.26 strips vision/random; agent finally moves
-                 through overworld but gets blocked at (152, 151)
-  - iter10-iter12 each iteration discovers ONE new Coneria-area warp
-  - iter13       3 fog-blocked warps + transit-block sealed the
-                 agent in a 1-tile pocket at (145, 153)
-  - iter14       V5.29 + V5.30 unblocked deliberate warp entry;
-                 agent reached (147, 154) and called
-                 `exploreInteriorFrontier` 4× — first time the new
-                 deterministic explorer ran live. Discovered 4th warp.
-
-**Persistent warp memory (`~/.knes/ff1-overworld-warps.json`)
-currently 4 tiles:** (145,152), (144,153), (147,153), (147,154).
-Geographic pattern: south edge of Coneria Town entries Y=152-154.
-
-**Architecture stable, prompt stable. Next session can either:**
-  (a) Continue iterative discovery (~$1-2/iter; 1-2 more warps
-      probably exist in this area)
-  (b) Manual ROM seed: read FF1 entry-tile table from Disch
-      disassembly and pre-populate the JSON in one shot
-  (c) Hard-block panic skills: agent's `pressStartUntilOverworld`
-      panic reset costs an entire run; V5.31 would AgentSession-
-      side reject the call when phase != TitleOrMenu
-
----
-
-## Read first (in this exact order)
-
-1. `docs/superpowers/runs/2026-05-05-v530-iter14/2026-05-05T*/trace.jsonl` —
-   most recent live run; shows V5.29 ExploreInteriorFrontier called 4×
-   live, agent reached Overworld(147, 154), discovered new warp.
-2. `~/.knes/ff1-overworld-warps.json` — persistent warp memory; current
-   contents (4 tiles): (145,152), (144,153), (147,153), (147,154).
-   All Coneria-area.
-3. `knes-agent/src/main/kotlin/knes/agent/runtime/AgentSession.kt` —
-   session loop, session-memory injection, persistent warp load/save.
-4. `knes-agent/src/main/kotlin/knes/agent/perception/OverworldWarpMemory.kt` —
-   V5.25 persistence layer.
-5. `knes-agent/src/main/kotlin/knes/agent/perception/InteriorFrontier.kt` —
-   the BFS already in tree that V5.29 will wrap as a skill.
-6. `knes-agent/src/main/kotlin/knes/agent/skills/SkillRegistry.kt` —
-   V5.26 intent-only @Tool surface. Vision-step + walkUntilEncounter
-   methods retained but unannotated.
-7. `knes-agent/src/main/kotlin/knes/agent/executor/ExecutorAgent.kt` —
-   system prompt with V5.20-V5.27 rules, maxIterations=16.
-8. `knes-agent/src/main/kotlin/knes/agent/advisor/AdvisorAgent.kt` —
-   matching planner prompt.
-
----
-
-## Commit log (this session)
+Today's session shipped **PR #102** (4 commits on top of PR #101 from earlier same day):
 
 ```
-5dbc08a  V5.30  fog destination-OK + deliberate-warp-entry prompt
-34a660d  V5.29  ExploreInteriorFrontier deterministic interior explorer
-69c7fda  docs   handoff refresh for V5.28
-bec76a2  V5.28  fog block warp tiles 1x1 (was 3x3, sealed agent in)
-086c09c  V5.27  T/C entry is legit FF1 traversal, not a trap (prompt)
-ea56a4b  V5.26  architectural shift, intent-only skill surface
-555bd42  V5.25  persistent overworld warp memory across runs
-ba39f02  V5.24  fog.markBlocked 3x3 zone around each warp tile
-35437fa  V5.23.2 bump maxIterations 10→16 (cap=10 still fired)
-f7c8b8b  V5.23.1 bump maxIterations 4→10 (cap=4 broke every turn)
-55184dd  V5.23  Koog usage corrections (maxIterations 20→4 (rolled back), session memory)
-a6e64fd  V5.22  goal-focus + propagate-failure-to-advisor rules (prompt)
-9e8ba75  V5.21  three behavioral rules from iter1+iter2 evidence (prompt)
-7601100  V5.20  WalkOverworldTo: ok=false on accidental interior entry
-6197979  V5.19  wire AnthropicVisionOverworldNavigator into ExecutorAgent
+61328df  fix     SalienceStrategy + LandmarkMemory — confirmed-vs-tagged tier
+a6c5e97  test    live HTTP smoke test for AnthropicHaikuConsult
+56c9ddd  Phase 2 AgentSession reads explorer landmarks
+0098eb2  Phase 1.5 wire real Haiku 4.5 in AnthropicHaikuConsult
+```
+
+End-to-end pipeline ALMOST works: explorer can run cheap multi-run campaigns,
+salience prefers confirmed entries over stale tile-tags, AgentSession reads
+landmarks.json on startup. **Goal still not validated** — Haiku trigger
+handlers never fire because every map the agent enters is already in
+`~/.knes/ff1-interior-memory.json` (3 maps pre-seeded from prior sessions).
+`detectTrigger` only returns `NewInteriorEntered` for maps where
+`!interiorMemory.hasMapBeenSeen(mapId)`. So 0 NPC classifications, $0 spent.
+
+**Live `runExplorer` after fix: 16 runs, Plateau, 79 landmarks discovered,
+0 confirmed entries, $0.** The salience+memory bug is fixed; the trigger
+gating is the next bottleneck.
+
+---
+
+## What landed this session
+
+### Phase 1.5 (commit 0098eb2)
+
+`AnthropicHaikuConsult` stub → real Haiku 4.5 (`claude-haiku-4-5`).
+- Direct HTTP to `api.anthropic.com/v1/messages` (mirrors VisionOverworldNavigator).
+- Two prompts: `classifyInterior` (post-explore screenshot → NPC list as JSON)
+  and `readDialog` (dialog screenshot → summary + landmarkHint).
+- Cost from `usage.input_tokens` / `usage.output_tokens` × Haiku 4.5 pricing
+  ($1/MT in, $5/MT out).
+- Interface param renamed `screenshotPng:ByteArray?` → `screenshotBase64:String?`
+  (toolset.getScreen() already returns base64 — no round-trip).
+- 7 pure-unit parse tests + 2 live HTTP smoke tests (skip without API key).
+
+### Phase 2 (commit 56c9ddd)
+
+`AgentSession` consumes `~/.knes/ff1-landmarks.json`.
+- New `runtime/LandmarkContext.kt` — pure formatter; groups by kind (TOWN →
+  CASTLE → DUNGEON → NPC_KING → NPC_SHOPKEEPER → ...), shows world coords +
+  `mapIdInterior` destination for entries, `[visited]` flag, note truncated to
+  60 chars. Returns null on empty memory.
+- `AgentSession` constructor: `landmarkMemory: LandmarkMemory = LandmarkMemory()`.
+  Default loads from disk; tests pass tmp file.
+- Injection in 2 places: advisor obs (alongside warp-tile section) and
+  executor input prompt.
+- Main.kt wires `LandmarkMemory()` into AgentSession.
+- 5 LandmarkContext tests.
+
+### Salience + LandmarkMemory fix (commit 61328df)
+
+Two correlated bugs blocking Phase 1.5 end-to-end validation:
+
+1. `LandmarkMemory.recordIfNew` discarded duplicates instead of upgrading. So
+   when `SalienceStrategy` priority 2 auto-recorded a tile-tagged candidate
+   `(visited=false, mapIdInterior=null)`, then later `handleNewInterior` tried
+   to record `(visited=true, mapIdInterior=8)` at the same coords, the strong
+   confirmation was thrown away. Stale tile-tags stayed `visited=false` forever.
+   - Fix: monotonic field upgrade on dup (visited=OR, mapIdInterior fills if
+     null, note + runId fill if blank). Return value still `false` (no new
+     record added) — call sites unaffected.
+
+2. `SalienceStrategy.pickOverworldTarget` priority 1 picked any unvisited
+   landmark by manhattan distance regardless of source. With 120 stale
+   tile-tagged records from prior runs scattered across the map (X 100-200,
+   Y 155-236), priority 1 always returned a far unreachable point. Agent
+   idled → plateau in 3 runs at $0.
+   - Fix: priority 1 split into 1A (`mapIdInterior != null` confirmed entries,
+     no distance limit) and 1B (`mapIdInterior == null` tile-tagged, manhattan
+     ≤ `tileTaggedDistanceLimit=40` = 2 × frontierRadius).
+
+5 new tests (3 SalienceStrategy + 2 LandmarkMemory). One existing test updated
+to set `mapIdInterior=8` for its "far landmark wins" semantic.
+
+---
+
+## Read first (next session, in this order)
+
+1. **This file**, then `git log --oneline -8 origin/master` to see latest commits.
+2. `knes-agent/src/main/kotlin/knes/agent/explorer/SingleRun.kt:99-105` —
+   `detectTrigger`. Note the `!interiorMemory.hasMapBeenSeen(phase.mapId)` gate.
+3. `~/.knes/ff1-interior-memory.json` — pre-seeded map IDs that block triggers.
+4. `knes-agent/src/main/kotlin/knes/agent/explorer/SalienceStrategy.kt` —
+   priority 1A vs 1B logic; key tunable: `tileTaggedDistanceLimit` (default 40).
+5. `knes-agent/src/main/kotlin/knes/agent/runtime/LandmarkContext.kt` —
+   what the agent now sees in its prompt.
+6. `~/.knes/ff1-landmarks.json` — live state (currently 120 tile-tagged
+   records from before fix; never confirmed). Backup at
+   `~/.knes/ff1-landmarks.json.before-fix-2026-05-05`.
+
+---
+
+## Top priority for next session
+
+**Trigger gating fix.** `detectTrigger` returns `null` for any interior the
+agent has ever entered before (across all sessions, persistently). To validate
+Phase 1.5 end-to-end, NPC classification must fire on at least one re-entry.
+
+Options:
+
+- **(A) Per-run novelty.** Track `novelMapIdsThisRun: Set<Int>` in `SingleRun`,
+  fire trigger first time agent enters each map THIS run regardless of prior
+  sessions. Bounded re-call (~3-5 maps/run).
+- **(B) Re-classification policy.** Trigger if existing landmarks for that
+  mapId have zero NPC entries (suggesting prior classification was no-op stub).
+  Cleaner but couples explorer to landmark-memory state.
+- **(C) Force-fresh fixture.** Clear `~/.knes/ff1-interior-memory.json` at
+  campaign start. Validates the pipeline once; doesn't scale.
+
+(A) is probably right. Sketch:
+
+```kotlin
+// in SingleRun
+private val novelMapIdsThisRun: MutableSet<Int> = mutableSetOf()
+
+private fun detectTrigger(phase: FfPhase, ram: Map<String, Int>): Trigger? = when {
+    phase is FfPhase.Indoors && phase.mapId !in novelMapIdsThisRun ->
+        Trigger.NewInteriorEntered(phase.mapId).also { novelMapIdsThisRun += phase.mapId }
+    phase is FfPhase.Battle -> Trigger.BattleEntered
+    isDialogBoxOpen(ram) -> Trigger.DialogBoxVisible
+    else -> null
+}
+```
+
+Then run live to validate Phase 1.5: at least one `interior_entry_<mapId>_<X>_<Y>`
+record in `~/.knes/ff1-landmarks.json` with `mapIdInterior != null` and at
+least one Haiku-classified `NPC_*` landmark, total cost > $0.
+
+## Open work / tech debt
+
+1. **Memory files non-atomic save.** All persistent memories use direct
+   `writeText()` — crash mid-save corrupts. Need write-temp-then-rename.
+2. **Explorer doesn't accumulate warps cross-run.** Warps detected by
+   AgentSession persist; explorer's discoveries don't (it doesn't write to
+   `OverworldWarpMemory`).
+3. **`isDialogBoxOpen` returns false.** `Trigger.DialogBoxVisible` never fires.
+   Need a real RAM signature or screenshot-diff heuristic.
+4. **Anthropic prompt caching still no-op.** Koog 0.6.x lacks `cache_control`
+   field on `SystemAnthropicMessage`. Custom HttpClient interceptor or upgrade
+   to Koog ≥0.7.
+5. **AgentSession + landmarks not yet validated live.** `LandmarkContext`
+   injection is unit-tested but the agent's actual behavior with populated
+   landmarks (does it route to known towns? does Garland stuck-pattern improve?)
+   is unverified.
+
+---
+
+## Test status
+
+```
+./gradlew :knes-agent:test
+```
+
+**191 pass / 2 pre-existing failures / 7 skipped** (master HEAD f13bd98).
+
+Pre-existing failures: `Coneria8VisualDiffTest`, `ConeriaTownEmpiricalDiscoveryTest`.
+
+```
+./gradlew :knes-agent:test --tests "*Live*"   # opt-in, needs ANTHROPIC_API_KEY
 ```
 
 ---
 
-## What's WORKING (do not regress)
+## Live evidence: campaign 2026-05-05T16:45 (post-fix)
 
-### Code
-
-- **V5.20 walkOverworldTo abort signal** — `ok=true` only when the entered
-  interior matches (targetX, targetY); otherwise `ok=false` with
-  "UNEXPECTED interior entry at world=(X,Y)" recovery hint.
-- **V5.23 cross-turn session memory** in `AgentSession`:
-  `failedWarpTiles: MutableSet<Pair<Int,Int>>`. Regex on `drainedCalls` for
-  `world=(X,Y) ... targeted=false` adds tiles. Both advisor and executor
-  observations are augmented with "Session memory — known FF1 warp tiles
-  to avoid as targets or route-throughs: (X,Y), ...".
-- **V5.24/V5.28 deterministic fog block** — exactly 1 tile per warp.
-  BFS pathfinder honours `FogOfWar.isBlocked`, so the agent reroutes
-  without depending on prompt compliance.
-- **V5.25 persistent warp memory** — `OverworldWarpMemory` reads/writes
-  `~/.knes/ff1-overworld-warps.json`. Loaded on AgentSession startup,
-  preloads `failedWarpTiles` + fog blocks. Saved immediately on every
-  detection so a crash mid-run keeps the discovery.
-- **V5.26 intent-only @Tool surface** — `walkInteriorVision`,
-  `walkOverworldVision`, `walkUntilEncounter` are retained as Kotlin
-  methods but lack `@Tool` annotations. Koog does not surface them. The
-  planner LLM only sees: `pressStartUntilOverworld`, `walkOverworldTo`,
-  `exitInterior`, `battleFightAll`, `findPath`, `findPathToExit`,
-  `askAdvisor`, `getState`.
-- **V5.6 foundation** (sm_player_x/y, mapflags bit 0) — never broke,
-  underlies all of the above.
-
-### Prompts
-
-- Executor system prompt (`ExecutorAgent.ff1ExecutorSystemPrompt`):
-  - STUCK DETECTION (V5.21): 3 identical consecutive calls without phase
-    change → askAdvisor.
-  - UNINTENDED INTERIOR RECOVERY (V5.21): when walkOverworldTo returns
-    "UNEXPECTED interior entry at (X,Y)", call exitInterior until
-    Overworld then re-route avoiding (X,Y).
-  - PROPAGATE FAILURE TO ADVISOR (V5.22): include warp coords in
-    askAdvisor reason so the advisor reroutes.
-  - GOAL FOCUS (V5.22+V5.26): terminal goal = Battle.enemyId=0x7C; random
-    encounters are progress; after 5 failed exits askAdvisor.
-  - T/C ENTRY IS LEGITIMATE (V5.27): pick a visible T/C neighbour as
-    walkOverworldTo target when otherwise BLOCKED.
-- Advisor system prompt (`AdvisorAgent.systemPrompt`):
-  - GROUND TRUTH ONLY (V5.21): no FF1 coords from training data.
-  - Matching corollaries to executor's V5.21/V5.22/V5.26/V5.27 rules.
-  - Removed V5.21's hard-coded "go WEST to x=140 grass corridor"
-    instruction — that route was the source of the (145,152) warp trap.
-
----
-
-## Open blockers (post-iter14)
-
-### 1. V5.31 panic-reset guard (top priority for next session)
-
-iter14 turn 7 evidence: agent called `pressStartUntilOverworld` from
-inside Indoors as a "hard warp trap reset", cost the entire run. The
-skill is supposed to be no-op when worldX != 0 + char1_hpLow != 0,
-but the LLM still chose it. AgentSession-side guard: reject the call
-unless phase == TitleOrMenu, return `BLOCKED, only valid on title
-screen`. ~10-line change to SkillRegistry. Without this, every run
-where the agent panics burns the budget twice (once on the failed
-exploration, once on starting over).
-
-### 2. exploreInteriorFrontier in iter14 didn't escape
-
-V5.29 was called 4× live. Agent still ended OutOfBudget inside the
-interior. Possible causes:
-  - InteriorMemory.visited doesn't include all reachable tiles, BFS
-    keeps proposing the same direction → "stuck: same blocked dir
-    twice" guard fires too early
-  - The town overlay's true exit isn't reachable through the BFS
-    passable mask (decoder limitation per V3.0 13% data)
-  - 4× 64-step ceiling = 256 frontier steps; might need 128 each
-Need a focused trace inspection on the iter14 explore log lines
-(`exploreInteriorFrontier.target` + `.step` in toolCallLog) to see
-which case fires.
-
-### 3. Iterative warp discovery is expensive
-
-After 12 iters at $1-2 each, the persistent warp memory has 3 tiles:
-(145,152), (147,153), (144,153). Geography:
+State setup: cleared `~/.knes/ff1-landmarks.json` to empty (backup at
+`.before-fix-2026-05-05`), kept other memory files.
 
 ```
-Y=151  .  .  .  .  .
-Y=152  .  W  .  .  .       W = warp
-Y=153  W  .  W  .  .
+[campaign] FINAL: CampaignResult(
+  outcome=Plateau, runsExecuted=16,
+  coverage=CoverageStats(terrainTilesKnown=65502, warpsKnown=4,
+    landmarksKnown=79, landmarksVisited=0, interiorMapsExplored=3),
+  totalCostUsd=0.0)
 ```
 
-Likely 2-3 more in the same zone (south edge of Coneria proper). Each
-iteration discovers one more tile, then OutOfBudget. Cheaper option:
-write a one-shot ROM-walker tool that reads the FF1 entry-tile table
-(or seeds from Disch disassembly) and pre-populates the JSON. Defer
-until V5.29 lands; if the agent can escape interiors deterministically,
-the warp count matters less (entering Coneria becomes traversal, not
-trap).
+Per-run stop reason distribution (16 runs): Idle ×7, LocalPlateau ×4,
+UnknownMapTrap ×5 — meaningful improvement over the 3-run pre-fix plateau.
 
-### 3. Phase-classifier confusion at warp boundaries
-
-Iter12 turn 5+ phase=Overworld(144,153) but agent narrates
-"Stuck in interior at (144,153)". RAM check shows mapflags=1 (in
-standard map) yet the classifier returns Overworld. Suspect: brief
-warp followed by rapid exit-back-to-overworld leaves RAM in a
-transitional state at observation time. Symptom is benign (executor
-falls back to walkOverworldTo, BFS still routes) but adds noise to
-the trace. Worth a deeper RAM-diff probe later.
-
-### 4. Anthropic prompt caching deferred
-
-Decompiled jar confirms Koog 0.6.1 `SystemAnthropicMessage` has no
-`cache_control` field; `PromptCacheConfig` is a no-op. Implementing
-Anthropic prompt caching means either upgrading Koog (>=0.7?) or
-writing a custom Ktor `HttpClient` that injects `cache_control:
-{"type":"ephemeral"}` into the JSON body before send.
-Estimated 70-90% reduction on input tokens for repeated system
-prompts. Significant cost win, fragile implementation.
-
-### 5. Vision skills retained as dormant code
-
-`walkInteriorVision` / `walkOverworldVision` / `walkUntilEncounter`
-methods exist in SkillRegistry without `@Tool` annotations. If V5.29
-ExploreInteriorFrontier proves robust, delete the three methods and
-their backing classes (`WalkInteriorVision.kt`,
-`WalkOverworldVision.kt`, `VisionInteriorNavigator.kt`,
-`VisionOverworldNavigator.kt`). Keep a note in HANDOFF if intentional.
-
----
-
-## Iteration log (this session)
-
-| Iter | Variant | Phases reached | New warps | Tools (highlights) |
-|---|---|---|---|---|
-| 1 | V5.19 baseline | mapId=8 → mapId=24 stuck | (145,152) | walkOverworldTo 11, exitInterior 437, walkInteriorVision 446 |
-| 2 | V5.21 prompts | mapId=24 stuck | — | exitInterior 306, walkInteriorVision 261 |
-| 3 | V5.20 ok=false | mapId=24 stuck | — | walkOverworldVision 17 (FIRST ever) |
-| 4 | V5.21 + advisor reroute | mapId=24 stuck | — | walkOverworldTo 21, exitInterior 455 |
-| 5 | V5.23 maxIter=4 | ITERATION_CAP every turn | — | regression, hotfix → V5.23.1 |
-| 6 | V5.23.1 maxIter=10 | mapId=24 stuck | — | session memory printed (works) |
-| 7 | V5.24 fog 3x3 + maxIter=16 | mapId=24 stuck | — | fog markBlocked logged |
-| 8 | V5.25 preseeded (145,152) | mapId=24 (via walkUntilEncounter) | — | walkUntilEncounter bypassed fog |
-| 9 | V5.26 intent-only | (152,151) — got past warp! | — | walkOverworldTo 49, NO vision |
-| 10 | V5.27 T/C entry rule | (147,153) trip | (147,153) | walkOverworldTo 37, exitInterior 1741 |
-| 11 | 2 warps preseed | sealed at (145,153) | — | 3x3 overlap bug |
-| 12 | V5.28 fog 1x1 | (144,153) trip | (144,153) | exitInterior 2200, no escape |
-| 13 | preseeded 3 warps | sealed at (145,153) | — | overworld trapped, fog blocks all paths |
-| 14 | V5.29 + V5.30 | (147,154) reached | (147,154) | exploreInteriorFrontier 4× LIVE; panic-reset cost the run |
+State restored after test: `cp ff1-landmarks.json.before-fix-2026-05-05
+ff1-landmarks.json` (120 records back).
 
 ---
 
 ## Useful CLI
 
 ```bash
-# Live run (needs ANTHROPIC_API_KEY)
-KNES_RUN_DIR=$(pwd)/docs/superpowers/runs/<date>-<topic> \
-  ./gradlew :knes-agent:run \
-    --args="--rom=/Users/askowronski/Priv/kNES/roms/ff.nes --profile=ff1 \
-            --max-skill-invocations=30 --wall-clock-cap-seconds=480 \
-            --cost-cap-usd=2.0"
+# Build memory cheaply (Haiku, no Anthropic-Opus). Default 20 runs / $1 cap.
+./gradlew :knes-agent:runExplorer
 
-# Trace summary
-python3 -c "
-import json, re
-events = [json.loads(l) for l in open('PATH/trace.jsonl')]
-counts = {}
-for e in events:
-    for tc in e.get('toolCalls') or []:
-        s = tc if isinstance(tc, str) else json.dumps(tc)
-        m = re.match(r'(\\w+)', s)
-        if m: counts[m.group(1)] = counts.get(m.group(1), 0) + 1
-print('TOOLS:', counts)
-for e in events: print(f'turn={e[\"turn\"]} {e[\"role\"]} {e[\"phase\"]}')"
+# Existing agent. Reads landmarks.json on startup (Phase 2).
+./gradlew :knes-agent:runAgent
 
-# Inspect persistent warp memory
-cat ~/.knes/ff1-overworld-warps.json
+# Tests
+./gradlew :knes-agent:test                                   # full suite
+./gradlew :knes-agent:test --tests "*Live*"                  # opt-in live
+./gradlew :knes-agent:test --tests "*AnthropicHaikuConsult*" # parsing only
 
-# Tests (2 pre-existing failures expected: Coneria8VisualDiffTest,
-# ConeriaTownEmpiricalDiscoveryTest)
-./gradlew :knes-agent:test
+# Inspect live memory
+jq '.landmarks | length' ~/.knes/ff1-landmarks.json
+jq '.landmarks | group_by(.kind) | map({k: .[0].kind, n: length, confirmed: (map(select(.mapIdInterior != null)) | length)})' ~/.knes/ff1-landmarks.json
+jq '.' ~/.knes/ff1-overworld-warps.json
 ```
 
 ---
 
 ## Repo paths
 
-- Worktree: `/Users/askowronski/Priv/kNES-ff1-agent-v2`
+- Main: `/Users/askowronski/Priv/kNES`
+- Worktree (ff1-agent-v2-4, now identical to master): `/Users/askowronski/Priv/kNES-ff1-agent-v2`
 - ROM (gitignored): `/Users/askowronski/Priv/kNES/roms/ff.nes`
-- Persistent warp memory: `~/.knes/ff1-overworld-warps.json`
-- Persistent interior memory: `~/.knes/ff1-interior-memory.json`
-- Iteration runs: `docs/superpowers/runs/2026-05-{04,05}-*/`
+- Persistent memory: `~/.knes/ff1-{overworld-terrain,landmarks,blockages,overworld-warps,interior-memory}.json`
+- Run traces: `~/.knes/runs/<ISO-timestamp>/trace.jsonl` (override via `KNES_RUN_DIR`)
+
+## Test fixtures
+
+- `ff1-post-boot.savestate` — overworld at (146, 158)
+- `ff1-coneria-interior-discovery.savestate` — inside mapId=8
 
 ---
 
-## First message to send to the next session
+## First message to send to next session (suggestion)
 
-> Resume FF1 Koog agent V5.30 from `HANDOFF.md`. 14 iterations this
-> session, architecture now stable: intent-only skill surface (V5.26),
-> persistent warp memory across runs (V5.25, currently 4 Coneria
-> tiles), deterministic interior explorer (V5.29), fog destination-OK
-> for deliberate warp entry (V5.30). Goal (Garland) not reached — every
-> run still OutOfBudget around south Coneria. Top priority next:
-> V5.31 AgentSession-side guard against `pressStartUntilOverworld` in
-> non-TitleOrMenu phases (iter14 panic-reset cost a full run). Then
-> either continue iterative warp discovery (~$1-2/iter) OR research
-> FF1 ROM entry-tile table for one-shot manual seed. Conversation in
-> Polish; user prefers short iterations, evidence-based conclusions,
-> commits per closed phase.
-
----
-
-## Cross-Run Explorer (Phase 1) — landed 2026-05-05
-
-New flow: `./gradlew :knes-agent:runExplorer` builds persistent memory across N
-cheap runs, then `./gradlew :knes-agent:runAgent` (existing) consumes it.
-
-Memory files in `~/.knes/`:
-- `ff1-overworld-terrain.json` — overworld tile types, cross-run
-- `ff1-landmarks.json` — towns, castles, dungeons, NPCs, stairs
-- `ff1-blockages.json` — failed attempts + run start directions
-- `ff1-overworld-warps.json` — existing, unchanged shape (NOTE: explorer does
-  not yet auto-populate this; warps are discovered by AgentSession only)
-- `ff1-interior-memory.json` — existing, unchanged
-
-Architecture: `ExplorerSession` (campaign, multiple `SingleRun`s) → hard-rule
-restart (mapId trap, party wipe, idle, plateau) → salience-driven targets
-(unvisited landmarks → viewport TOWN/CASTLE → frontier → diversify) →
-deterministic walk via existing skills + Haiku consult on triggers.
-
-Spec: `docs/superpowers/specs/2026-05-05-cross-run-explorer-design.md`
-Plan: `docs/superpowers/plans/2026-05-05-cross-run-explorer.md`
-
-Stub: `AnthropicHaikuConsult` returns no classifications in MVP. Phase 1.5
-wires real Haiku 4.5 calls for interior NPC classification + dialog reading.
-Phase 2 modifies `AgentSession` to consume `landmarks.json` for goal routing.
-
-Smoke-run result (2026-05-05): 17 runs, `CampaignResult(outcome=Plateau)`,
-120 landmarks discovered, 65502 terrain tiles mapped, memory files written.
-
-### MVP debt (known issues, deferred to follow-up commits)
-
-- Memory classes use non-atomic save (mirrors existing OverworldWarpMemory).
-  Atomic save (write-tmp + rename) needed before crash-mid-save risks data loss.
-- `BlockageMemory.pathTriedRecentDirections` KDoc says "most recent" but is
-  insertion-order; harmless since SingleRun records once per run.
-- `SingleRun` does NOT pass warps it discovers into `OverworldWarpMemory`
-  cross-run persistence. Warps are still detected per-run via fog blocks but
-  do not accumulate across explorer runs (only across AgentSession runs).
-- `isDialogBoxOpen` heuristic returns `false` (stub) — Trigger.DialogBoxVisible
-  never fires until refined.
+> Worktree `kNES-ff1-agent-v2` on branch `ff1-agent-v2-4` is now identical to
+> master at `f13bd98` (PR #102 merged: Phase 1.5 real Haiku, Phase 2 AgentSession
+> reads landmarks, salience+landmark-memory fix). End-to-end pipeline blocked
+> on `detectTrigger` gating: `interiorMemory.hasMapBeenSeen` returns true for
+> all 3 pre-seeded maps so `NewInteriorEntered` never fires and Haiku is never
+> called ($0 every campaign). Top priority: add per-run `novelMapIdsThisRun`
+> to `SingleRun.detectTrigger`. Then validate Phase 1.5 + Phase 2 with a live
+> `runExplorer` followed by a live `runAgent` with populated `landmarks.json`.
+> Conversation in Polish; user prefers PR flow + tests-first + commit per closed phase.
