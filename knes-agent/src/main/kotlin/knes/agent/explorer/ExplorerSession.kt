@@ -88,9 +88,11 @@ class ExplorerSession(
             if (totalCost >= budget.maxTotalCostUsd) return result(CampaignOutcome.OutOfBudget, runs, totalCost)
             if (consecutiveZero >= budget.coveragePlateauRuns) return result(CampaignOutcome.Plateau, runs, totalCost)
 
-            emulatorSession.loadState(savedState)
-            val before = snapshotCoverage()
             val runId = "run-${runs + 1}-${Instant.now()}"
+            check(emulatorSession.loadState(savedState)) {
+                "loadState failed for $runId — savedState may be corrupt or version-incompatible"
+            }
+            val before = snapshotCoverage()
             println("[campaign] starting $runId; coverage=$before")
 
             val singleRun = SingleRun(
