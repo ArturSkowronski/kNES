@@ -8,6 +8,7 @@ import knes.agent.perception.Landmark
 import knes.agent.perception.LandmarkKind
 import knes.agent.perception.LandmarkMemory
 import knes.agent.perception.OverworldTerrainMemory
+import knes.agent.perception.OverworldWarpMemory
 import knes.agent.perception.TileType
 import knes.agent.perception.ViewportMap
 import java.nio.file.Files
@@ -196,5 +197,64 @@ class SalienceStrategyTest : FunSpec({
         // We expect a real frontier tile. 146,158 yields itself (distance 0). That's the chosen target.
         target.first shouldBe 146
         target.second shouldBe 158
+    }
+
+    test("priority 0: known warp not yet entered this run is targeted, beating priority 1A") {
+        // Both a confirmed entry (priority 1A, distance 50) and a known warp (priority 0,
+        // distance 6) exist; priority 0 must win because OverworldWarpMemory carries
+        // cross-session evidence the warp triggers an interior, while a confirmed entry
+        // at (200,200) might still need the matching warp tile to be walked over.
+        val landmarks = LandmarkMemory(file = tmp("l"))
+        landmarks.record(Landmark(id = "far_confirmed", kind = LandmarkKind.TOWN_ENTRY,
+            worldX = 200, worldY = 200, mapIdInterior = 8, visited = false))
+        val warps = OverworldWarpMemory(file = tmp("w"))
+        warps.record(worldX = 145, worldY = 152, mapId = 8)
+        val strategy = SalienceStrategy(
+            terrainMemory = OverworldTerrainMemory(file = tmp("t")),
+            landmarkMemory = landmarks,
+            blockageMemory = BlockageMemory(file = tmp("b")),
+            fog = FogOfWar(),
+            warpMemory = warps,
+        )
+        val target = strategy.pickOverworldTarget(currentXY = 146 to 158,
+            viewport = viewportAllGrass(146 to 158))
+        target shouldBe (145 to 152)
+    }
+
+    test("priority 0: warp already entered this run is skipped — falls through to next priority") {
+        val landmarks = LandmarkMemory(file = tmp("l"))
+        landmarks.record(Landmark(id = "far_confirmed", kind = LandmarkKind.TOWN_ENTRY,
+            worldX = 200, worldY = 200, mapIdInterior = 8, visited = false))
+        val warps = OverworldWarpMemory(file = tmp("w"))
+        warps.record(worldX = 145, worldY = 152, mapId = 8)
+        val strategy = SalienceStrategy(
+            terrainMemory = OverworldTerrainMemory(file = tmp("t")),
+            landmarkMemory = landmarks,
+            blockageMemory = BlockageMemory(file = tmp("b")),
+            fog = FogOfWar(),
+            warpMemory = warps,
+        )
+        val target = strategy.pickOverworldTarget(currentXY = 146 to 158,
+            viewport = viewportAllGrass(146 to 158),
+            enteredWarpsThisRun = setOf(145 to 152))
+        // (145,152) is excluded; falls through to priority 1A (confirmed entry at 200,200).
+        target shouldBe (200 to 200)
+    }
+
+    test("priority 0: closest of multiple warps wins") {
+        val warps = OverworldWarpMemory(file = tmp("w"))
+        warps.record(worldX = 145, worldY = 152) // distance 7
+        warps.record(worldX = 100, worldY = 100) // distance 104
+        warps.record(worldX = 150, worldY = 160) // distance 6
+        val strategy = SalienceStrategy(
+            terrainMemory = OverworldTerrainMemory(file = tmp("t")),
+            landmarkMemory = LandmarkMemory(file = tmp("l")),
+            blockageMemory = BlockageMemory(file = tmp("b")),
+            fog = FogOfWar(),
+            warpMemory = warps,
+        )
+        val target = strategy.pickOverworldTarget(currentXY = 146 to 158,
+            viewport = viewportAllGrass(146 to 158))
+        target shouldBe (150 to 160)
     }
 })

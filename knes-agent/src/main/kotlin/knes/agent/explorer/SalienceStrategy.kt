@@ -6,6 +6,7 @@ import knes.agent.perception.Landmark
 import knes.agent.perception.LandmarkKind
 import knes.agent.perception.LandmarkMemory
 import knes.agent.perception.OverworldTerrainMemory
+import knes.agent.perception.OverworldWarpMemory
 import knes.agent.perception.TileType
 import knes.agent.perception.ViewportMap
 import java.time.Duration
@@ -21,15 +22,32 @@ class SalienceStrategy(
     private val landmarkMemory: LandmarkMemory,
     private val blockageMemory: BlockageMemory,
     private val fog: FogOfWar,
+    private val warpMemory: OverworldWarpMemory? = null,
     private val recentFailureWindow: Duration = Duration.ofMinutes(10),
     private val frontierRadius: Int = 20,
     /** Distance ceiling for tile-tagged landmark candidates (mapIdInterior == null).
      *  Confirmed entries (mapIdInterior != null) ignore this. Default 2 × frontierRadius. */
     private val tileTaggedDistanceLimit: Int = 40,
 ) {
-    fun pickOverworldTarget(currentXY: Pair<Int, Int>, viewport: ViewportMap): Pair<Int, Int> {
+    fun pickOverworldTarget(
+        currentXY: Pair<Int, Int>,
+        viewport: ViewportMap,
+        enteredWarpsThisRun: Set<Pair<Int, Int>> = emptySet(),
+    ): Pair<Int, Int> {
         val recentlyFailed = blockageMemory.recentlyFailedTargets(recentFailureWindow)
         val asKey: (Pair<Int, Int>) -> String = { "${it.first},${it.second}" }
+
+        // Priority 0: known warp tile not yet entered this run. OverworldWarpMemory
+        // carries cross-session evidence that the tile triggers an interior — without
+        // this, the explorer's deterministic salience plateaus at 17 runs / 0 entries
+        // because BFS routes around warp tiles toward viewport TOWN/CASTLE candidates
+        // (priority 2) that may be unreachable. Targeting warps directly turns the
+        // explorer from lucky discovery into purposeful coverage.
+        warpMemory?.all()
+            ?.filter { it !in enteredWarpsThisRun }
+            ?.filter { asKey(it) !in recentlyFailed }
+            ?.minByOrNull { manhattan(currentXY, it) }
+            ?.let { return it }
 
         val unvisited = landmarkMemory.findByKind(
                 LandmarkKind.TOWN_ENTRY, LandmarkKind.CASTLE_ENTRY, LandmarkKind.DUNGEON_ENTRY,
