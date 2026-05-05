@@ -241,6 +241,30 @@ class SalienceStrategyTest : FunSpec({
         target shouldBe (200 to 200)
     }
 
+    test("priority 0: warp in recentlyFailed is still retried — only enteredWarpsThisRun gates it") {
+        // Post-loadState the emulator drops a few input frames (V5.2 "input not
+        // responding"). On run 1 the very first attempt at the closest warp fails
+        // and the warp lands in recentlyFailed (10-minute global window). If we
+        // filtered priority 0 by recentlyFailed, every subsequent run for the next
+        // 10 minutes would skip the real Coneria warp and idle out. enteredWarps-
+        // ThisRun is the correct gate.
+        val warps = OverworldWarpMemory(file = tmp("w"))
+        warps.record(worldX = 145, worldY = 152, mapId = 8)
+        val blockages = BlockageMemory(file = tmp("b"))
+        blockages.record(runId = "prev", from = 146 to 158, attemptedTo = "145,152",
+            result = "input not responding")
+        val strategy = SalienceStrategy(
+            terrainMemory = OverworldTerrainMemory(file = tmp("t")),
+            landmarkMemory = LandmarkMemory(file = tmp("l")),
+            blockageMemory = blockages,
+            fog = FogOfWar(),
+            warpMemory = warps,
+        )
+        val target = strategy.pickOverworldTarget(currentXY = 146 to 158,
+            viewport = viewportAllGrass(146 to 158))
+        target shouldBe (145 to 152)
+    }
+
     test("priority 0: closest of multiple warps wins") {
         val warps = OverworldWarpMemory(file = tmp("w"))
         warps.record(worldX = 145, worldY = 152) // distance 7
