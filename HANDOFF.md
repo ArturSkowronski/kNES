@@ -1,99 +1,110 @@
-# FF1 Koog Agent — Handoff (mapId fix shipped, V5.2 quirk blocks live verification)
+# FF1 Koog Agent — Handoff (Phase 1.5 fully verified live, 2026-05-05 night)
 
-**Master HEAD:** `7be39be` — PR #108 merged (PR #106 + #107 + #108 this session; #105 closed unmerged)
+**Master HEAD:** `ab0b677` — PR #109 merged. **Four PRs this session: #106 + #107 + #108 + #109** (#105 closed unmerged).
 **Required env:** `ANTHROPIC_API_KEY` (live runs only; tests run without it)
 
 ---
 
-## TL;DR — three PRs harden the explorer; one bug verified live, one blocked
+## TL;DR — Phase 1.5 mapId mismatch closed; both bugs verified live
 
-Phase 1.5 mapId-mismatch investigation closed for code; live verification partially complete.
+The investigation that #105 (diagnostic, closed unmerged) opened is now fully closed. Multi-stage warp at (146, 152) → mapId=8 (overlay) → mapId=24 (Coneria Castle) is correctly handled.
 
 ```
-7be39be  PR #108 merge: priority 0 must not filter recentlyFailed (V5.2 quirk)
+ab0b677  PR #109 merge: post-loadState warm-up — bridges V5.2 input-frame drop
 30fb464  PR #107 merge: salience priority 0 — target known warp tiles deliberately
+7be39be  PR #108 merge: priority 0 must not filter recentlyFailed (V5.2 quirk)
 fc25534  PR #106 merge: tag landmarks with live mapId; skip Haiku on wipe / overworld
-26f8b1d  docs(handoff): close prior session — Phase 1.5 validated end-to-end
 ```
 
-PR #105 (println diagnostic) closed without merge — served its purpose, the
-captured data drove #106; printlns aren't worth keeping in master.
+(Also `a852f23` mid-session handoff, then `ab0b677` final.)
+
+### Live evidence — overworld campaign post-warmup, cleaned warp memory
+
+11-run campaign with cleared landmarks/blockages/interior, only the manually-annotated `(145, 152)` warp:
+
+```
+landmarks final state:
+- 7× NPC_KING       mapId=24 — "Crowned figure on throne in center of [room|chamber]"
+- 1× STAIRS_DOWN    mapId=24 — "Staircase descending..."
+- 1× TOWN_ENTRY     mapIdInterior=8  worldXY=(146,152)  visited=true
+totalCostUsd ≈ $0.005, runs 2-11 entered interior, every run hit UnknownMapTrap exit
+```
+
+This is the morning campaign's claim made true:
+- Entry tile recorded with **live RAM mapId at entry moment** (= 8, Coneria Town overlay).
+- Haiku post-explore screenshot caught the Castle (the agent walked through stairs at mapId=8 (12,18) into mapId=24 during the 80-step explore).
+- Haiku landmarks tagged with **live RAM mapId at screenshot moment** (= 24, NOT the trigger's stale 8).
+
+Pre-fix morning campaign: throne was tagged `mapId=8` (wrong). Post-fix tonight: throne tagged `mapId=24` (right).
 
 ---
 
-## What was wrong (root cause from #105 diagnostic)
+## Bugs fixed this session (recap)
 
-Phase 1.5's morning campaign reported `interior_entry_8_145_152` (mapIdInterior=8, kind=TOWN_ENTRY) and Haiku then described "throne room with crowned figure" — inconsistent with mapId=8 being Coneria Town. Two co-occurring bugs in `handleNewInterior`:
+### A. Stale `t.mapId` tag on landmarks (PR #106) — verified live ✅
+`Trigger.NewInteriorEntered.mapId` captures the moment phase becomes `Indoors`. FF1 multi-stage warps briefly expose a transient `currentMapId` during the engine handoff. By the first `ramSnapshot()` inside `handleNewInterior` the value has stabilised. Both the entry landmark and the Haiku call now use the live RAM mapId, falling back to `t.mapId` only if RAM is unreadable. `handleNewInterior` returns the effective mapId so the caller adds **both** trigger and stabilised mapIds to `novelMapIdsThisRun`.
 
-### A. Stale `t.mapId` tag
-`Trigger.NewInteriorEntered.mapId` is captured the instant `phase` becomes `Indoors`. FF1 multi-stage warps briefly expose a transient `currentMapId`: `(145,152)` Coneria warp → `mapId=8` outer overlay → `mapId=24` inner (per the V5.25 comment in `OverworldWarpMemory.kt:13`). By the first `ramSnapshot()` inside `handleNewInterior` the value has stabilised, but the entry landmark + Haiku call were both still using `t.mapId`.
+### B. PartyWipe / overworld-return corrupts Haiku call (PR #106) — verified live ✅
+A wipe inside `exploreInteriorFrontier` returns the player to the title screen; `getScreen()` then captures that frame and Haiku misclassifies UI text. New `decideClassification` companion-helper gates the Haiku call on `mapflags=1 && hpSum > 0`. **Live evidence (interior fixture campaign):** run-1 stop=PartyWiped → cost=$0.0 (was $0.000578 pre-fix), only the entry landmark recorded, zero "NEW GAME" garbage.
 
-**Fix:** entry landmark + classification now use `ram["currentMapId"]` (falling back to `t.mapId` only if RAM unreadable). `handleNewInterior` returns the effective mapId so the caller adds **both** trigger and stabilised mapIds to `novelMapIdsThisRun` (avoids re-firing the trigger after the engine completes the warp).
+### C. Explorer plateau at 0 entries (PRs #107 + #108 + #109) — verified live ✅
+Three independent issues in the deterministic explorer:
 
-### B. PartyWipe / overworld-return during 80-step explore corrupts Haiku
-A wipe inside `exploreInteriorFrontier` returns the player to the title screen; the post-explore `getScreen()` captures that frame and Haiku misclassifies UI text. **Live evidence (run-1, ff1-coneria-interior-discovery fixture):** `NPC_GENERIC` recorded with note _"Small figure sprite to the left of 'NEW GAME' text"_, tagged mapId=8.
-
-**Fix:** new `decideClassification` companion-helper gates the Haiku call on `mapflags=1 && hpSum > 0`. Returns null → skip classification, no Haiku cost, no garbage landmarks.
-
----
-
-## Live verification status
-
-| Bug | Verified live? | Evidence |
-|---|---|---|
-| **B (PartyWipe gate)** | ✅ | 20-run interior-fixture campaign post-#106: run-1 stop=PartyWiped cost=**$0.0** (was $0.000578); only entry landmark recorded, zero "NEW GAME" garbage |
-| **A (live mapId tag)** | ⚠️ unit-tested only | Fixture savestate (146,152) enters mapId=8 directly with no transition; multi-stage warp from (145,152) needs an overworld run that reaches the warp tile — blocked by V5.2 quirk below |
-
-20-run interior-fixture campaign produced 30 landmarks: 13 NPC_GENERIC + 4 STAIRS_DOWN + 7 TOWN_ENTRY + 6 stale CASTLE_ENTRY (overworld leftover). Cost $0.0128. **Zero NPC_KING hallucinations** — confirms mapId=8 is genuinely Coneria Town (no throne); morning's "throne room" classification was the multi-stage-warp staleness now fixed.
+1. **#107 — salience priority 0 (known warps).** `OverworldWarpMemory` carries cross-session evidence that specific tiles trigger interiors, but salience never used it. Now explicit priority 0 in `pickOverworldTarget` picks the closest unvisited-this-run warp before any other heuristic.
+2. **#108 — priority 0 doesn't filter recentlyFailed.** `BlockageMemory.recentlyFailedTargets` has a 10-min global window. The first warp attempt typically failed (V5.2 quirk below), poisoning the warp for the next 10 minutes across runs. Per-run `enteredWarpsThisRun` is the right gate.
+3. **#109 — post-loadState warm-up.** `WalkOverworldTo`'s `INPUT_DEAD_THRESHOLD=3` aborted with "input not responding" on every first walk because the emulator drops input frames after `loadState`. New `WARMUP_FRAMES=30` NOOP step in `ExplorerSession.run` after each `loadState` bridges the threshold.
 
 ---
 
-## V5.2 loadState quirk — blocks overworld live verification
+## Open work / known issues
 
-After PR #107 (priority 0 = known warp tiles) and PR #108 (priority 0 doesn't filter `recentlyFailed`), live overworld campaigns still plateau at **3 runs / 0 entries / $0**.
+### Bogus auto-detected warps in `OverworldWarpMemory`
+Pre-cleanup, `~/.knes/ff1-overworld-warps.json` contained four entries: `(145,152)` (manual annotation, real Coneria warp) plus `(144,153)`, `(147,153)`, `(147,154)` auto-detected. Two of those auto-detected are real (per FF1 ROM), but `(147,154)` triggers a transition to `mapId=0 + mapflags=1` — UnknownMapTrap, not a real interior. Auto-detection in `AgentSession.kt` records every "UNEXPECTED interior entry" without filtering on `mapId != 0`. Cleanup fix: extend the regex (or post-filter) to skip mapId=0.
 
-Trace from blockage memory:
-```
-runId=run-1-22:19, from=(146,158), attemptedTo=(147,154):
-"input not responding: 3 consecutive non-moving steps from (146,158)
- toward (147,154). Likely cause: fixture loadState quirk (V5.2) or
- party physically boxed in by terrain. Fog has been marked accordingly."
-```
+For tonight's verification I manually pruned the warp file to only `(145,152)` so priority 0 would target the real Coneria warp.
 
-The agent doesn't move once in 10 idle iterations after `loadState`. Priority 0 retries the same warp every iteration (intended), but the emulator drops input frames longer than the idle threshold (10 turns) tolerates. Run ends Idle, never enters.
+### UnknownMapTrap exits every overworld run
+Run-2..11 of tonight's campaign each ended `stop=UnknownMapTrap`. The trap fires when `mapflags=1 && mapId !in knownMapIds && consecutiveIdleInTrap >= 3`. The agent enters mapId=8 → walks stairs → mapId=24 → from mapId=24's stairs, transitions to mapId=0 (void, no map data loaded). Three idle frames in mapId=0 → UnknownMapTrap → run ends. This is a real engine state (FF1 doesn't have a defined behaviour for stepping past Castle stairs in our context); we just need a recovery strategy.
 
-This is **the** thing that needs to be fixed to unblock everything else.
+The original Priority D from the prior HANDOFF: V5.31 panic-reset guard restricts `pressStartUntilOverworld` to TitleOrMenu phase; it'd need to also handle "mapflags=1 + mapId=0" or a different escape path.
+
+### Phase 2 LandmarkContext live validation (was Priority B, still untouched)
+`AgentSession` reads `landmarks.json` at startup, but the `LandmarkContext` injection's effect on agent behaviour is unverified. With tonight's known-good landmarks data populated (7× NPC_KING@mapId=24, 1× STAIRS_DOWN, 1× TOWN_ENTRY), this is a good time to run `runAgent` and watch advisor/executor traces.
 
 ---
 
 ## Top priorities for next session
 
-### A. Fix the V5.2 loadState quirk (highest leverage)
-Add a warm-up before the first `deterministicStep` of each run in `ExplorerSession.run`: `~30-60 frames of toolset.sequence([])` (or equivalent NOOP) so the emulator stabilises before the agent reads RAM and tries to walk. Without this, every overworld campaign plateaus at 0 entries regardless of how smart salience is.
+### A. Fix bogus auto-detected warps
+In `AgentSession.kt:194`, the `failedRegex` extracts `world=(X,Y)` from the toolCallLog `walkOverworldTo.aborted` message. The same message includes `mapId=N`. Extend the regex (or split parsing) to also capture mapId; skip recording when mapId == 0. Optionally also add a one-shot cleanup pass on file load to drop existing mapId=0 records.
 
-Alternative: detect "input not responding" inside `SingleRun.execute` and skip incrementing `idleTurns` while the emulator is warming up. Less surgical, more robust.
+### B. Phase 2 LandmarkContext live validation
+Run `./gradlew :knes-agent:runAgent` with the populated landmarks file. Observe whether the advisor's prompt actually uses `LandmarkContext`-injected entries (check the trace's advisor input). If yes → Phase 2 closed. If not → debug LandmarkContext wiring.
 
-Once fixed: re-run `runExplorer` on `ff1-post-boot` overworld savestate, expect run-1 to enter `(147,154)` or `(145,152)` and the entry landmark to be tagged with the **live RAM mapId** (closes Fix A live verification).
+### C. UnknownMapTrap recovery strategy
+With every overworld run ending in mapId=0 trap, the explorer's per-run yield is capped at one classification per run. Recovery options:
+1. `pressStartUntilOverworld` from inside the trap (might work since mapId=0 is degenerate state).
+2. Hard-reset the run via emulator `reset()`. Side effect: loses non-savestate progress, but since explorer reloads savestate per run anyway, acceptable.
+3. Add `mapId=0 + mapflags=1` to `knownMapIds` so the trap doesn't trigger; let exploreInteriorFrontier figure out an exit.
 
-### B. Phase 2 LandmarkContext live validation (was Priority B in prior HANDOFF)
-`AgentSession` reads `landmarks.json` at startup; the `LandmarkContext` injection's effect on agent behaviour is unverified. Run `runAgent` with the populated landmarks file and observe advisor/executor traces.
-
-### C. UnknownMapTrap recovery (was Priority D)
-Run-3 of an earlier validation campaign hit `stop=UnknownMapTrap` (mapId=0, mapflags=1). V5.31 panic-reset guard restricts `pressStartUntilOverworld` to TitleOrMenu phase, so a different escape strategy is needed.
-
-### D. Auto-detected warps may be false positives
-`~/.knes/ff1-overworld-warps.json` has 3 auto-detected entries: `(144,153)`, `(147,153)`, `(147,154)`. Only `(145,152)` is manually annotated as the real Coneria warp. Auto-detection logic in `OverworldWarpMemory` should be reviewed — false-positive warps would make priority 0 pick unreachable / non-warp tiles.
+### D. Coverage instrumentation
+Tonight's campaign had `terrainTilesKnown=0` delta every run because the savestate already contains a full overworld scan. New territory only opens when warp interiors lead somewhere new. Consider a different progress metric — confirmed-entries count, distinct-mapIds-classified count, etc.
 
 ---
 
-## Code architecture (post-#108)
+## Code architecture (post-#109)
 
 ```
 knes-agent/src/main/kotlin/knes/agent/
   explorer/
+    ExplorerSession.kt
+      run() now does:
+        loadState
+        toolset.step(buttons=[], frames=WARMUP_FRAMES=30)   // bridges V5.2 quirk
+        SingleRun(...).execute()
     SingleRun.kt
       handleNewInterior(): returns Int? (effective mapId or null on skip);
-                           tracks enteredWarpsThisRun
+                           tracks enteredWarpsThisRun (entered (cx,cy) before recording)
       Companion:
         decideClassification(triggerMapId, ramAfter): ClassifyDecision?
           - null on hpSum=0 (PartyWipe) or mapflags!=1 (back overworld)
@@ -102,11 +113,10 @@ knes-agent/src/main/kotlin/knes/agent/
     SalienceStrategy.kt
       pickOverworldTarget(currentXY, viewport, enteredWarpsThisRun)
         Priority 0: closest known warp not yet entered this run
-          (no recentlyFailed filter — see #108)
+                    (no recentlyFailed filter — see #108)
         Priority 1A: confirmed entries (mapIdInterior set)
         Priority 1B: tile-tagged candidates within distance limit
         Priority 2-5: unchanged
-    ExplorerSession.kt: salience now constructed with warpMemory
 ```
 
 ---
@@ -114,9 +124,9 @@ knes-agent/src/main/kotlin/knes/agent/
 ## Read-first files (next session, in this order)
 
 1. **This file** + `git log --oneline -8 origin/master`.
-2. `knes-agent/src/main/kotlin/knes/agent/explorer/SingleRun.kt` — handleNewInterior + decideClassification.
-3. `knes-agent/src/main/kotlin/knes/agent/explorer/SalienceStrategy.kt` — priority 0 + comment about V5.2.
-4. The "input not responding" message — likely in `WalkOverworldTo` or `ExploreOverworldFrontier` skill. Find it, understand the threshold, decide warm-up vs idle-skip.
+2. `knes-agent/src/main/kotlin/knes/agent/runtime/AgentSession.kt:194` — `failedRegex`; extend to filter mapId=0.
+3. `knes-agent/src/main/kotlin/knes/agent/perception/OverworldWarpMemory.kt` — consider on-load cleanup of mapId=0 records.
+4. `knes-agent/src/main/kotlin/knes/agent/explorer/SingleRun.kt:117` (handleNewInterior) — verify mapId tagging matches expectations.
 
 ---
 
@@ -126,7 +136,7 @@ knes-agent/src/main/kotlin/knes/agent/
 ./gradlew :knes-agent:test
 ```
 
-**213 pass / 2 pre-existing fail / 7 skipped** (master HEAD `7be39be`).
+**213 pass / 2 pre-existing fail / 7 skipped** (master HEAD `ab0b677`).
 
 Pre-existing failures: `Coneria8VisualDiffTest`, `ConeriaTownEmpiricalDiscoveryTest`.
 
@@ -156,9 +166,9 @@ FF1_SAVESTATE=knes-agent/src/test/resources/fixtures/ff1-coneria-interior-discov
 
 # Inspect live memory
 jq '.landmarks | length' ~/.knes/ff1-landmarks.json
-jq '[.landmarks | group_by(.kind)[] | {k: .[0].kind, n: length, confirmed: (map(select(.mapIdInterior != null)) | length)}]' ~/.knes/ff1-landmarks.json
-jq '.tiles | map([.worldX, .worldY])' ~/.knes/ff1-overworld-warps.json
-jq '[.blockages[] | select(.result | test("input not responding"))] | length' ~/.knes/ff1-blockages.json
+jq '[.landmarks | group_by(.kind)[] | {k: .[0].kind, n: length, mapIds: ([.[].mapId, .[].mapIdInterior] | map(select(. != null)) | unique)}]' ~/.knes/ff1-landmarks.json
+jq '.tiles' ~/.knes/ff1-overworld-warps.json
+jq '[.blockages[-10:]]' ~/.knes/ff1-blockages.json
 ```
 
 ---
@@ -171,14 +181,15 @@ jq '[.blockages[] | select(.result | test("input not responding"))] | length' ~/
 - Persistent memory: `~/.knes/ff1-{overworld-terrain,landmarks,blockages,overworld-warps,interior-memory}.json`
 - Archives:
   - `~/.knes/archive-2026-05-05-pre-mapid-fix/` (state before #106)
-  - `~/.knes/archive-2026-05-05-pre-warp-targeting/` (state before #107/#108 live test)
+  - `~/.knes/archive-2026-05-05-pre-warp-targeting/` (state before #107/#108)
+  - `~/.knes/archive-2026-05-05-pre-warmup/` (state before #109; includes `ff1-overworld-warps.json.with-bogus` — the 4-warp file before manual cleanup)
 
 ## Test fixtures
 - `ff1-post-boot.savestate` — overworld at (146, 158)
-- `ff1-coneria-interior-discovery.savestate` — inside mapId=8 at party=(11,32)
+- `ff1-coneria-interior-discovery.savestate` — inside mapId=8 at party=(11, 32)
 
 ---
 
 ## First message to send to next session (suggestion)
 
-> Master at `7be39be`. PRs #106 + #107 + #108 merged this session; #105 closed unmerged. Bug B (PartyWipe gate) verified live ($0 cost, no NEW GAME garbage). Fix A (live mapId tag) unit-tested but not live-verified — blocked by **V5.2 loadState quirk**: emulator drops input frames after `loadState`, agent doesn't move within the 10-turn idle threshold, every overworld campaign plateaus at 0 entries. Top priority: warm-up after loadState in `ExplorerSession.run` (or equivalent — see HANDOFF priority A). Once unblocked, re-run overworld campaign and confirm `(145,152)` or `(147,154)` entry tags `mapIdInterior=24` not 8. Conversation in Polish; PR-flow + tests-first + commit per closed phase.
+> Master at `ab0b677`. Four PRs merged this session (#106, #107, #108, #109); #105 closed unmerged. Phase 1.5 mapId mismatch fully verified live: tonight's overworld campaign produces 7× NPC_KING tagged mapId=24 (Coneria Castle), entry landmark at (146,152) tagged mapIdInterior=8 (overlay) — exactly the multi-stage warp behaviour the morning campaign's bug had obscured. Top priorities: (A) filter mapId=0 records out of `OverworldWarpMemory` auto-detection in `AgentSession.kt:194` (currently records UnknownMapTrap as a warp); (B) Phase 2 LandmarkContext live validation via `runAgent` with the now-populated landmarks; (C) UnknownMapTrap recovery (every overworld run currently ends in mapId=0 trap from Castle's stairs). Conversation in Polish; PR-flow + tests-first + commit per closed phase.
