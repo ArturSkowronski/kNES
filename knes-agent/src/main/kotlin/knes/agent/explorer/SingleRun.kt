@@ -117,6 +117,9 @@ class SingleRun(
         val ram = observer.ramSnapshot()
         // Pre-record the entry as a TOWN/CASTLE/DUNGEON_ENTRY landmark (visited=true).
         val cx = ram["worldX"] ?: 0; val cy = ram["worldY"] ?: 0
+        val mapIdAtTrigger = ram["currentMapId"] ?: -1
+        val mapflagsAtTrigger = ram["mapflags"] ?: -1
+        System.err.println("[mapid-diag] $runId enter: trigger.mapId=${t.mapId} ramMapId=$mapIdAtTrigger mapflags=$mapflagsAtTrigger world=($cx,$cy)")
         landmarkMemory.recordIfNew(Landmark(
             id = "interior_entry_${t.mapId}_${cx}_${cy}",
             kind = guessEntryKind(t.mapId),
@@ -128,6 +131,14 @@ class SingleRun(
         // Run the deterministic interior explorer.
         skillRegistry.exploreInteriorFrontier(maxSteps = 80)
         // Post-explore: ask Haiku to classify what we saw.
+        val ramAfter = observer.ramSnapshot()
+        val mapIdAfter = ramAfter["currentMapId"] ?: -1
+        val mapflagsAfter = ramAfter["mapflags"] ?: -1
+        val pxAfter = ramAfter["smPlayerX"] ?: -1; val pyAfter = ramAfter["smPlayerY"] ?: -1
+        System.err.println("[mapid-diag] $runId post-explore: ramMapId=$mapIdAfter mapflags=$mapflagsAfter party=($pxAfter,$pyAfter)")
+        if (mapIdAfter != t.mapId) {
+            System.err.println("[mapid-diag] $runId MISMATCH: trigger.mapId=${t.mapId} != ramMapId=$mapIdAfter — Haiku screenshot is from $mapIdAfter but classification will tag mapId=${t.mapId}")
+        }
         val visited = interiorMemory.visited(t.mapId)
         val b64 = runCatching { toolset.getScreen().base64 }.getOrNull()
         val classification = haikuConsult.classifyInterior(
