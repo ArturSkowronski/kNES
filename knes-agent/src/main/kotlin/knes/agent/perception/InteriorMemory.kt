@@ -116,6 +116,14 @@ class InteriorMemory(
     /** All facts (debug / dump). */
     fun all(): List<InteriorTileFact> = byKey.values.toList()
 
+    /** True if any tile inside [mapId] has been recorded as visited. */
+    fun hasMapBeenSeen(mapId: Int): Boolean =
+        visited(mapId).isNotEmpty()
+
+    /** All mapIds with at least one recorded fact (visited or POI). */
+    fun knownMapIds(): Set<Int> =
+        byKey.keys.map { it.first }.toSet()
+
     /**
      * Record an observation. Priority order is the declaration order of
      * [InteriorObservation]: higher ordinal wins on conflict. Same-priority

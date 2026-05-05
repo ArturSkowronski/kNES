@@ -58,3 +58,11 @@ java {
 test {
     useJUnitPlatform()
 }
+
+tasks.register('runExplorer', JavaExec) {
+    group = 'application'
+    description = 'Run the Phase-1 cross-run explorer (builds memory in ~/.knes/).'
+    mainClass = 'knes.agent.explorer.ExplorerMainKt'
+    classpath = sourceSets.main.runtimeClasspath
+    standardInput = System.in
+}

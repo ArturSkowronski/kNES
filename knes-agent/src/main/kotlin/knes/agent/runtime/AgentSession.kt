@@ -3,6 +3,8 @@ package knes.agent.runtime
 import knes.agent.advisor.AdvisorAgent
 import knes.agent.executor.ExecutorAgent
 import knes.agent.perception.FfPhase
+import knes.agent.perception.FogOfWar
+import knes.agent.perception.OverworldWarpMemory
 import knes.agent.perception.RamObserver
 import knes.agent.perception.ScreenshotPolicy
 import knes.agent.tools.EmulatorToolset
@@ -22,6 +24,18 @@ class AgentSession(
     private val advisor: AdvisorAgent,
     private val toolCallLog: ToolCallLog = ToolCallLog(),
     private val budget: Budget = Budget(),
+    /**
+     * V5.24: shared FogOfWar so the session can mark warp tiles blocked.
+     * BFS pathfinder honors fog blocks → deterministic reroute around
+     * known warps. Optional for backward compat with tests.
+     */
+    private val fog: FogOfWar? = null,
+    /**
+     * V5.25: persistent overworld warp memory across runs. Default loads
+     * from ~/.knes/ff1-overworld-warps.json. Tests pass an in-memory file
+     * to keep the host filesystem clean.
+     */
+    private val warpMemory: OverworldWarpMemory = OverworldWarpMemory(),
     runDir: Path = Trace.newRunDir(),
     /**
      * Optional per-turn hook fired after each executor turn. Receives current
@@ -45,6 +59,33 @@ class AgentSession(
         var advisorCalls = 0
         var skillsInvoked = 0
         val startMs = System.currentTimeMillis()
+        // V5.23: cross-turn memory of FF1 ROM-encoded warp tiles the agent has tripped
+        // into. Both AIAgent instances are spun up fresh each turn (singleRunStrategy +
+        // newAgent per phase) so they have NO native memory of prior failures. We track
+        // here and inject into both advisor and executor observations so neither suggests
+        // routing back through a known warp.
+        val failedWarpTiles: MutableSet<Pair<Int, Int>> = mutableSetOf()
+        // Match toolCallLog format: "entered interior after N steps; world=(X,Y) ... targeted=false"
+        // (set by WalkOverworldTo.kt when an UNEXPECTED interior was entered mid-route).
+        val failedRegex = Regex("""world=\((\d+),(\d+)\)[^|]*targeted=false""")
+        // V5.25: pre-seed from persistent memory so the very first walk in
+        // this run already knows about warps detected in earlier sessions.
+        // Both the LLM hint (text injection) and the deterministic fog block
+        // are armed before the agent moves.
+        val seededWarps = warpMemory.all()
+        if (seededWarps.isNotEmpty()) {
+            failedWarpTiles += seededWarps
+            println("[overworld-warp-memory] preloaded ${seededWarps.size} known warps: $seededWarps")
+            fog?.let { f ->
+                // V5.28: 1x1 block per warp tile. 3x3 (V5.24) was too aggressive
+                // — iter11 evidence: overlapping 3x3 zones around (145,152) and
+                // (147,153) sealed the agent into a 1-tile pocket at (145,153).
+                // Warps are confirmed 1x1 (each ROM-encoded entry tile is a
+                // separate trigger); siblings get auto-detected if also warps.
+                seededWarps.forEach { tile -> f.markBlocked(tile.first, tile.second) }
+                println("[overworld-warp-memory] fog.markBlocked exact tiles only (1x1)")
+            }
+        }
 
         try {
             while (true) {
@@ -87,6 +128,14 @@ class AgentSession(
                     val obs = buildString {
                         append("Phase: $phase\nRAM: $ram\n")
                         if (attachShot) append("(screenshot available via getScreen)\n")
+                        if (failedWarpTiles.isNotEmpty()) {
+                            // V5.23: session memory injected so the planner reroutes
+                            // around tiles that previously warped the party indoors.
+                            append("Session memory — known FF1 warp tiles to avoid as " +
+                                "targets or route-throughs: ")
+                            append(failedWarpTiles.joinToString(", ") { "(${it.first},${it.second})" })
+                            append('\n')
+                        }
                         append("Reason: $reason")
                     }
                     println("[advisor #$advisorCalls] phase=$phase")
@@ -102,13 +151,46 @@ class AgentSession(
                     idleTurns = 0
                 }
 
-                val executorInput = "Plan:\n$currentPlan\n\nCurrent phase: $phase\nRAM: $ram"
+                val executorInput = buildString {
+                    append("Plan:\n$currentPlan\n\nCurrent phase: $phase\nRAM: $ram")
+                    if (failedWarpTiles.isNotEmpty()) {
+                        append("\nSession memory — known FF1 warp tiles to avoid as targets " +
+                            "or route-throughs: ")
+                        append(failedWarpTiles.joinToString(", ") { "(${it.first},${it.second})" })
+                    }
+                }
                 println("[executor turn=$skillsInvoked] phase=$phase idle=$idleTurns")
                 val result = executor.run(phase, executorInput)
                 skillsInvoked += 1
                 println("[executor result] ${result.lineSequence().take(2).joinToString(" | ").take(160)}")
                 val drainedCalls = toolCallLog.drain()
                 println("[executor calls] ${drainedCalls.joinToString(" ; ").take(200)}")
+                // V5.23: extract UNEXPECTED warp tiles from the toolCallLog (set by
+                // WalkOverworldTo.aborted when targeted=false). Drained calls include
+                // the abort message verbatim, so this is a stable signal independent
+                // of how the LLM phrases its final response.
+                drainedCalls.forEach { call ->
+                    failedRegex.findAll(call).forEach { m ->
+                        val tile = m.groupValues[1].toInt() to m.groupValues[2].toInt()
+                        if (failedWarpTiles.add(tile)) {
+                            println("[session-memory] +failedWarpTile=$tile (total=${failedWarpTiles.size})")
+                            // V5.28: 1x1 block. Was 3x3 in V5.24 on the assumption
+                            // FF1 warps could span 2x1, but iter10/iter11 evidence
+                            // says each entry tile is a separate trigger. 3x3
+                            // overlap sealed a 1-tile pocket at (145,153). Sibling
+                            // warps auto-detected on subsequent steps.
+                            fog?.let { f ->
+                                f.markBlocked(tile.first, tile.second)
+                                println("[session-memory] +fog.markBlocked exact $tile")
+                            }
+                            // V5.25: persist for future sessions. Save immediately
+                            // so a crash mid-run doesn't lose the discovery.
+                            warpMemory.record(tile.first, tile.second,
+                                note = "auto-detected ${java.time.Instant.now()}")
+                            warpMemory.save()
+                        }
+                    }
+                }
                 trace.record(
                     TraceEvent(
                         turn = 0, role = "executor", phase = phase.toString(),

@@ -47,24 +47,41 @@ class SkillRegistry(
     private val walkOverworldVisionSkill = visionOverworldNavigator?.let {
         WalkOverworldVision(toolset, it, toolCallLog)
     }
+    private val exploreInteriorFrontierSkill =
+        ExploreInteriorFrontier(toolset, mapSession, interiorMemory, toolCallLog)
 
     @Tool
     @LLMDescription(
         "Advance from the FF1 title screen through NEW GAME / class select / name entry into " +
-            "the overworld. Mashes START then A. Termination: char1_hpLow != 0 OR worldX != 0."
+            "the overworld. Mashes START then A. Termination: char1_hpLow != 0 OR worldX != 0. " +
+            "Valid ONLY from pre-game phases (Boot/TitleOrMenu/NewGameMenu/NameEntry); not a " +
+            "panic reset from Overworld/Indoors/Battle — guard rejects with REJECTED."
     )
     suspend fun pressStartUntilOverworld(maxAttempts: Int = 60): SkillResult {
         toolCallLog.append("pressStartUntilOverworld", "maxAttempts=$maxAttempts")
+        // V5.31 panic-reset guard. iter14 evidence: agent called this from Indoors
+        // as a panic move, mashing START+A through the in-game menu and wiping the
+        // run. Reject unless we are still pre-party-creation (same termination
+        // markers the skill itself uses, inverted).
+        val ram = toolset.getState().ram
+        val alreadyInGame = (ram["char1_hpLow"] ?: 0) != 0 || (ram["worldX"] ?: 0) != 0
+        if (alreadyInGame) {
+            return SkillResult(
+                ok = false,
+                message = "REJECTED: party already created (worldX=0x${(ram["worldX"] ?: 0).toString(16)}, " +
+                    "char1_hp=0x${(ram["char1_hpLow"] ?: 0).toString(16)}). pressStartUntilOverworld " +
+                    "is only valid from the title/menu — do NOT use as a panic reset. Use " +
+                    "exitInterior or exploreInteriorFrontier from Indoors.",
+                framesElapsed = 0,
+                ramAfter = ram,
+            )
+        }
         return pressStartSkill.invoke(mapOf("maxAttempts" to "$maxAttempts"))
     }
 
-    @Tool
-    @LLMDescription(
-        "PREFERRED for Indoors phase. Walk inside the current FF1 interior map by " +
-            "asking a vision model for one direction at a time. Each step looks at " +
-            "the screen, picks N/S/E/W, taps the button, verifies movement via RAM. " +
-            "Stops on exit-to-overworld, encounter, or visual STUCK. maxSteps default 24."
-    )
+    // V5.26: removed @Tool annotation. Per-step vision navigation is anti-pattern
+    // (LLM driving directions). Method retained in case a future fallback needs
+    // direct invocation, but it is no longer offered to the planner LLM.
     suspend fun walkInteriorVision(maxSteps: Int = 24): SkillResult {
         val skill = walkInteriorVisionSkill
             ?: return SkillResult(false,
@@ -75,14 +92,29 @@ class SkillRegistry(
 
     @Tool
     @LLMDescription(
-        "(DEPRECATED on towns; ~13% step success) Walk to the nearest interior exit " +
-            "using the offline ROM-decoder pathfinder. Kept as fallback only — prefer " +
-            "walkInteriorVision in Indoors. Stops on sub-map transition, encounter, " +
+        "Walk to the nearest interior exit using the offline ROM-decoder pathfinder. " +
+            "Reliable on castles/dungeons; ~13% step success on town overlays — if " +
+            "exitInterior fails twice in the same Indoors phase, switch to " +
+            "exploreInteriorFrontier instead. Stops on sub-map transition, encounter, " +
             "or arrival on overworld."
     )
     suspend fun exitInterior(maxSteps: Int = 64): SkillResult {
         toolCallLog.append("exitInterior", "maxSteps=$maxSteps")
         return exitInteriorSkill.invoke(mapOf("maxSteps" to "$maxSteps"))
+    }
+
+    @Tool
+    @LLMDescription(
+        "(V5.29) Deterministic interior explorer. Walks the party tile-by-tile " +
+            "toward the nearest UNVISITED reachable tile in the current FF1 " +
+            "interior map, persisting visited tiles in InteriorMemory. Use this " +
+            "when exitInterior fails on a town overlay — full map coverage exposes " +
+            "exits as side effects. Stops on phase=Overworld, encounter, " +
+            "fully-explored map, or repeated blocked direction. maxSteps default 64."
+    )
+    suspend fun exploreInteriorFrontier(maxSteps: Int = 64): SkillResult {
+        toolCallLog.append("exploreInteriorFrontier", "maxSteps=$maxSteps")
+        return exploreInteriorFrontierSkill.invoke(mapOf("maxSteps" to "$maxSteps"))
     }
 
     @Tool
@@ -117,14 +149,7 @@ class SkillRegistry(
         return walkSkill.invoke(mapOf("targetX" to "$targetX", "targetY" to "$targetY", "maxSteps" to "$maxSteps"))
     }
 
-    @Tool
-    @LLMDescription(
-        "(V5.18) PREFERRED for entering towns/castles. Walk on the FF1 overworld toward " +
-            "(targetX, targetY) by asking a vision model for one direction at a time. " +
-            "Bypasses BFS classifier heuristics — useful when the deterministic pathfinder " +
-            "fails to enter a town because tile properties are ROM-encoded. Stops on " +
-            "interior entry, encounter, target reached, or visual STUCK."
-    )
+    // V5.26: removed @Tool annotation. See walkInteriorVision for rationale.
     suspend fun walkOverworldVision(targetX: Int, targetY: Int, maxSteps: Int = 24): SkillResult {
         val skill = walkOverworldVisionSkill
             ?: return SkillResult(false,
@@ -169,8 +194,11 @@ class SkillRegistry(
         return toolset.executeAction(profileId = "ff1", actionId = "battle_fight_all")
     }
 
-    @Tool
-    @LLMDescription("Run the registered FF1 walk_until_encounter action.")
+    // V5.26: removed @Tool. Random-walk-until-encounter ignores fog blocks and
+    // session memory, which iter8 evidence showed leads the agent into known
+    // warp tiles even after pre-seeded warp memory was loaded. The legitimate
+    // grinding use case is rare and can be re-introduced later as
+    // grindEncounters(targetXp) with proper safe-tile gating.
     suspend fun walkUntilEncounter(): ActionToolResult {
         toolCallLog.appendNoArgs("walkUntilEncounter")
         return toolset.executeAction(profileId = "ff1", actionId = "walk_until_encounter")
@@ -179,4 +207,22 @@ class SkillRegistry(
     @Tool
     @LLMDescription("Return frame count, watched RAM, CPU regs, held buttons.")
     fun getState(): StateSnapshot = toolset.getState()
+
+    private val exploreOverworldFrontierSkill =
+        ExploreOverworldFrontier(toolset, overworldMap, fog, overworldPathfinder, toolCallLog)
+
+    /**
+     * Explorer-phase deterministic walk to (targetX, targetY). Uses SalienceStrategy
+     * upstream to pick the target. NOT exposed via @Tool because the explorer phase
+     * does not run an LLM tool surface — SingleRun calls this directly.
+     */
+    suspend fun exploreOverworldFrontier(
+        targetX: Int, targetY: Int, maxSteps: Int = 32,
+    ): SkillResult {
+        toolCallLog.append("exploreOverworldFrontier",
+            "targetX=$targetX, targetY=$targetY, maxSteps=$maxSteps")
+        return exploreOverworldFrontierSkill.invoke(
+            mapOf("targetX" to "$targetX", "targetY" to "$targetY", "maxSteps" to "$maxSteps")
+        )
+    }
 }
