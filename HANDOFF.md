@@ -295,3 +295,45 @@ cat ~/.knes/ff1-overworld-warps.json
 > FF1 ROM entry-tile table for one-shot manual seed. Conversation in
 > Polish; user prefers short iterations, evidence-based conclusions,
 > commits per closed phase.
+
+---
+
+## Cross-Run Explorer (Phase 1) — landed 2026-05-05
+
+New flow: `./gradlew :knes-agent:runExplorer` builds persistent memory across N
+cheap runs, then `./gradlew :knes-agent:runAgent` (existing) consumes it.
+
+Memory files in `~/.knes/`:
+- `ff1-overworld-terrain.json` — overworld tile types, cross-run
+- `ff1-landmarks.json` — towns, castles, dungeons, NPCs, stairs
+- `ff1-blockages.json` — failed attempts + run start directions
+- `ff1-overworld-warps.json` — existing, unchanged shape (NOTE: explorer does
+  not yet auto-populate this; warps are discovered by AgentSession only)
+- `ff1-interior-memory.json` — existing, unchanged
+
+Architecture: `ExplorerSession` (campaign, multiple `SingleRun`s) → hard-rule
+restart (mapId trap, party wipe, idle, plateau) → salience-driven targets
+(unvisited landmarks → viewport TOWN/CASTLE → frontier → diversify) →
+deterministic walk via existing skills + Haiku consult on triggers.
+
+Spec: `docs/superpowers/specs/2026-05-05-cross-run-explorer-design.md`
+Plan: `docs/superpowers/plans/2026-05-05-cross-run-explorer.md`
+
+Stub: `AnthropicHaikuConsult` returns no classifications in MVP. Phase 1.5
+wires real Haiku 4.5 calls for interior NPC classification + dialog reading.
+Phase 2 modifies `AgentSession` to consume `landmarks.json` for goal routing.
+
+Smoke-run result (2026-05-05): 17 runs, `CampaignResult(outcome=Plateau)`,
+120 landmarks discovered, 65502 terrain tiles mapped, memory files written.
+
+### MVP debt (known issues, deferred to follow-up commits)
+
+- Memory classes use non-atomic save (mirrors existing OverworldWarpMemory).
+  Atomic save (write-tmp + rename) needed before crash-mid-save risks data loss.
+- `BlockageMemory.pathTriedRecentDirections` KDoc says "most recent" but is
+  insertion-order; harmless since SingleRun records once per run.
+- `SingleRun` does NOT pass warps it discovers into `OverworldWarpMemory`
+  cross-run persistence. Warps are still detected per-run via fog blocks but
+  do not accumulate across explorer runs (only across AgentSession runs).
+- `isDialogBoxOpen` heuristic returns `false` (stub) — Trigger.DialogBoxVisible
+  never fires until refined.
