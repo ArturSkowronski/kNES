@@ -39,4 +39,22 @@ class LandmarkMemoryTest : FunSpec({
         mem.recordIfNew(Landmark(id = "b", kind = LandmarkKind.TOWN_ENTRY, worldX = 1, worldY = 2))
         mem.findByKind(LandmarkKind.TOWN_ENTRY) shouldHaveSize 1
     }
+
+    test("recordIfNew dedupes interior landmarks on (kind, mapId, localX, localY)") {
+        val tmp = Files.createTempFile("landmarks", ".json").toFile().apply { deleteOnExit() }
+        val mem = LandmarkMemory(file = tmp)
+        mem.recordIfNew(Landmark(id = "k1", kind = LandmarkKind.NPC_KING,
+            mapId = 1, localX = 14, localY = 4)) shouldBe true
+        mem.recordIfNew(Landmark(id = "k2", kind = LandmarkKind.NPC_KING,
+            mapId = 1, localX = 14, localY = 4)) shouldBe false  // duplicate interior coords
+        mem.findByKind(LandmarkKind.NPC_KING) shouldHaveSize 1
+    }
+
+    test("recordIfNew does NOT dedupe coord-less landmarks (treated as distinct)") {
+        val tmp = Files.createTempFile("landmarks", ".json").toFile().apply { deleteOnExit() }
+        val mem = LandmarkMemory(file = tmp)
+        mem.recordIfNew(Landmark(id = "g1", kind = LandmarkKind.NPC_GENERIC)) shouldBe true
+        mem.recordIfNew(Landmark(id = "g2", kind = LandmarkKind.NPC_GENERIC)) shouldBe true
+        mem.findByKind(LandmarkKind.NPC_GENERIC) shouldHaveSize 2
+    }
 })

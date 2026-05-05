@@ -64,10 +64,19 @@ class LandmarkMemory(
     /** Records iff no existing landmark matches on (kind + world coords) for overworld
      *  or (kind + mapId + local coords) for interior. Returns true if added. */
     fun recordIfNew(l: Landmark): Boolean {
+        val isOverworld = l.worldX != null && l.worldY != null
+        val isInterior = l.mapId != null && l.localX != null && l.localY != null
+
         val dup = byId.values.firstOrNull { existing ->
-            existing.kind == l.kind &&
-                existing.worldX == l.worldX && existing.worldY == l.worldY &&
-                existing.mapId == l.mapId && existing.localX == l.localX && existing.localY == l.localY
+            if (existing.kind != l.kind) return@firstOrNull false
+            when {
+                isOverworld && existing.worldX != null && existing.worldY != null ->
+                    existing.worldX == l.worldX && existing.worldY == l.worldY
+                isInterior && existing.mapId != null && existing.localX != null && existing.localY != null ->
+                    existing.mapId == l.mapId &&
+                        existing.localX == l.localX && existing.localY == l.localY
+                else -> false  // coord-less landmarks are never deduped
+            }
         }
         if (dup != null) return false
         byId[l.id] = l
