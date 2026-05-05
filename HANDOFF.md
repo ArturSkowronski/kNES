@@ -1,40 +1,57 @@
-# FF1 Koog Agent — Handoff (V5.28 → V5.29 in flight)
+# FF1 Koog Agent — Handoff (V5.30, session close 2026-05-05)
 
 **Branch:** `ff1-agent-v2-4` of `/Users/askowronski/Priv/kNES-ff1-agent-v2`
-**HEAD:** `bec76a2` — V5.28 fog block 1x1 around warp tiles
+**HEAD:** `5dbc08a` — V5.30 fog destination-OK + deliberate-warp-entry prompt
 **Required env:** `ANTHROPIC_API_KEY` (live runs only; tests run without it)
 
 ---
 
-## TL;DR — where we are (2026-05-05, post-iter12)
+## TL;DR — where we are (2026-05-05, session close after iter14)
 
-V5.6 foundation (sm_player_x/y, mapflags) holds since the previous session.
-This session shipped V5.19 → V5.28, twelve commits, plus 12 live iterations
-(iter1 → iter12) on the Coneria → Garland scenario. **Goal not reached.**
-Each run currently OutOfBudget around the south edge of Coneria Town.
+V5.6 foundation (sm_player_x/y, mapflags) holds since previous session.
+**This session shipped V5.19 → V5.30, fourteen commits, plus 14 live
+iterations (iter1 → iter14) on the Coneria → Garland scenario.**
+Goal (Garland battle) not reached; every run still OutOfBudget around
+south Coneria. But the architectural picture is clean and the pieces
+needed for the next attempt are in place.
 
-The session converged on a clear architectural picture: the planner LLM was
-controlling per-step movement via `walkInteriorVision` /
-`walkOverworldVision` / `walkUntilEncounter`, ignoring deterministic
-guardrails. V5.26 removed those skills from the @Tool surface. After that
-the bottleneck flipped from "agent burns budget on vision steps" to
-"agent can't escape Coneria Town interior using exitInterior alone".
+Bottleneck migration log:
+  - iter1-iter5  burn budget on vision-step skills inside mapId=24
+  - iter6-iter8  agent uses panic-skills (`walkUntilEncounter`,
+                 `pressStartUntilOverworld`) that bypass guardrails
+  - iter9        V5.26 strips vision/random; agent finally moves
+                 through overworld but gets blocked at (152, 151)
+  - iter10-iter12 each iteration discovers ONE new Coneria-area warp
+  - iter13       3 fog-blocked warps + transit-block sealed the
+                 agent in a 1-tile pocket at (145, 153)
+  - iter14       V5.29 + V5.30 unblocked deliberate warp entry;
+                 agent reached (147, 154) and called
+                 `exploreInteriorFrontier` 4× — first time the new
+                 deterministic explorer ran live. Discovered 4th warp.
 
-**Next deliverable in flight: V5.29 ExploreInteriorFrontier skill** —
-deterministic frontier search using the existing `InteriorFrontier` +
-`InteriorPathfinder` + `InteriorMemory` infrastructure. Replaces
-walkInteriorVision as the way to uncover an interior; exit emerges as a
-side-effect of full map coverage.
+**Persistent warp memory (`~/.knes/ff1-overworld-warps.json`)
+currently 4 tiles:** (145,152), (144,153), (147,153), (147,154).
+Geographic pattern: south edge of Coneria Town entries Y=152-154.
+
+**Architecture stable, prompt stable. Next session can either:**
+  (a) Continue iterative discovery (~$1-2/iter; 1-2 more warps
+      probably exist in this area)
+  (b) Manual ROM seed: read FF1 entry-tile table from Disch
+      disassembly and pre-populate the JSON in one shot
+  (c) Hard-block panic skills: agent's `pressStartUntilOverworld`
+      panic reset costs an entire run; V5.31 would AgentSession-
+      side reject the call when phase != TitleOrMenu
 
 ---
 
 ## Read first (in this exact order)
 
-1. `docs/superpowers/runs/2026-05-05-v528-iter12/2026-05-05T*/trace.jsonl` —
-   most recent live run; shows agent stuck at Overworld(144, 153) with
-   exitInterior 2200 sub-steps unable to escape mapId=24.
+1. `docs/superpowers/runs/2026-05-05-v530-iter14/2026-05-05T*/trace.jsonl` —
+   most recent live run; shows V5.29 ExploreInteriorFrontier called 4×
+   live, agent reached Overworld(147, 154), discovered new warp.
 2. `~/.knes/ff1-overworld-warps.json` — persistent warp memory; current
-   contents (3 tiles): (145,152), (147,153), (144,153). All Coneria-area.
+   contents (4 tiles): (145,152), (144,153), (147,153), (147,154).
+   All Coneria-area.
 3. `knes-agent/src/main/kotlin/knes/agent/runtime/AgentSession.kt` —
    session loop, session-memory injection, persistent warp load/save.
 4. `knes-agent/src/main/kotlin/knes/agent/perception/OverworldWarpMemory.kt` —
@@ -54,6 +71,9 @@ side-effect of full map coverage.
 ## Commit log (this session)
 
 ```
+5dbc08a  V5.30  fog destination-OK + deliberate-warp-entry prompt
+34a660d  V5.29  ExploreInteriorFrontier deterministic interior explorer
+69c7fda  docs   handoff refresh for V5.28
 bec76a2  V5.28  fog block warp tiles 1x1 (was 3x3, sealed agent in)
 086c09c  V5.27  T/C entry is legit FF1 traversal, not a trap (prompt)
 ea56a4b  V5.26  architectural shift, intent-only skill surface
@@ -120,27 +140,34 @@ a6e64fd  V5.22  goal-focus + propagate-failure-to-advisor rules (prompt)
 
 ---
 
-## Open blockers (post-iter12)
+## Open blockers (post-iter14)
 
-### 1. V5.29 ExploreInteriorFrontier (NEW, in flight, top priority)
+### 1. V5.31 panic-reset guard (top priority for next session)
 
-Iter12 evidence: agent enters Coneria Town overlay, calls exitInterior with
-maxSteps=64/128/256, 2200 sub-steps total, never escapes. Per V3.0
-evidence the decoder gets ~13% step success on town overlays. The
-remaining 87% are wasted budget.
+iter14 turn 7 evidence: agent called `pressStartUntilOverworld` from
+inside Indoors as a "hard warp trap reset", cost the entire run. The
+skill is supposed to be no-op when worldX != 0 + char1_hpLow != 0,
+but the LLM still chose it. AgentSession-side guard: reject the call
+unless phase == TitleOrMenu, return `BLOCKED, only valid on title
+screen`. ~10-line change to SkillRegistry. Without this, every run
+where the agent panics burns the budget twice (once on the failed
+exploration, once on starting over).
 
-The fix per the user's architectural critique (point 6, "exploration as
-frontier search"): wrap `InteriorFrontier.nearestUnvisited` + a walker
-loop into a `@Tool` skill. Deterministic, no LLM in the step loop.
-Termination: phase=Overworld (real exit emerged), encounter, or no
-frontier left (interior fully covered — at which point the runtime hands
-back to advisor for "still stuck after full coverage" handling).
+### 2. exploreInteriorFrontier in iter14 didn't escape
 
-Code skeleton: see `WalkInteriorVision.kt` for the per-step loop pattern,
-swap the vision call for `InteriorFrontier.nearestUnvisited` to pick the
-direction, then `toolset.tap(direction)` and verify movement via RAM.
+V5.29 was called 4× live. Agent still ended OutOfBudget inside the
+interior. Possible causes:
+  - InteriorMemory.visited doesn't include all reachable tiles, BFS
+    keeps proposing the same direction → "stuck: same blocked dir
+    twice" guard fires too early
+  - The town overlay's true exit isn't reachable through the BFS
+    passable mask (decoder limitation per V3.0 13% data)
+  - 4× 64-step ceiling = 256 frontier steps; might need 128 each
+Need a focused trace inspection on the iter14 explore log lines
+(`exploreInteriorFrontier.target` + `.step` in toolCallLog) to see
+which case fires.
 
-### 2. Iterative warp discovery is expensive
+### 3. Iterative warp discovery is expensive
 
 After 12 iters at $1-2 each, the persistent warp memory has 3 tiles:
 (145,152), (147,153), (144,153). Geography:
@@ -206,6 +233,8 @@ their backing classes (`WalkInteriorVision.kt`,
 | 10 | V5.27 T/C entry rule | (147,153) trip | (147,153) | walkOverworldTo 37, exitInterior 1741 |
 | 11 | 2 warps preseed | sealed at (145,153) | — | 3x3 overlap bug |
 | 12 | V5.28 fog 1x1 | (144,153) trip | (144,153) | exitInterior 2200, no escape |
+| 13 | preseeded 3 warps | sealed at (145,153) | — | overworld trapped, fog blocks all paths |
+| 14 | V5.29 + V5.30 | (147,154) reached | (147,154) | exploreInteriorFrontier 4× LIVE; panic-reset cost the run |
 
 ---
 
@@ -254,13 +283,15 @@ cat ~/.knes/ff1-overworld-warps.json
 
 ## First message to send to the next session
 
-> Resume FF1 Koog agent V5.28 from `HANDOFF.md`. V5.6 foundation holds.
-> Architecture is now intent-only (V5.26): planner LLM sees no
-> per-step skills. Persistent warp memory (V5.25) tracks 3 Coneria-area
-> warp tiles in `~/.knes/ff1-overworld-warps.json`. Top priority:
-> finish V5.29 ExploreInteriorFrontier — wrap `InteriorFrontier` +
-> `InteriorPathfinder` + `InteriorMemory` into a `@Tool` skill so the
-> agent can escape Coneria Town interior deterministically (current
-> exitInterior 13% step success → wastes budget). Conversation in
+> Resume FF1 Koog agent V5.30 from `HANDOFF.md`. 14 iterations this
+> session, architecture now stable: intent-only skill surface (V5.26),
+> persistent warp memory across runs (V5.25, currently 4 Coneria
+> tiles), deterministic interior explorer (V5.29), fog destination-OK
+> for deliberate warp entry (V5.30). Goal (Garland) not reached — every
+> run still OutOfBudget around south Coneria. Top priority next:
+> V5.31 AgentSession-side guard against `pressStartUntilOverworld` in
+> non-TitleOrMenu phases (iter14 panic-reset cost a full run). Then
+> either continue iterative warp discovery (~$1-2/iter) OR research
+> FF1 ROM entry-tile table for one-shot manual seed. Conversation in
 > Polish; user prefers short iterations, evidence-based conclusions,
 > commits per closed phase.
