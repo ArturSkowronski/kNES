@@ -207,4 +207,22 @@ class SkillRegistry(
     @Tool
     @LLMDescription("Return frame count, watched RAM, CPU regs, held buttons.")
     fun getState(): StateSnapshot = toolset.getState()
+
+    private val exploreOverworldFrontierSkill =
+        ExploreOverworldFrontier(toolset, overworldMap, fog, overworldPathfinder, toolCallLog)
+
+    /**
+     * Explorer-phase deterministic walk to (targetX, targetY). Uses SalienceStrategy
+     * upstream to pick the target. NOT exposed via @Tool because the explorer phase
+     * does not run an LLM tool surface — SingleRun calls this directly.
+     */
+    suspend fun exploreOverworldFrontier(
+        targetX: Int, targetY: Int, maxSteps: Int = 32,
+    ): SkillResult {
+        toolCallLog.append("exploreOverworldFrontier",
+            "targetX=$targetX, targetY=$targetY, maxSteps=$maxSteps")
+        return exploreOverworldFrontierSkill.invoke(
+            mapOf("targetX" to "$targetX", "targetY" to "$targetY", "maxSteps" to "$maxSteps")
+        )
+    }
 }
