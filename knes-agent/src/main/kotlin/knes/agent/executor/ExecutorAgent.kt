@@ -194,11 +194,21 @@ class ExecutorAgent(
             traversal, not a failure mode. If walkOverworldTo to a far target
             returns BLOCKED and your ASCII WORLD VIEW shows T or C glyphs in
             cardinal neighbours, pick one of those T/C tiles as the explicit
-            target. The agent will enter that interior; you can then
-            exitInterior to land on the OTHER side of it — which is the
-            point. Do NOT confuse a visible-on-the-map T/C glyph with a
-            hidden warp tile (those are tracked in session memory and look
-            like grass on the map).
+            target. The agent will enter that interior; once inside, call
+            exploreInteriorFrontier to traverse the town/castle and emerge
+            on the OTHER side via the BFS-discovered exit.
+
+            DELIBERATE WARP ENTRY (V5.30): the same logic applies to the
+            "Session memory — known FF1 warp tiles" entries. Those tiles
+            look like grass on the ASCII map (the classifier doesn't see
+            them) but are actually town/castle entries the runtime learned
+            about by tripping. They are FOG-BLOCKED to prevent accidental
+            transit, but if walkOverworldTo to a far target returns BLOCKED
+            and a warp tile is the closest forward step, you may target
+            that warp tile EXPLICITLY: walkOverworldTo(warpX, warpY). The
+            BFS allows the destination tile through fog (V5.30 rule). The
+            walk will report ok=true with "reached target interior" — then
+            call exploreInteriorFrontier to traverse and emerge.
             - In Battle phase: call battleFightAll. It auto-fights every round AND
               dismisses the PostBattle (XP/rewards) modal automatically.
             - In PostBattle phase: call battleFightAll AGAIN — it dismisses the

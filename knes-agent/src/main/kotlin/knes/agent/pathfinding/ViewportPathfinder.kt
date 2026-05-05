@@ -72,7 +72,15 @@ class ViewportPathfinder(private val maxSteps: Int = 32) : Pathfinder {
                 // soft-penalty which leaked through when no detour fit in the viewport.
                 if (tile.isImpassableTransit() && !isDestination) continue
                 val (wx, wy) = viewport.localToWorld(nx, ny)
-                if (fog.isBlocked(wx, wy)) continue
+                // V5.30: fog blocks (warp tiles, confirmed-blocked overworld) are
+                // treated as transit-impassable but destination-OK, mirroring the
+                // TOWN/CASTLE rule above. iter13 evidence: blocking warp tiles for
+                // both transit AND destination sealed the agent in a 1-tile pocket
+                // where every path forward went through a known warp. Allowing
+                // them as deliberate targets lets the agent enter Coneria via a
+                // warp tile, traverse with exploreInteriorFrontier, and exit on
+                // the other side.
+                if (fog.isBlocked(wx, wy) && !isDestination) continue
                 val tileCost = if (isDestination) 1 else tile.cost()
                 val nCost = cost + tileCost
                 if (nCost < dist[ny][nx]) {

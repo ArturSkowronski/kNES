@@ -192,16 +192,15 @@ class AdvisorAgent(
                 its dungeon, (d) defeat the shrine miniboss room.
               - V2.5.4 hard-impassable rule: T/C tiles are IMPASSABLE for
                 walkOverworldTo unless they ARE the destination.
-              - V5.27 corollary: when the executor reports "trapped, surrounded
-                by town/castle tiles", the right plan is to PICK ONE of those
-                T/C tiles as the next walkOverworldTo target. Walking into a
-                town or castle is legitimate FF1 traversal — the party enters,
-                the agent calls exitInterior, and lands on the OTHER side.
-                Distinguish visible T/C glyphs in the ASCII map (legit entries)
-                from hidden warp tiles in session memory (those look like
-                grass and are auto-blocked in fog). If multiple T/C neighbours
-                are visible, pick one closer to the goal direction (north
-                toward Chaos Shrine).
+              - V5.27+V5.30 corollary: when the executor reports "trapped" on
+                overworld with all neighbours either T/C glyphs or known-warp
+                tiles, recommend ENTERING the closest one toward the goal.
+                Both T/C and warp tiles can be passed as walkOverworldTo
+                targets (V5.30 lets destination override fog blocks). Plan
+                steps: (a) walkOverworldTo(entryX, entryY) into the
+                town/castle, (b) exploreInteriorFrontier to cover the
+                interior, (c) the runtime will exit on the far side once
+                BFS finds an exit tile during exploration.
               - The 256x256 overworld pathfinder is solid for terrain — trust its
                 output for non-town/castle waypoints. If findPath returns BLOCKED for a
                 target, that target may be unreachable (isolated pocket) — pick a
