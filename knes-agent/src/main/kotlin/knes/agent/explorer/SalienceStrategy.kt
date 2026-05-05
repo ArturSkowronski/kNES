@@ -43,9 +43,15 @@ class SalienceStrategy(
         // because BFS routes around warp tiles toward viewport TOWN/CASTLE candidates
         // (priority 2) that may be unreachable. Targeting warps directly turns the
         // explorer from lucky discovery into purposeful coverage.
+        //
+        // Deliberately bypasses the global recentlyFailed window: post-loadState the
+        // emulator drops a few input frames (V5.2 "input not responding" quirk), which
+        // poisons every warp the moment we try it. Filtering by recentlyFailed there
+        // permanently disqualifies known-good warps for 10 minutes across runs. The
+        // per-run enteredWarpsThisRun set is the right gate — once we've actually
+        // entered a warp, we don't re-target it for the rest of the run.
         warpMemory?.all()
             ?.filter { it !in enteredWarpsThisRun }
-            ?.filter { asKey(it) !in recentlyFailed }
             ?.minByOrNull { manhattan(currentXY, it) }
             ?.let { return it }
 
