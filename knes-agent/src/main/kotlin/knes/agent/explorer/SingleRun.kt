@@ -4,6 +4,8 @@ import knes.agent.perception.BlockageMemory
 import knes.agent.perception.FfPhase
 import knes.agent.perception.FogOfWar
 import knes.agent.perception.InteriorMemory
+import knes.agent.perception.Landmark
+import knes.agent.perception.LandmarkKind
 import knes.agent.perception.LandmarkMemory
 import knes.agent.perception.OverworldMap
 import knes.agent.perception.OverworldTerrainMemory
@@ -111,9 +113,63 @@ class SingleRun(
         return false
     }
 
-    // Filled in next task (Task 9):
-    private suspend fun handleNewInterior(t: Trigger.NewInteriorEntered) { /* Task 9 */ }
-    private suspend fun handleDialog() { /* Task 9 */ }
+    private suspend fun handleNewInterior(t: Trigger.NewInteriorEntered) {
+        val ram = observer.ramSnapshot()
+        // Pre-record the entry as a TOWN/CASTLE/DUNGEON_ENTRY landmark (visited=true).
+        val cx = ram["worldX"] ?: 0; val cy = ram["worldY"] ?: 0
+        landmarkMemory.recordIfNew(Landmark(
+            id = "interior_entry_${t.mapId}_${cx}_${cy}",
+            kind = guessEntryKind(t.mapId),
+            worldX = cx, worldY = cy,
+            mapIdInterior = t.mapId,
+            visited = true,
+            discoveredRunId = runId,
+        ))
+        // Run the deterministic interior explorer.
+        skillRegistry.exploreInteriorFrontier(maxSteps = 80)
+        // Post-explore: ask Haiku to classify what we saw.
+        val visited = interiorMemory.visited(t.mapId)
+        val screenshot: ByteArray? = runCatching {
+            // Implementation note: real screenshot acquisition is via toolset.getState() or a
+            // dedicated call. Pass null if not yet wired — the explorer handles cost=0.0.
+            null
+        }.getOrNull()
+        val classification = haikuConsult.classifyInterior(
+            mapId = t.mapId, visitedTileCount = visited.size, screenshotPng = screenshot,
+        )
+        haikuCostUsd += applyInteriorClassification(landmarkMemory, classification)
+    }
+
+    private suspend fun handleDialog() {
+        // Press A once to advance, take screenshot, ask Haiku to read.
+        toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 30)
+        val reading = haikuConsult.readDialog(screenshotPng = null)
+        haikuCostUsd += reading.costUsd
+        if (reading.landmarkHint != null) {
+            val ram = observer.ramSnapshot()
+            val mapId = ram["currentMapId"] ?: -1
+            val lx = ram["smPlayerX"]; val ly = ram["smPlayerY"]
+            landmarkMemory.recordIfNew(Landmark(
+                id = "dialog_${reading.landmarkHint.lowercase()}_${mapId}_${lx}_${ly}",
+                kind = kindFromHint(reading.landmarkHint),
+                mapId = mapId, localX = lx, localY = ly,
+                visited = true, note = reading.summary, discoveredRunId = runId,
+            ))
+        }
+    }
+
+    private fun guessEntryKind(mapId: Int): LandmarkKind = when (mapId) {
+        1 -> LandmarkKind.CASTLE_ENTRY    // Coneria Castle
+        8 -> LandmarkKind.TOWN_ENTRY      // Coneria Town
+        else -> LandmarkKind.DUNGEON_ENTRY
+    }
+
+    private fun kindFromHint(hint: String): LandmarkKind = when (hint.uppercase()) {
+        "KING" -> LandmarkKind.NPC_KING
+        "SHOP", "SHOPKEEPER" -> LandmarkKind.NPC_SHOPKEEPER
+        else -> LandmarkKind.NPC_GENERIC
+    }
+
     private suspend fun handleBattle() { skillRegistry.battleFightAll() }
 
     private suspend fun deterministicStep(phase: FfPhase, ram: Map<String, Int>) {
@@ -154,6 +210,15 @@ class SingleRun(
     }
 
     companion object {
+        /** Pure helper used by handleNewInterior; testable in isolation. */
+        fun applyInteriorClassification(
+            landmarkMemory: LandmarkMemory,
+            classification: HaikuConsult.InteriorClassification,
+        ): Double {
+            classification.landmarks.forEach { landmarkMemory.recordIfNew(it) }
+            return classification.costUsd
+        }
+
         fun checkRestart(
             ram: Map<String, Int>,
             knownMapIds: Set<Int>,
