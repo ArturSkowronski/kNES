@@ -51,7 +51,7 @@ open class AdvisorAgent(
         maxIterations = 8,   // Koog counts node executions; advisor may inspect state once + produce plan
     )
 
-    suspend fun plan(phase: FfPhase, observation: String): String {
+    open suspend fun plan(phase: FfPhase, observation: String): String {
         val augmented = augmentMapView(phase, observation)
         return try {
             newAgent(phase).run(augmented)

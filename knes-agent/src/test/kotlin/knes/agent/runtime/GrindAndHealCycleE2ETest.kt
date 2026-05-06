@@ -1,6 +1,7 @@
 package knes.agent.runtime
 
 import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import knes.agent.advisor.AdvisorAgent
 import knes.agent.executor.ExecutorAgent
@@ -104,7 +105,7 @@ class GrindAndHealCycleE2ETest : FunSpec({
 
         // Smoke assertions: session completed without throwing, and party was not wiped.
         outcome shouldNotBe Outcome.PartyDefeated
-        outcome shouldNotBe null
+        stubAdvisor.tickCount shouldBe 3  // verifies all 3 scripted tokens consumed → BRIDGE flipped grindModeActive
     }
 })
 
@@ -115,12 +116,9 @@ class GrindAndHealCycleE2ETest : FunSpec({
 /**
  * Stub advisor: returns scripted tokens from [scripted] list for each
  * consultStrategy() call. Falls back to "BRIDGE" once the list is exhausted.
- * plan() is intentionally NOT overridden — if called it will attempt a real
- * LLM request (which will fail with the fake key). This is acceptable because
- * in grind mode, plan() is only invoked after the budget cap fires or the
- * session transitions out of Overworld; the budget (30s / 30 skills) ensures
- * the session terminates before many plan() calls happen, and the stub executor
- * (below) prevents real advisor plan() calls from being necessary.
+ * plan() is overridden to return a no-op string, preventing any HTTP call to
+ * Anthropic (which would fail with the fake key) when the idle-turn watchdog
+ * (idleTurns >= 20) triggers advisor.plan() after grindMode flips off.
  */
 private class StubAdvisor(
     anthropic: AnthropicSession,
@@ -138,6 +136,9 @@ private class StubAdvisor(
         println("[stub-advisor] tick=$tickCount idx=${idx - 1} → $tok")
         return tok
     }
+
+    override suspend fun plan(phase: FfPhase, observation: String): String =
+        "stub-plan: no-op"
 }
 
 /**
