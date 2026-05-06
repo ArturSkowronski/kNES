@@ -138,6 +138,10 @@ class OutfitBootPhaseE2ETest : FunSpec({
         val warpMemory = OverworldWarpMemory(file =
             Files.createTempFile("e2e-warps-", ".json").toFile().apply { deleteOnExit() })
 
+        val tmpOutfit = Files.createTempFile("e2e-outfit-", ".json").toFile().apply { deleteOnExit() }
+        if (tmpOutfit.exists()) tmpOutfit.delete()  // start fresh
+        val outfitState = OutfitState(file = tmpOutfit)
+
         val agent = AgentSession(
             toolset = toolset,
             observer = observer,
@@ -153,6 +157,7 @@ class OutfitBootPhaseE2ETest : FunSpec({
             outfitViewportSource = overworldMap,
             outfitMapSession = mapSession,
             outfitSavestatePath = savestate,
+            outfitState = outfitState,
             runDir = runDir,
         )
 

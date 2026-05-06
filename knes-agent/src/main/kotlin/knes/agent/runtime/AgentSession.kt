@@ -73,6 +73,13 @@ class AgentSession(
      *  ("no-savestate"); the boot phase will still run but the cache won't be
      *  reused across sessions. */
     private val outfitSavestatePath: String? = null,
+    /**
+     * Optional injected OutfitState. Tests pass a temp-file-backed instance so
+     * e2e runs against a real ROM/savestate don't pollute the developer's real
+     * `~/.knes/ff1-outfit-state.json`. Defaulted to null = production behavior
+     * (default home-dir-backed file).
+     */
+    private val outfitState: OutfitState? = null,
     runDir: Path = Trace.newRunDir(),
     /**
      * Optional per-turn hook fired after each executor turn. Receives current
@@ -548,12 +555,12 @@ class AgentSession(
      * without bailing. Silently no-ops when optional vision deps are absent.
      */
     private suspend fun runOutfitBootPhase() {
-        val outfitState = OutfitState()
+        val state = outfitState ?: OutfitState()
         val savestateHash = computeSavestateHash()
         val phase = OutfitBootPhase(
             toolset = toolset,
             landmarks = landmarkMemory,
-            outfitState = outfitState,
+            outfitState = state,
             savestateHash = savestateHash,
             trace = { kind, msg ->
                 println("[boot_outfit] $kind: $msg")
@@ -661,7 +668,7 @@ class AgentSession(
             "weapon@map${activeShop.mapId}-(${activeShop.localX},${activeShop.localY})"
         )
         if (charsEquipped.isNotEmpty()) {
-            outfitState.markBought(savestateHash, charsEquipped, goldSpent, shopsClassified)
+            state.markBought(savestateHash, charsEquipped, goldSpent, shopsClassified)
         }
         val summary = "candidatesProbed=${if (cachedShop == null) 1 else 0} " +
             "weaponShopFound=true weaponsBought=${charsBought.size} " +
