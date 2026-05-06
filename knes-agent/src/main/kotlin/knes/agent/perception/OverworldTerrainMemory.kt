@@ -40,13 +40,12 @@ class OverworldTerrainMemory(
     }
 
     fun save() {
-        file.parentFile?.mkdirs()
         val payload = TerrainFile(
             tiles = seen.entries
                 .sortedWith(compareBy({ it.key.second }, { it.key.first }))
                 .associate { (k, v) -> "${k.first},${k.second}" to v.name },
         )
-        file.writeText(json.encodeToString(TerrainFile.serializer(), payload))
+        AtomicJsonWriter.write(file, json.encodeToString(TerrainFile.serializer(), payload))
     }
 
     fun record(worldX: Int, worldY: Int, type: TileType) {

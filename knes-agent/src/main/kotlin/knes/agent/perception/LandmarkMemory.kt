@@ -54,9 +54,8 @@ class LandmarkMemory(
     }
 
     fun save() {
-        file.parentFile?.mkdirs()
         val payload = LandmarkFile(landmarks = byId.values.sortedBy { it.id })
-        file.writeText(json.encodeToString(LandmarkFile.serializer(), payload))
+        AtomicJsonWriter.write(file, json.encodeToString(LandmarkFile.serializer(), payload))
     }
 
     fun record(l: Landmark) { byId[l.id] = l }

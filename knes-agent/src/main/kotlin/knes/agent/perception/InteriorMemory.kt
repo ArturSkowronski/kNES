@@ -90,13 +90,12 @@ class InteriorMemory(
     }
 
     fun save() {
-        file.parentFile?.mkdirs()
         val payload = InteriorMemoryFile(
             facts = byKey.values.sortedWith(
                 compareBy({ it.mapId }, { it.tileY }, { it.tileX }),
             ),
         )
-        file.writeText(json.encodeToString(InteriorMemoryFile.serializer(), payload))
+        AtomicJsonWriter.write(file, json.encodeToString(InteriorMemoryFile.serializer(), payload))
     }
 
     fun get(mapId: Int, tileX: Int, tileY: Int): InteriorTileFact? =
