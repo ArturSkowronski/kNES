@@ -1,7 +1,9 @@
 package knes.agent.runtime
 
 import knes.agent.advisor.AdvisorAgent
+import knes.agent.advisor.StrategyAdvice
 import knes.agent.executor.ExecutorAgent
+import knes.agent.skills.GrindLoop
 import knes.agent.perception.FfPhase
 import knes.agent.perception.FogOfWar
 import knes.agent.perception.LandmarkMemory
@@ -57,6 +59,45 @@ class AgentSession(
     private val resolvedRunDir = runDir
     private val trace = Trace(resolvedRunDir)
     private val screenshotPolicy = ScreenshotPolicy()
+
+    /** Strategy mode state — see spec §2 (one-way switch). */
+    private var grindModeActive: Boolean = true
+    private val recentDecisions: RecentDecisionsBuffer = RecentDecisionsBuffer()
+
+    /** Coneria spawn anchor for grind corridor. Pre-bridge target (157,141). */
+    private val GRIND_ANCHOR_X: Int = 157
+    private val GRIND_ANCHOR_Y: Int = 158
+    private val BRIDGE_TILE: Pair<Int, Int> = 157 to 141
+    private val TARGET_MIN_LEVEL: Int = 3
+
+    private sealed interface SkillInvocation {
+        data object Grind : SkillInvocation
+        data object Rest : SkillInvocation
+    }
+
+    private suspend fun runStrategicTick(ram: Map<String, Int>): SkillInvocation? {
+        // Coneria entry tile for inn-distance calc — fall back to overworld center if absent.
+        val coneriaEntry = landmarkMemory.all()
+            .firstOrNull { it.kind == knes.agent.perception.LandmarkKind.TOWN_ENTRY }
+            ?.let { (it.worldX ?: 0) to (it.worldY ?: 0) }
+            ?: (152 to 159)  // fallback: pre-known approx for Coneria spawn area
+        val prompt = StrategyAdvice.buildPrompt(
+            ram = ram, recent = recentDecisions,
+            innTile = coneriaEntry, bridgeTile = BRIDGE_TILE, targetMinLevel = TARGET_MIN_LEVEL,
+        )
+        val raw = advisor.consultStrategy(prompt)
+        val parsed = StrategicDecision.parse(raw) ?: StrategicDecision.GRIND
+        val guarded = StrategyAdvice.applySanityGuards(parsed, ram, recentDecisions.isThrashing())
+        recentDecisions.record(guarded)
+        println("[strategy] raw='${raw.take(40)}' parsed=$parsed guarded=$guarded recent=${recentDecisions.snapshot()}")
+        trace.record(TraceEvent(turn = 0, role = "strategy", phase = "Overworld",
+            input = prompt, output = "raw=$raw parsed=$parsed guarded=$guarded"))
+        return when (guarded) {
+            StrategicDecision.GRIND -> SkillInvocation.Grind
+            StrategicDecision.REST -> SkillInvocation.Rest
+            StrategicDecision.BRIDGE -> { grindModeActive = false; null }
+        }
+    }
 
     suspend fun run(): Outcome {
         println("[knes-agent] run dir: $resolvedRunDir")
@@ -196,6 +237,28 @@ class AgentSession(
                     continue  // re-observe phase next iteration
                 }
                 consecutivePostBattle = 0  // reset when phase leaves PostBattle
+
+                // V5.35: strategic decision gate (MVP scope: GRIND + BRIDGE only).
+                // REST falls through to existing advisor flow until heal-cycle integration ships.
+                // See spec §2 + §9.
+                if (grindModeActive && phase is FfPhase.Overworld) {
+                    val invocation = runStrategicTick(ram)
+                    when (invocation) {
+                        SkillInvocation.Grind -> {
+                            val res = GrindLoop(toolset).invoke(emptyMap())
+                            println("[strategy:grind] ok=${res.ok} ${res.message.take(120)}")
+                            continue
+                        }
+                        SkillInvocation.Rest -> {
+                            // MVP: heal cycle (walk-to-inn + RestAtInn / DiscoverInn) deferred.
+                            // For now, REST falls through to existing advisor flow so the agent
+                            // doesn't deadlock; landmark-aware REST integration is a follow-up.
+                            val cached = landmarkMemory.findInnkeeper()
+                            println("[strategy:rest] cache=${if (cached != null) "HIT mapId=${cached.mapId}" else "MISS"} — heal cycle deferred to follow-up")
+                        }
+                        null -> { /* BRIDGE: grindModeActive flipped, fall through */ }
+                    }
+                }
 
                 val phaseChanged = previousPhase == null || previousPhase::class != phase::class
                 // V4 hybrid C: advisor consult earlier when stuck inside an interior.

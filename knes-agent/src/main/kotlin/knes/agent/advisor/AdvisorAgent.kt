@@ -62,6 +62,28 @@ class AdvisorAgent(
         }
     }
 
+    /**
+     * Strategy-mode advisor consult. Different system prompt
+     * (StrategyAdvice.SYSTEM_PROMPT, no Koog tools, single-token output).
+     * See spec §3.3.
+     */
+    suspend fun consultStrategy(prompt: String): String {
+        val agent = AIAgent(
+            promptExecutor = anthropic.executor,
+            llmModel = modelRouter.modelFor(FfPhase.Overworld(0, 0), AgentRole.ADVISOR),
+            toolRegistry = ToolRegistry { },
+            strategy = singleRunStrategy(),
+            systemPrompt = StrategyAdvice.SYSTEM_PROMPT,
+            maxIterations = 2,
+        )
+        return try {
+            agent.run(prompt)
+        } catch (e: Exception) {
+            if (e::class.simpleName == "AIAgentMaxNumberOfIterationsReachedException") "GRIND"
+            else throw e
+        }
+    }
+
     private fun augmentMapView(phase: FfPhase, observation: String): String {
         val (src, partyXY) = when (phase) {
             is FfPhase.Overworld -> viewportSource to (phase.x to phase.y)
