@@ -1,190 +1,105 @@
-# FF1 Koog Agent — Handoff (Phase 2 Garland-attempt session, 2026-05-06 afternoon)
+# FF1 Koog Agent — Handoff (Spec 1 grind & heal cycle session, 2026-05-06 evening)
 
-**Branch HEAD:** `69c8e53` on `ff1-phase2-garland-attempt-hardening`. **PR #115 open** against `master`. 12 attempts to reach Garland; agent infrastructure substantially hardened, but Garland NOT defeated.
-**Required env:** `ANTHROPIC_API_KEY` (Phase 2 vision is hardcoded to Anthropic in `Main.kt`).
+**Branch HEAD:** `a5c76d0` on `ff1-grind-strategy`. **PR #116 open** against `master`.
 
----
+Cut from `ff1-phase2-garland-attempt-hardening` (PR #115 still open separately for prior session work).
 
-## TL;DR — Phase 2 agent hardened across 12 iterations; Coneria peninsula remains a wall
+**Required env:** `ANTHROPIC_API_KEY` (Phase 2 vision hardcoded to Anthropic in `Main.kt`).
 
-Tried to make `:knes-agent:run` actually reach Garland. Pre-populated `LandmarkMemory` with derived bridge + Temple coords from ROM tile bytes. Each iteration uncovered the next bug; cumulative fixes landed in **PR #115**.
+## TL;DR
 
-```
-PR #115 (open) — fix(phase2): harden agent — postbattle cap, trap detection, frontier prompt
-  WalkOverworldTo (V5.33) — 30-frame NOOP warmup + deferred fog.markBlocked
-  AgentSession (V5.34/V5.34.2/V5.34.3) — top-of-loop budget, postbattle cap=150,
-    confirmed UnknownMapTrap detection (3-obs threshold + Battle/PostBattle excl.)
-  AdvisorAgent prompt — V5.32 frontier bias + V5.34.4 Coneria overlay nav + V5.34.5 XP grind
-  ExecutorAgent — maxIterations 16 → 24
-```
+PR #116 ships full **strategy decision infrastructure** for Phase 2 agent: GRIND/REST/BRIDGE decision gate, GrindLoop / RestAtInn / DiscoverInn skills, advisor consult with sanity guards, plan-injection for REST cycle, autonomous inn discovery with landmark persistence. **35 new tests, all green, 0 regressions.**
 
-**Net effect:** infinite postbattle zombie loops → clean `OutOfBudget` termination; false-positive trap-bails on tile 0x00 FIGHT-normal grass eliminated; agent now reaches Coneria town overlay and uses `exploreInteriorFrontier` as designed (327 calls in v11).
+Validation runs (4 attempts) revealed that **Spec 2 (`buyAtShop`) is a hard prerequisite** before grind strategy is viable end-to-end. Party L0 with starting weapons dies in 3-4 round IMP battles → death-restart loop → progress lost. Net consensus is "buy weapons FIRST, then grind" — Spec 2 was deferred speculatively in original planning, must ship before next validation.
 
----
+## What's in PR #116 (chronological)
 
-## Verified live this session
-
-| Fix | Live evidence |
+| Commit | Subject |
 |---|---|
-| WalkOverworldTo WARMUP_FRAMES=30 (V5.33) | v5+ runs no longer flag input-dead on first overworld step post-spawn / post-battle. |
-| WalkOverworldTo deferred fog mark (V5.33) | v5 evidence vs v4: agent stopped declaring false deadlock at (152,151) after one failed W step. |
-| AgentSession postbattle cap (V5.34, 60→150) | v6 first clean OutOfBudget after 20 dismiss; v11 at 150 dismiss across 23 battles → cap = working but multi-screen postbattle dwarfs initial estimates. |
-| Top-of-loop budget enforcement (V5.34) | wallClock check no longer skipped by `continue` branches. v6 ran 4m 7s and terminated cleanly. |
-| Trap detection 3-obs threshold + phase exclusion (V5.34.3) | v9: 0 trap-bails despite phase=Indoors(mapId=0,isTown=true) Coneria overlay reached. v11: 0 trap-bails across 9m 44s + 23 battles. |
-| Advisor frontier prompt (V5.32) | v4 advisor invoked findPath 69× (was 0); chose verified GRASS waypoint (168,144) instead of WATER (168,145). |
-| Advisor Coneria-overlay nav prompt (V5.34.4) | v10/v11: agent used `exploreInteriorFrontier` 135× / 327× respectively instead of cycling exitInterior. |
-| Pre-populated bridge + stepping-stone landmarks | Advisor visibly references EXIT_TILE(157,141) and EXIT_TILE(168,144) in turn-2 plan output. |
+| 12c544d | docs(spec): FF1 grind & heal cycle design (Spec 1 of 2) |
+| 53ee356 | docs(plan): FF1 grind & heal cycle implementation plan |
+| 0b74fee | feat(strategy): StrategicDecision enum + token parser |
+| d40487b | feat(strategy): RecentDecisionsBuffer with anti-thrash predicate |
+| da31cb5 | feat(strategy): StrategyContext RAM helpers + summarize() |
+| 1367579 | feat(skill): GrindLoop — N-S corridor walk near spawn |
+| 8e93126 | fix(grindloop): correct framesElapsed delta + add 0x63 test |
+| 61023c2 | feat(skill): RestAtInn — deterministic Coneria inn heal |
+| 2e9083b | fix(restatinn): document taps>=4 heuristic + test already-full branch |
+| e37e81d | feat(advisor): StrategyAdvice — prompt builder + sanity guards |
+| 72b8773 | fix(strategy-advice): document L0/L1 BRIDGE override threshold |
+| 7e6a269 | docs(spec+plan): autonomous inn discovery (replaces manual probe) |
+| 5f6aa81 | feat(skill): DiscoverInn — autonomous inn discovery + persist landmark |
+| 142637f | fix(discoverinn): correct interior RAM keys (smPlayerX/Y) + round-trip |
+| aa733c8 | feat(session): strategic decision point + grindMode (V5.35) — MVP |
+| 2a606fd | fix(session): pass grind anchor + correct trace phase |
+| 664d6c7 | test(e2e): GrindAndHealCycleE2ETest with stub advisor |
+| ed307f1 | fix(e2e-test): override plan() in stub + assert tickCount |
+| 5109f40 | feat(session): REST heal cycle via executor plan-injection (V5.36) |
+| 6b66ad9 | fix(session): capture grind anchor from party position dynamically |
+| 09ba8ab | fix(grindloop-args): widen corridor 3->6, max steps 6->12 |
+| a5c76d0 | feat(strategy): adaptive grind anchor — shift on consecutive non-progress |
 
----
+## Validation iteration table
 
-## Iteration progression
+| Iter | Outcome | Strategy ticks | Battles | Death restarts | Diagnosis → Fix |
+|------|---------|----------------|---------|------------------|-----------------|
+| v1 | BuildFail | 0 | 0 | 0 | Relative ROM path → use absolute via `$PWD` |
+| v2 | OutOfBudget | 50+ | 0 | 0 | Hardcoded anchor (157,158); spawn (146,158) → WanderedOff each step → drift into town. **Fixed:** dynamic anchor capture (`6b66ad9`) |
+| v3 | OutOfBudget | 6 | 0 | 0 | Spawn area (146, 157-159) is no-encounter zone. Wider corridor reaches town entry but still no encounters. **Fixed:** adaptive anchor shift after 3 non-progress (`a5c76d0`) |
+| v4 | OutOfBudget | 2/life | many | **32** | Adaptive shift → encounter at (152,151), party briefly L1, then dies in IMP encounter → restart cycle. Death loop dominates wallclock. **Spec 2 blocking.** |
 
-Spawn at world (146, 158); spawn → bridge = ~22 manhattan tiles; spawn → Temple = ~50.
+## Critical insight from validation
 
-| Iter | Outcome | Max y N | Battles | Postbattle | Trap-bail | Key change |
-|------|---------|---------|---------|------------|-----------|------------|
-| v2 | zombie loop | 153 | — | infinite | — | baseline |
-| v3 | zombie loop | 151 | — | infinite | — | bridge landmark + maxIter 24 |
-| v4 | zombie loop | 151 | — | infinite | — | frontier prompt + stepping stone |
-| v5 | zombie loop | 149 | — | infinite | — | WARMUP + deferred fog |
-| **v6** | **`OutOfBudget`** ✅ | 149 | — | 20 (cap) | — | V5.34 postbattle cap |
-| v7 | trap-bail (false) | 153 | — | 0 | 1 | UnknownMapTrap detection (eager) |
-| v8 | trap-bail (false) | 153 | — | 0 | 1 | pre-pop trap warps |
-| **v9** | **`OutOfBudget`** ✅ | 149 | **51** | 60 (cap) | 0 | V5.34.3 confirmed trap detection |
-| v10 | (Anthropic 60s timeout) | 149 | 5 | 0 | 0 | postbattle cap 60→150, town nav prompt |
-| **v11** | **`OutOfBudget`** ✅ | 149 | 23 | 150 (cap) | 0 | retry of v10 |
-| v12 | (killed for PR) | — | — | — | — | XP grind prompt (V5.34.5) |
+**Death loop is the dominant blocker, not strategic infrastructure.**
 
-Bridge (157, 141), mainland north of Coneria, Temple of Fiends (168, 117), Garland — **none reached**.
+Without weapon upgrades:
+- Party L0 IMP encounter takes 3-4 rounds
+- Multiple IMPs hit per round → 30 HP party can die in 2 rounds
+- 32 deaths in 7-min run = ~13s per death cycle, dominates wallclock
 
----
+With Coneria weapons (400 GP starting gold = enough for 4× starter weapons):
+- Each class one-shots IMP/Goblin per net consensus
+- 1-round battles → minimal HP loss → grind viable
 
-## Research finding: FF1 NES warp table (datacrystal + Entroper/FF1Disassembly)
+User feedback (verbatim): *"oddal się od conerii, ale nie jakoś daleko - dodatkowo miałeś kupić broń"* — IMPs are close to town (not at bridge), and weapons MUST be bought.
 
-The "hidden warp" hypothesis at (147,153)/(147,154) was wrong. Per `bank_0F.asm` (`GetOWTile` + `SetOWTileProps`), each visual tile_id 0x00–0x7F has a 2-byte property entry in `tileset_prop` (NES $8000 in BANK_OWINFO = file offset 0x10):
+## Known existing bugs (NOT in scope of this PR)
 
-- byte 1 `[SSdf ascw]` = walking + vehicle restrictions
-- byte 2: `$80` set → TELEPORT (low 6 bits = teleport_id, indexes `lut_EntrTele_X/Y/Map`); `$40` set → FIGHT (random encounter trigger)
+1. **Town overlay exit failures** — `exitInterior` 13% step success on towns (V5.29 docs); `exploreInteriorFrontier` often fails. Once warped into Coneria town at (146,152), high probability of getting stuck.
+2. **Death-restart not detected as PartyDefeated** — `pressStartUntilOverworld` called from existing flow without `Outcome.PartyDefeated` returning. Agent silently restarts and continues.
+3. **`PressStartUntilOverworld.totalFrames` accumulation** — same bug as fixed in `GrindLoop` (`8e93126`). Not fixed here.
 
-Dumped the table for our ROM. Tile 0x00 has byte2 = `0x40` = **FIGHT-normal**, NOT teleport. The empirical (mapflags=1, mapId=0) state on stepping onto (147, 154) was a 1-frame battle-entry artifact, not a hidden warp. V5.34.3 (3-obs threshold + Battle/PostBattle exclusion) addresses this directly.
+## Next session entry point
 
-Real overworld warp tile_ids (byte2 & 0x80):
-- 0x01–0x02 (id 9), 0x0E (id 14), 0x1B–0x1C (id 10), 0x1D (id 24, chime-gated),
-- 0x29–0x2A (id 11), 0x2B (id 16), 0x2F (id 20), **0x32 (id 21 — Temple of Fiends)**,
-- 0x34 (id 25), 0x35 (id 26), 0x38–0x39 (id 12), 0x3A (id 22), 0x46 (id 19, currently misclassified as BRIDGE),
-- 0x49–0x4E (ids 1–5), 0x57–0x58 (id 13), 0x5A/5D (ids 6–7), 0x64/0x65 (id 15),
-- 0x66–0x6E (ids 17, 27, 28, 29, 0, 18, 8, 23).
+**Highest-leverage next step: implement Spec 2 (`buyAtShop` skill).**
 
-`OverworldTileClassifier` already buckets most of these as CASTLE/TOWN (impassable transit). Notable misclassifications:
-- 0x46 currently → BRIDGE; should be WARP (post-Garland bridge cutscene teleport).
-- 0x1D currently → UNKNOWN; could be WARP_CHIME_GATED.
+Sub-tasks:
+- Walk to Coneria entry (TOWN_ENTRY landmark from Phase 1 explorer if available; else fallback)
+- Enter town, navigate to weapon shop (vision-driven via `WalkInteriorVision`)
+- Shop dialog: deterministic menu interaction (BUY → WEAPON → select per class → confirm)
+- Validate: gold drops, item RAM slot populated
+- Persist `NPC_SHOPKEEPER` landmark (already in `LandmarkKind` enum) on first discovery for cross-run reuse
 
-Coneria warp at world (145, 152) tile = 0x76; tileset_prop[0x76] byte2 = 0x00 (no teleport). Coneria overlay activates via a different mechanism (proximity-based town overlay, not per-tile warp lookup) — separate codepath in the engine, out of scope of `tileset_prop`.
+Secondary:
+- Reduce adaptive anchor shift offset from `(+2 E, -4 N)` to `(+3 E, -1 N)` — lateral move per user feedback ("oddal się od conerii, ale nie jakoś daleko").
+- Validate cross-run landmark persistence after Spec 2 ships.
 
----
+After Spec 2 works:
+- Wire REST cycle to actually walk-to-inn (currently plan-injection logs cache hit/miss only)
+- Validate full grind→heal→bridge flow
 
-## Open work for next session
-
-### Primary blocker: encounter density on Coneria peninsula
-
-v9 + v11 evidence: spawn → bridge needs ~22 tiles of traversal. Random encounters fire every 4–8 tiles in grass/forest, producing 23–51 battles. Multi-screen postbattle (XP / level-up / gold) × 4 chars = 60–150 dismiss cycles per run. Even with `POSTBATTLE_DISMISS_CAP=150`, full budget exhausts before reaching the bridge.
-
-**Candidate fixes (not yet implemented):**
-- (a) **Savestate fixture past the bridge** (10 min manual): boot game, walk through Coneria, cross bridge, save state at world ~(180, 150). Set as `FF1_SAVESTATE` for Phase 2 runs that target Garland specifically.
-- (b) **Waypoint-aware advisor planning**: V5.34.5 prompt added the *concept* of 8-10 tile waypoints, but advisor still defaulted to `walkOverworldTo(157,141)` end-to-end in v11. May need to enforce in code (split single long walks at intermediate fog frontiers).
-- (c) **Wire Gemini into Phase 2** (1–2h, 3 new classes + Main.kt router) — better vision precision; not a root-cause fix for encounter density but would help downstream once past the bridge.
-
-### Smaller / opportunistic
-- Update `OverworldTileClassifier` to consume `tileset_prop` from ROM, so 0x46 → WARP (not BRIDGE) and 0x1D → WARP. Would let BFS treat all true warp tiles as impassable transit.
-- Postbattle handler diagnosis: 23 battles × ~6.5 dismiss avg suggests level-up animations or cascading encounters mid-postbattle. Could add a per-battle dismiss counter (vs current consecutive cross-battle counter).
-- `OverworldWarpMemory` has 1 entry: (145, 152) Coneria. The two false UnknownMapTrap entries from attempt8 were cleaned up.
-
----
-
-## Code architecture (post-PR-#115)
-
-```
-knes-agent/src/main/kotlin/knes/agent/
-  advisor/AdvisorAgent.kt
-    systemPrompt — V5.32 FRONTIER, V5.34.4 CONERIA OVERLAY, V5.34.5 XP GRIND
-  executor/ExecutorAgent.kt
-    maxIterations = 24 (V5.23.2 update — was 16)
-  runtime/AgentSession.kt
-    Top-of-loop budget enforcement
-    POSTBATTLE_DISMISS_CAP = 150 + consecutivePostBattle reset
-    UnknownMapTrap detection: TRAP_CONFIRM_THRESHOLD=3 + phase!=Battle/PostBattle
-      On confirmed trap: failedWarpTiles += tile, fog.markBlocked,
-                          warpMemory.record(mapId=0) + save, return OutOfBudget
-  skills/WalkOverworldTo.kt
-    WARMUP_FRAMES=30 NOOP at skill start
-    fog.markBlocked deferred to consecutiveNoMove >= 2
-```
-
-Explorer pipeline (`SingleRun.kt`, `ExplorerSession.kt`) unchanged this session — its #111/#113 trap-bail logic is what V5.34.2/3 ports into Phase 2.
-
----
-
-## Test status (post-PR-#115)
-
-`./gradlew :knes-agent:test` not re-run this session — last green was **233 pass / 2 pre-existing fail / 7 skipped** at master (`ca2972f`). PR test plan checkbox open.
-
----
-
-## Pre-populated memory state
-
-`~/.knes/ff1-landmarks.json` (16 entries; 2 manually added this session):
-- `EXIT_TILE at world(157,141)` — N bridge from Coneria peninsula (manual ROM derivation).
-- `EXIT_TILE at world(168,144)` — verified GRASS stepping stone S of Temple of Fiends.
-- `DUNGEON_ENTRY at world(168,117)` — Temple of Fiends candidate.
-- `DUNGEON_ENTRY at world(210,149)` — alternative candidate (Pravoka or Temple cluster).
-- 12 NPC_KING / STAIRS_DOWN / TOWN_ENTRY entries from prior explorer runs.
-
-`~/.knes/ff1-overworld-warps.json`: 1 entry — Coneria (145,152) → mapId=8. Two false trap entries from attempt8 were cleaned out after V5.34.3 fix.
-
----
-
-## Useful CLI
+## Run command
 
 ```bash
-# Phase 2 with bumped budget (matches PR #115 test plan).
-./gradlew :knes-agent:run --args="--rom=/Users/askowronski/Priv/kNES/roms/ff.nes \
-  --max-skill-invocations=200 --cost-cap-usd=10.0 --wall-clock-cap-seconds=1800"
-
-# Explorer (unchanged, Gemini-capable).
-KNES_VISION=gemini-pro ./gradlew :knes-agent:runExplorer
-
-# Verify fog state mid-run by checking log for trap detector + postbattle counter.
-grep -E "unknown-map-trap|postbattle auto-dismiss|OUTCOME:" /tmp/knes-garland-attempt*.log
-
-# Inspect landmarks (incl. our manual additions).
-jq '.landmarks[] | {kind, x: .worldX, y: .worldY, note}' ~/.knes/ff1-landmarks.json
+./gradlew :knes-agent:run --args="--rom=$PWD/roms/ff.nes --wall-clock-cap-seconds=420 --cost-cap-usd=2.0 --max-skill-invocations=80"
 ```
 
----
+## Files of note
 
-## Repo paths
-
-- Main: `/Users/askowronski/Priv/kNES`
-- Branch: `ff1-phase2-garland-attempt-hardening` (HEAD `69c8e53`)
-- PR: https://github.com/ArturSkowronski/kNES/pull/115
-- ROM (gitignored): `/Users/askowronski/Priv/kNES/roms/ff.nes`
-- Persistent memory: `~/.knes/ff1-{landmarks,overworld-warps,interior-memory,overworld-terrain,blockages,ow-memory}.json`
-- Run logs (this session): `/tmp/knes-garland-attempt{2..12}.log`
-
-Pre-session archive (rollback target if PR rejected):
-- `~/.knes/archive-2026-05-06-pre-gemini-campaign/`
-
----
-
-## Test fixtures
-
-- `ff1-post-boot.savestate` — overworld at (146, 158); used by explorer, NOT by Phase 2 (Phase 2 boots from ROM intro).
-- `ff1-coneria-interior-discovery.savestate` — inside mapId=8.
-
-**Missing fixture for next session:** post-bridge savestate at world ~(180, 150) — would skip the encounter-dense Coneria peninsula entirely. See "Open work" section.
-
----
-
-## First message to send to next session (suggestion)
-
-> Branch `ff1-phase2-garland-attempt-hardening` at `69c8e53`, PR #115 open. 12 Phase 2 attempts this session — agent now terminates cleanly (no zombie postbattle, no false UnknownMapTrap), reaches Coneria town overlay, fights 23–51 battles per run. Garland not reached: encounter density on Coneria peninsula consumes the full postbattle dismiss budget (cap=150) before agent crosses the N bridge. **Highest-leverage next step: capture a savestate past the bridge and set `FF1_SAVESTATE` so Phase 2 runs targeting Garland skip the peninsula entirely.** FF1 disasm research dumped `tileset_prop` table — `OverworldTileClassifier` should consume it (0x46 is WARP not BRIDGE; 0x1D is WARP_CHIME_GATED) for true overworld passability. Conversation in Polish; PR-flow + tests-first + commit per closed phase.
+- Spec: `docs/superpowers/specs/2026-05-06-ff1-grind-and-heal-cycle-design.md`
+- Plan: `docs/superpowers/plans/2026-05-06-ff1-grind-and-heal-cycle.md`
+- Strategy types: `knes-agent/src/main/kotlin/knes/agent/runtime/{StrategicDecision,RecentDecisionsBuffer,StrategyContext}.kt`
+- Skills: `knes-agent/src/main/kotlin/knes/agent/skills/{GrindLoop,RestAtInn,DiscoverInn}.kt`
+- Advisor: `knes-agent/src/main/kotlin/knes/agent/advisor/StrategyAdvice.kt` + `AdvisorAgent.consultStrategy`
+- Session integration: `knes-agent/src/main/kotlin/knes/agent/runtime/AgentSession.kt` (V5.35 / V5.36 / V5.36.x sections)
+- E2E test: `knes-agent/src/test/kotlin/knes/agent/runtime/GrindAndHealCycleE2ETest.kt`
