@@ -32,6 +32,16 @@ object StrategyContext {
     fun manhattanDistance(x1: Int, y1: Int, x2: Int, y2: Int): Int =
         (x1 - x2).absoluteValue + (y1 - y2).absoluteValue
 
+    fun weaponSlot(ram: Map<String, Int>, char: Int, slot: Int): Int =
+        ram["char${char}_weapon${slot}"] ?: 0
+
+    fun weaponId(byte: Int): Int = byte and 0x7F
+
+    fun isEquipped(byte: Int): Boolean = (byte and 0x80) != 0
+
+    fun anyWeaponEquipped(ram: Map<String, Int>, char: Int): Boolean =
+        (0..3).any { isEquipped(weaponSlot(ram, char, it)) }
+
     fun summarize(
         ram: Map<String, Int>,
         innTile: Pair<Int, Int>,
