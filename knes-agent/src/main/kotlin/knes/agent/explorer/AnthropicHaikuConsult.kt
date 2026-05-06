@@ -59,6 +59,10 @@ class AnthropicHaikuConsult(
         return parseDialogResponse(raw)
     }
 
+    /** Stub: shop classification is delegated to Gemini in this codebase. */
+    override suspend fun classifyShopMenu(screenshotBase64: String?): HaikuConsult.ShopClassification =
+        HaikuConsult.ShopClassification("unknown", emptyList(), 0.0)
+
     override fun close() { client.close() }
 
     private suspend fun postOrNull(body: String): String? {

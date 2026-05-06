@@ -57,6 +57,12 @@ class GeminiVisionConsult(
         return parseDialogResponse(raw)
     }
 
+    override suspend fun classifyShopMenu(screenshotBase64: String?): HaikuConsult.ShopClassification {
+        val body = buildBody(SYSTEM_SHOP, SHOP_USER_TEXT, screenshotBase64, maxOutputTokens = 800)
+        val raw = postOrNull(body) ?: return HaikuConsult.ShopClassification("unknown", emptyList(), 0.0)
+        return parseShopResponse(raw)
+    }
+
     override fun close() { client.close() }
 
     private suspend fun postOrNull(body: String): String? {
@@ -145,6 +151,21 @@ class GeminiVisionConsult(
                 "Output JSON only:\n" +
                 """{"summary":"<paraphrase ≤80 chars>","landmarkHint":"KING|SHOPKEEPER|null"}"""
 
+        private const val SYSTEM_SHOP =
+            "You are reading the BUY menu screen of a Final Fantasy 1 (NES) shop. " +
+                "Classify the shop kind and list each item name + price. " +
+                """Output JSON only: {"kind":"weapon|armor|whiteMagic|blackMagic|item|unknown","items":[{"name":"<short>","price":N}]}""" +
+                " Rules: " +
+                "weapon = physical weapons (sword, axe, dagger, hammer, nunchucks, staff). " +
+                "armor = body equipment (cloth, leather, mail, shield, helm, gauntlets). " +
+                "whiteMagic = spells like CURE / HARM / FOG / RUSE. " +
+                "blackMagic = spells like FIRE / LIT / SLEP / LOCK. " +
+                "item = potions, antidote, tents, cabins. " +
+                "unknown = cannot classify with confidence. " +
+                "Return ONLY JSON, no prose."
+
+        private const val SHOP_USER_TEXT = "Classify this shop BUY menu."
+
         /** Parse the Gemini response envelope and the inner LLM-emitted JSON.
          *  Visible for testing — pure function, no side effects. */
         fun parseInteriorResponse(rawJson: String, mapId: Int, runId: String): HaikuConsult.InteriorClassification {
@@ -185,6 +206,28 @@ class GeminiVisionConsult(
             } catch (e: Exception) {
                 System.err.println("[gemini-vision] parseDialog failed: ${e.message}")
                 HaikuConsult.DialogReading("", null, costUsd)
+            }
+        }
+
+        fun parseShopResponse(rawJson: String): HaikuConsult.ShopClassification {
+            val (innerText, costUsd) = parseEnvelope(rawJson)
+            if (innerText == null) return HaikuConsult.ShopClassification("unknown", emptyList(), costUsd)
+            return try {
+                val match = JSON_OBJECT.find(innerText)
+                    ?: return HaikuConsult.ShopClassification("unknown", emptyList(), costUsd)
+                val obj = json.parseToJsonElement(match.value).jsonObject
+                val kind = obj["kind"]?.jsonPrimitive?.content ?: "unknown"
+                val items = obj["items"]?.jsonArray?.mapNotNull { el ->
+                    val o = el.jsonObject
+                    val name = o["name"]?.jsonPrimitive?.content ?: return@mapNotNull null
+                    // price may be emitted as int or string — accept both.
+                    val price = o["price"]?.jsonPrimitive?.content?.toIntOrNull() ?: return@mapNotNull null
+                    name to price
+                } ?: emptyList()
+                HaikuConsult.ShopClassification(kind, items, costUsd)
+            } catch (e: Exception) {
+                System.err.println("[gemini-vision] parseShop failed: ${e.message}")
+                HaikuConsult.ShopClassification("unknown", emptyList(), costUsd)
             }
         }
 
