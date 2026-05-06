@@ -122,17 +122,28 @@ class SingleRun(
     /** Returns the effective mapId actually classified, which may differ from
      *  the trigger mapId if the engine completed a multi-stage warp transition
      *  between trigger fire and snapshot, or null if classification was skipped
-     *  (party wiped or returned to overworld during the 80-step explore). */
+     *  (party wiped, returned to overworld, or void state mapId=0). */
     private suspend fun handleNewInterior(t: Trigger.NewInteriorEntered): Int? {
         val ram = observer.ramSnapshot()
+        val cx = ram["worldX"] ?: 0; val cy = ram["worldY"] ?: 0
+        enteredWarpsThisRun += (cx to cy)
+        // mapId=0 + mapflags=1 is UnknownMapTrap (engine void state, e.g. the
+        // transition pseudo-map reached after stepping on (147,154) bogus warp).
+        // The screen renders an outer-overlay frame Haiku misreads as a throne
+        // room with a king (verified live: 4 false NPC_KING/STAIRS landmarks
+        // produced from the INN sign + party sprite). Don't record an entry,
+        // don't call Haiku — just return early.
+        val ramMapId = ram["currentMapId"] ?: -1
+        if (ramMapId == 0) {
+            System.err.println("[explorer] handleNewInterior skipped: ram mapId=0 (UnknownMapTrap), world=($cx,$cy)")
+            return null
+        }
         // Use RAM-stable mapId rather than trigger mapId for the entry landmark.
         // FF1 warp transitions briefly expose a transient currentMapId during the
         // engine handoff (e.g. (145,152) Coneria warp shows mapId=8 outer overlay
         // before settling on mapId=24 inner). By the time we read RAM here the
         // value has stabilised. Fall back to trigger.mapId if RAM is unreadable.
-        val cx = ram["worldX"] ?: 0; val cy = ram["worldY"] ?: 0
-        enteredWarpsThisRun += (cx to cy)
-        val entryMapId = ram["currentMapId"]?.takeIf { it >= 0 } ?: t.mapId
+        val entryMapId = if (ramMapId > 0) ramMapId else t.mapId
         landmarkMemory.recordIfNew(Landmark(
             id = "interior_entry_${entryMapId}_${cx}_${cy}",
             kind = guessEntryKind(entryMapId),
@@ -274,11 +285,13 @@ class SingleRun(
         }
 
         /** Decides whether the post-explore Haiku call should run, and which
-         *  mapId to tag its landmarks with. Returns null to skip — either the
-         *  party died (HP=0, screenshot would be game-over) or the engine left
-         *  the interior (mapflags=0, screenshot would be the overworld). When
-         *  RAM still reports an interior, prefers the live mapId over the
-         *  trigger mapId so multi-stage warps are tagged with the inner map. */
+         *  mapId to tag its landmarks with. Returns null to skip — party died
+         *  (HP=0, screenshot would be game-over), engine left the interior
+         *  (mapflags=0, screenshot would be the overworld), or void state
+         *  (mapId=0 + mapflags=1, screenshot is a town-overlay pseudo-frame
+         *  that Haiku misreads as throne room with king). When RAM reports a
+         *  real interior, prefers the live mapId over the trigger mapId so
+         *  multi-stage warps are tagged with the inner map. */
         fun decideClassification(
             triggerMapId: Int,
             ramAfterExplore: Map<String, Int>,
@@ -288,7 +301,8 @@ class SingleRun(
             if (hpSum == 0) return null
             if (mapflags != 1) return null
             val ramMapId = ramAfterExplore["currentMapId"] ?: -1
-            val effective = if (ramMapId >= 0) ramMapId else triggerMapId
+            if (ramMapId == 0) return null
+            val effective = if (ramMapId > 0) ramMapId else triggerMapId
             return ClassifyDecision(mapIdToUse = effective)
         }
 
