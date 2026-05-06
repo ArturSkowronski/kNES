@@ -66,6 +66,28 @@ class EquipWeaponTest : FunSpec({
         r.ok shouldBe false
         r.message shouldContain "MenuStuck"
     }
+
+    test("Equipped exercises charSlot=3 weaponSlot=2 cursor loops") {
+        val pre = mapOf(
+            "currentMapId" to 0, "screenState" to 0,
+            "char3_weapon2" to 0x12,  // owned, not equipped
+        )
+        val post = pre.toMutableMap().apply {
+            put("char3_weapon2", 0x92)  // equipped flag set
+        }
+        val toolset = ScriptedEquipToolset(listOf(pre) + List(20) { pre } + listOf(post, post, post, post, post))
+        val skill = EquipWeapon(toolset)
+
+        val r = skill.invoke(mapOf("charSlot" to "3", "weaponSlot" to "2"))
+        r.ok shouldBe true
+        r.message shouldContain "Equipped"
+        r.message shouldContain "char=3"
+        r.message shouldContain "slot=2"
+        // tapsIssued is non-zero (menu nav + watch-loop + B-mash recovery).
+        // Sanity floor: 1 (B menu open) + 2 (down to EQUIP) + 1 (A) + 2 (down to char3) + 1 (A)
+        // + 2 (down to weapon2) + 1 (A) = 10 nav taps before watch loop.
+        (toolset.tapsIssued > 10) shouldBe true
+    }
 })
 
 private class ScriptedEquipToolset(

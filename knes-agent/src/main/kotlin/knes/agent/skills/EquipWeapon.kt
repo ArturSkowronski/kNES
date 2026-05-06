@@ -28,7 +28,7 @@ class EquipWeapon(private val toolset: EmulatorToolset) : Skill {
     // 60 = generous cap covering pessimistic menu render lag + B-mash recovery.
     private val maxTaps = 60
     // After equip-flag detected (success) or not detected (timeout), B-mash to
-    // unwind from EQUIP submenu -> field menu -> overworld. 4-5 B taps sufficient.
+    // unwind from EQUIP submenu -> field menu -> overworld. Used on both paths.
     private val recoveryBTaps = 5
 
     override suspend fun invoke(args: Map<String, String>): SkillResult {
@@ -71,7 +71,7 @@ class EquipWeapon(private val toolset: EmulatorToolset) : Skill {
             val curByte = StrategyContext.weaponSlot(ram, charSlot, weaponSlot)
             if (StrategyContext.isEquipped(curByte)) {
                 // Close menu: B-mash back to overworld.
-                repeat(4) { toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 20) }
+                repeat(recoveryBTaps) { toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 20) }
                 return SkillResult(true,
                     "Equipped: char=$charSlot slot=$weaponSlot byte ${preByte}->$curByte after $taps taps",
                     ramAfter = ram)
