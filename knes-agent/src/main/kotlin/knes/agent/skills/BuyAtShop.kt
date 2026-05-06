@@ -12,10 +12,11 @@ import knes.agent.tools.EmulatorToolset
  * Args:
  *   itemSlot           — 0-indexed BUY-list slot to purchase.
  *   forCharSlot        — 1..4, character to receive the item.
- *   expectedKeeperKind — e.g. "weapon"; skill bails on landmark mismatch.
+ *   expectedKeeperKind — must be "weapon" (the only supported kind in Spec 2;
+ *                        armor/magic shops will need separate inventory-delta logic).
  *
  * Outcomes: Bought, InsufficientGold (sync pre-check), WrongClass, NotInShop,
- *           LandmarkKindMismatch.
+ *           LandmarkKindMismatch, UnsupportedKind.
  *
  * The skill issues B-taps to back out of confirm dialog before returning, but
  * does NOT exit the shop interior — caller handles building exit.
@@ -28,7 +29,11 @@ class BuyAtShop(
     override val description =
         "Buy one item at the current shop. Args: itemSlot, forCharSlot, expectedKeeperKind."
 
+    // FF1 confirmation flow: ~6-12 A-press dismiss frames after YES — well below 30.
+    // 30 = hard cap; if no gold drop by then, the dialog is stuck or class-rejected.
     private val maxDismissFrames = 30
+    // 5 consecutive unchanged dismiss frames = clear signal the purchase was rejected
+    // silently (FF1 returns to BUY list without any animation/sound on class mismatch).
     private val wrongClassFrames = 5
 
     override suspend fun invoke(args: Map<String, String>): SkillResult {
@@ -38,6 +43,13 @@ class BuyAtShop(
             ?: return failResult("Bad args: forCharSlot missing/invalid", emptyMap())
         val expectedKind = args["expectedKeeperKind"]
             ?: return failResult("Bad args: expectedKeeperKind missing", emptyMap())
+
+        if (expectedKind != "weapon") {
+            return failResult(
+                "UnsupportedKind: BuyAtShop currently supports kind=weapon only (got $expectedKind)",
+                emptyMap()
+            )
+        }
 
         val pre = toolset.getState().ram
         val mapId = pre["currentMapId"] ?: 0
@@ -88,6 +100,7 @@ class BuyAtShop(
             val curGold = StrategyContext.totalGold(ram)
             val curInvSum = (0..3).sumOf { StrategyContext.weaponId(StrategyContext.weaponSlot(ram, forCharSlot, it)) }
             if (curGold < preGold && curInvSum > preInvSum) {
+                // 2 B-taps backs out of "another?" prompt + BUY list, leaves us at shop main menu.
                 repeat(2) { toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 15) }
                 return SkillResult(
                     ok = true,
@@ -99,6 +112,7 @@ class BuyAtShop(
             if (curGold == preGold && curInvSum == preInvSum) {
                 unchangedTaps++
                 if (unchangedTaps >= wrongClassFrames) {
+                    // 3 B-taps unwinds further: confirm-dialog dismiss + BUY list + shop main menu.
                     repeat(3) { toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 15) }
                     return SkillResult(ok = false,
                         message = "WrongClass: char=$forCharSlot itemSlot=$itemSlot — gold/inventory " +

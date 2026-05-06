@@ -103,6 +103,24 @@ class BuyAtShopTest : FunSpec({
         r.message shouldContain "LandmarkKindMismatch"
         toolset.tapsIssued shouldBe 0
     }
+
+    test("UnsupportedKind when expectedKeeperKind is not weapon") {
+        val tmp = Files.createTempFile("buy-", ".json").toFile().apply { deleteOnExit() }
+        val landmarks = LandmarkMemory(file = tmp).also {
+            seedShopLandmark(it, kind = "armor")  // doesn't matter; bails on arg first
+        }
+        val pre = mapOf("currentMapId" to 7, "screenState" to 0,
+            "goldLow" to 0x90, "goldMid" to 0x01, "char1_weapon0" to 0)
+        val toolset = ScriptedBuyToolset(listOf(pre))
+        val skill = BuyAtShop(toolset, landmarks)
+
+        val r = skill.invoke(mapOf(
+            "itemSlot" to "0", "forCharSlot" to "1", "expectedKeeperKind" to "armor"
+        ))
+        r.ok shouldBe false
+        r.message shouldContain "UnsupportedKind"
+        toolset.tapsIssued shouldBe 0
+    }
 })
 
 private class ScriptedBuyToolset(
