@@ -46,10 +46,9 @@ class BlockageMemory(
     }
 
     fun save() {
-        file.parentFile?.mkdirs()
         val payload = BlockageFile(blockages = blockages.toList(),
             runStartDirections = runStartDirections.toMap())
-        file.writeText(json.encodeToString(BlockageFile.serializer(), payload))
+        AtomicJsonWriter.write(file, json.encodeToString(BlockageFile.serializer(), payload))
     }
 
     fun record(runId: String, from: Pair<Int, Int>, attemptedTo: String, result: String) {

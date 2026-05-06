@@ -59,11 +59,10 @@ class OverworldWarpMemory(
     }
 
     fun save() {
-        file.parentFile?.mkdirs()
         val payload = OverworldWarpFile(
             tiles = byKey.values.sortedWith(compareBy({ it.worldY }, { it.worldX })),
         )
-        file.writeText(json.encodeToString(OverworldWarpFile.serializer(), payload))
+        AtomicJsonWriter.write(file, json.encodeToString(OverworldWarpFile.serializer(), payload))
     }
 
     fun all(): Set<Pair<Int, Int>> = byKey.keys.toSet()

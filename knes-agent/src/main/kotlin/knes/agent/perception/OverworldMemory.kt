@@ -66,9 +66,8 @@ class OverworldMemory(
     }
 
     fun save() {
-        file.parentFile?.mkdirs()
         val payload = MemoryFile(facts = byCoord.values.sortedWith(compareBy({ it.worldY }, { it.worldX })))
-        file.writeText(json.encodeToString(MemoryFile.serializer(), payload))
+        AtomicJsonWriter.write(file, json.encodeToString(MemoryFile.serializer(), payload))
     }
 
     fun get(worldX: Int, worldY: Int): TileFact? = byCoord[worldX to worldY]
