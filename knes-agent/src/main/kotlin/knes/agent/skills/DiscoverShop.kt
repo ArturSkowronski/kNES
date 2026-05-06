@@ -9,7 +9,8 @@ import knes.agent.tools.EmulatorToolset
 /**
  * Open the shop BUY menu, capture a screenshot, send to vision (Gemini) for classification,
  * persist NPC_SHOPKEEPER landmark with kind=weapon|armor|... in note. Caller is responsible
- * for entering the shop interior and exiting after this skill returns.
+ * for entering the shop interior. The skill closes its own BUY menu via B-mash before
+ * returning; caller is responsible for walking out of the building.
  *
  * Outcomes: Classified(kind), ClassifyFailed, NotInBuilding.
  */
@@ -42,9 +43,11 @@ class DiscoverShop(
         )
         val screenshot = openStep.screenshot
 
+        var classifyError: String? = null
         val classification = try {
             vision.classifyShopMenu(screenshot)
         } catch (e: Exception) {
+            classifyError = e.message ?: "exception with no message"
             HaikuConsult.ShopClassification("unknown", emptyList(), 0.0)
         }
 
@@ -54,7 +57,7 @@ class DiscoverShop(
         if (classification.kind == "unknown") {
             return SkillResult(
                 ok = false,
-                message = "ClassifyFailed: vision returned unknown",
+                message = "ClassifyFailed: " + (classifyError ?: "vision returned unknown"),
                 ramAfter = toolset.getState().ram,
             )
         }
