@@ -68,6 +68,19 @@ class SingleRunHandleNewInteriorTest : FunSpec({
             ClassifyDecision(mapIdToUse = 24)
     }
 
+    test("decideClassification skips when ram mapId=0 (UnknownMapTrap void state)") {
+        // mapflags=1 + currentMapId=0 = engine void after stepping on a bogus warp
+        // tile (e.g. (147,154)). Screen renders a town-overlay pseudo-frame that
+        // Haiku misreads as a throne room with king + 2 stairs (verified live).
+        // Skip the Haiku call — would only produce 4 false landmarks.
+        val ram = mapOf(
+            "mapflags" to 1, "currentMapId" to 0,
+            "char1_hpLow" to 35, "char2_hpLow" to 30,
+            "char3_hpLow" to 28, "char4_hpLow" to 25,
+        )
+        SingleRun.decideClassification(triggerMapId = 8, ramAfterExplore = ram) shouldBe null
+    }
+
     test("decideClassification falls back to trigger mapId when RAM unreadable") {
         val ram = mapOf(
             "mapflags" to 1,
