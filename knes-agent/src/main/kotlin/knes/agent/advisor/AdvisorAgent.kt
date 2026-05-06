@@ -131,6 +131,76 @@ class AdvisorAgent(
             128), or recommend a different sub-map target if the screenshot
             shows one. Budget spent escaping Coneria is budget lost to
             Garland — at some point declare the run unsalvageable and accept it.
+
+            FRONTIER EXPLORATION BIAS (V5.32): when walkOverworldTo fails
+            twice in a row on the same target with reasons like
+            "target tile is impassable", "no path within viewport", or
+            "did not reach in N steps", STOP retrying that target. The
+            picked coordinate is likely WATER/MOUNTAIN or unreachable from
+            current position. Instead:
+              (a) Pick a waypoint at the EDGE of the visible 16×16
+                  viewport in the rough direction of the goal. Edge tiles
+                  expand the fog and reveal new structure even when the
+                  long-range goal can't be reached directly.
+              (b) PREFER fog frontiers — '?' tiles in the ASCII map —
+                  over re-trying known-walkable targets. Unexplored
+                  tiles often hide the path forward; "weird" isolated
+                  glyphs in the viewport (single C/T amid GRASS) are
+                  often dungeon entries worth probing.
+              (c) Before committing to a long-range walkOverworldTo,
+                  consult findPath with that target. If findPath returns
+                  no path, pick a different waypoint within ±3 tiles —
+                  prefer GRASS/FOREST tiles you can SEE in the ASCII map
+                  rather than blind training-data coords. NEVER pick a
+                  target without verifying it's a passable terrain glyph
+                  in the current viewport or at minimum near a passable
+                  glyph.
+              (d) Map boundaries are valid exploration targets in their
+                  own right. If the ASCII map shows water/forest/mountain
+                  walls, target a tile that REACHES the wall (forces
+                  viewport shift) rather than picking a coord that's
+                  already unreachable. Iterate: walk to edge, observe
+                  new viewport, re-plan.
+
+            XP / LEVEL GRIND STRATEGY (V5.34.5): the default party at level 0
+            is FRAGILE — single battle takes ~10 rounds, char1 HP can drop to
+            10/35 after one encounter. attempt11 evidence: walking from spawn
+            toward bridge (157,141) triggers ~23 random encounters in
+            high-encounter Coneria peninsula terrain; multi-screen postbattle
+            (dmg / XP / level / gold) per fight × 23 = ~150 dismiss cycles =
+            full budget spent before reaching bridge. Therefore:
+              (a) After 5+ battles in a single overworld walk, expect HP to
+                  be low. Plan a Coneria castle/town visit ONLY for
+                  buying potions OR resting at inn (heal 1 gp); do NOT detour
+                  to inn unless char_hp < 30% maxHp.
+              (b) Random encounter chains are FEATURE not bug — XP from
+                  overworld walks reduces battle length quadratically (lvl 1
+                  party = 10-rd battles; lvl 3 party = 3-rd battles). Don't
+                  panic-restart a run after few fights; ride them out.
+              (c) If a single walkOverworldTo skill call triggers 5+ encounters,
+                  the postbattle dismiss budget will exhaust before reaching
+                  target. Break long walks into intermediate waypoints
+                  (every 8-10 tiles) so per-skill encounter count stays low.
+                  After waypoint reached, fresh advisor call → fresh budget.
+              (d) Level-up screens add 3-5 extra postbattle dismiss cycles per
+                  character that levels. Plan budget accordingly: 4-char
+                  level-up = ~20 extra dismiss cycles on top of standard
+                  battle resolution.
+
+            CONERIA TOWN OVERLAY NAVIGATION (V5.34.4): when phase becomes
+            `Indoors(mapId=0, isTown=true)`, the party has entered the
+            Coneria town overlay layer (not a real interior, not a trap).
+            DO NOT cycle exitInterior repeatedly — V5.29 evidence shows
+            ~13% step success per call on town overlays. After 1 failed
+            exitInterior, switch strategy:
+              (a) exploreInteriorFrontier with maxSteps=64 — covers town
+                  tiles tile-by-tile, naturally exposing exits.
+              (b) If that also fails, walkOverworldTo to a coord OUTSIDE
+                  the Coneria overlay zone (~6+ tiles away from castle),
+                  e.g. (140,160) west or (157,141) bridge, to escape the
+                  overlay re-entry trap.
+              (c) NEVER call exitInterior more than 2 times in a row in
+                  town overlay — it burns budget without exiting.
             Skill repertoire (V5.26 — INTENT-LEVEL only, deterministic):
               - pressStartUntilOverworld: title screen → overworld with default party
               - exitInterior: deterministic BFS to nearest interior exit. FIRST

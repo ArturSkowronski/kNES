@@ -98,8 +98,37 @@ class AgentSession(
             println("[landmark-memory] preloaded ${landmarkMemory.all().size} landmarks (advisor + executor injection)")
         }
 
+        // V5.34: postbattle auto-dismiss zombie-loop guard. If RAM gets stuck
+        // in PostBattle/Battle screenState (e.g. enemy_dead flags clear but the
+        // engine never transitions back to overworld), the auto-dismiss branch
+        // below loops forever because `continue` skips the budget checks at
+        // line 241-243. Track consecutive dismissals; bail when threshold hit.
+        var consecutivePostBattle = 0
+        // V5.34.4: bumped 60→150. attempt9 evidence: agent fought 51 battles
+        // and hit the 60-dismiss cap exactly — bailing mid-progress. 51 battles
+        // × 3-4 screens each (XP / level-up / gold) = ~200 dismiss cycles
+        // possible. 150 gives headroom while still catching genuine zombie
+        // loops (no progress within ~150 frames is clearly stuck).
+        val POSTBATTLE_DISMISS_CAP = 150
+        // V5.34.3: confirm UnknownMapTrap before bail. attempt8 + FF1 disasm
+        // research showed (mapflags=1 + mapId=0) is NOT exclusively a trap:
+        // it also fires as a 1-frame artifact during battle entry on tile 0x00
+        // (FIGHT-normal random encounter). Require N consecutive observations
+        // and require phase is NOT Battle/PostBattle (those resolve themselves).
+        var consecutiveTrapObs = 0
+        val TRAP_CONFIRM_THRESHOLD = 3
+
         try {
             while (true) {
+                // V5.34: budget enforcement at TOP of loop, BEFORE phase
+                // observation. Previously these checks lived only after the
+                // phase-handling switch (line 241-243), so any branch that
+                // `continue`d would bypass them. Moved here so wallClock /
+                // skillCap always fire even when an inner branch loops.
+                val elapsedSec = (System.currentTimeMillis() - startMs) / 1000
+                if (elapsedSec > budget.wallClockCapSeconds) return Outcome.OutOfBudget
+                if (skillsInvoked > budget.maxSkillInvocations) return Outcome.OutOfBudget
+
                 val phase = observer.observeWithVision()
                 val ram = observer.ramSnapshot()
 
@@ -113,8 +142,52 @@ class AgentSession(
                 // until it clears, walkOverworldTo / exitInterior return BLOCKED. The LLM
                 // sometimes loops on these instead of calling battleFightAll, burning the
                 // budget. Auto-tap A here so the agent never waits on the modal.
+                // V5.34.2/3: detect UnknownMapTrap (mapId=0 + mapflags=1)
+                // with persistence guard. attempt7 evidence + FF1 disasm
+                // research: tile 0x00 has FIGHT-normal flag (random encounter,
+                // NOT teleport). Battle entry produces a 1-frame artifact
+                // where mapflags=1 + mapId=0 BEFORE screenState transitions
+                // to 0x68 (Battle). Require:
+                //   (a) 3 consecutive observations of trap state
+                //   (b) phase is NOT Battle/PostBattle (those self-resolve)
+                // Only then declare trap, persist warp memory, and bail.
+                val mapflagsBit = (ram["mapflags"] ?: 0) and 0x01
+                val ramMapIdNow = ram["currentMapId"] ?: -1
+                val isInTrapState = mapflagsBit == 1 && ramMapIdNow == 0 &&
+                    phase !is FfPhase.Battle && phase !is FfPhase.PostBattle
+                if (isInTrapState) {
+                    consecutiveTrapObs++
+                    if (consecutiveTrapObs >= TRAP_CONFIRM_THRESHOLD) {
+                        val trapX = ram["worldX"] ?: -1
+                        val trapY = ram["worldY"] ?: -1
+                        if (trapX in 0..255 && trapY in 0..255 &&
+                            (trapX to trapY) !in failedWarpTiles) {
+                            failedWarpTiles += trapX to trapY
+                            fog?.markBlocked(trapX, trapY)
+                            warpMemory.record(trapX, trapY, mapId = 0,
+                                note = "UnknownMapTrap — confirmed after $consecutiveTrapObs consecutive observations")
+                            warpMemory.save()
+                            println("[unknown-map-trap] persisted warp block at ($trapX,$trapY) after $consecutiveTrapObs obs")
+                        }
+                        trace.record(TraceEvent(0, "outcome", phase.toString(),
+                            note = "UnknownMapTrap at world($trapX,$trapY) — confirmed after $consecutiveTrapObs obs, bailing"))
+                        return Outcome.OutOfBudget
+                    }
+                } else {
+                    consecutiveTrapObs = 0
+                }
+
                 if (phase is FfPhase.PostBattle) {
-                    println("[postbattle auto-dismiss]")
+                    consecutivePostBattle++
+                    if (consecutivePostBattle > POSTBATTLE_DISMISS_CAP) {
+                        // V5.34: dismiss is not transitioning out of PostBattle —
+                        // engine is stuck (RAM enemy_dead flags clear but
+                        // screenState frozen). Bail rather than spam forever.
+                        trace.record(TraceEvent(0, "outcome", phase.toString(),
+                            note = "PostBattle dismiss zombie loop after $consecutivePostBattle attempts"))
+                        return Outcome.OutOfBudget
+                    }
+                    println("[postbattle auto-dismiss] ($consecutivePostBattle/$POSTBATTLE_DISMISS_CAP)")
                     toolset.executeAction(profileId = "ff1", actionId = "battle_fight_all")
                     trace.record(TraceEvent(
                         turn = 0, role = "system", phase = phase.toString(),
@@ -122,6 +195,7 @@ class AgentSession(
                     ))
                     continue  // re-observe phase next iteration
                 }
+                consecutivePostBattle = 0  // reset when phase leaves PostBattle
 
                 val phaseChanged = previousPhase == null || previousPhase::class != phase::class
                 // V4 hybrid C: advisor consult earlier when stuck inside an interior.
@@ -238,9 +312,7 @@ class AgentSession(
                     return hookOutcome
                 }
 
-                if (skillsInvoked > budget.maxSkillInvocations) return Outcome.OutOfBudget
-                val elapsedSec = (System.currentTimeMillis() - startMs) / 1000
-                if (elapsedSec > budget.wallClockCapSeconds) return Outcome.OutOfBudget
+                // V5.34: top-of-loop budget enforcement covers all cases now.
             }
         } finally {
             trace.close()
