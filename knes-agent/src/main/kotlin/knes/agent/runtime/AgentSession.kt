@@ -3,13 +3,25 @@ package knes.agent.runtime
 import knes.agent.advisor.AdvisorAgent
 import knes.agent.advisor.StrategyAdvice
 import knes.agent.executor.ExecutorAgent
+import knes.agent.explorer.HaikuConsult
+import knes.agent.skills.BuyAtShop
+import knes.agent.skills.DiscoverShop
+import knes.agent.skills.EquipWeapon
+import knes.agent.skills.ExitInterior
 import knes.agent.skills.GrindLoop
+import knes.agent.skills.WalkInteriorVision
+import knes.agent.skills.WalkOverworldTo
 import knes.agent.perception.FfPhase
 import knes.agent.perception.FogOfWar
+import knes.agent.perception.Landmark
+import knes.agent.perception.LandmarkKind
 import knes.agent.perception.LandmarkMemory
+import knes.agent.perception.MapSession
 import knes.agent.perception.OverworldWarpMemory
 import knes.agent.perception.RamObserver
 import knes.agent.perception.ScreenshotPolicy
+import knes.agent.perception.VisionInteriorNavigator
+import knes.agent.perception.ViewportSource
 import knes.agent.tools.EmulatorToolset
 import java.nio.file.Path
 
@@ -46,6 +58,21 @@ class AgentSession(
      * interest without rediscovery. Default loads from ~/.knes/ff1-landmarks.json.
      */
     private val landmarkMemory: LandmarkMemory = LandmarkMemory(),
+    /**
+     * Spec 2 / Task 9: optional dependencies needed for the outfit boot phase
+     * (buy + equip starter weapons). All four must be non-null for the phase
+     * to run; otherwise it is silently skipped. Defaulted to null so existing
+     * tests + e2e callers that don't yet wire vision/MapSession keep working.
+     */
+    private val outfitVision: HaikuConsult? = null,
+    private val outfitNavigator: VisionInteriorNavigator? = null,
+    private val outfitViewportSource: ViewportSource? = null,
+    private val outfitMapSession: MapSession? = null,
+    /** Path to the savestate file used for this session, if any. Used to derive
+     *  a stable hash that the OutfitState compares against. Null = sentinel hash
+     *  ("no-savestate"); the boot phase will still run but the cache won't be
+     *  reused across sessions. */
+    private val outfitSavestatePath: String? = null,
     runDir: Path = Trace.newRunDir(),
     /**
      * Optional per-turn hook fired after each executor turn. Receives current
@@ -119,6 +146,17 @@ class AgentSession(
 
     suspend fun run(): Outcome {
         println("[knes-agent] run dir: $resolvedRunDir")
+        // Spec 2 / Task 9: one-shot outfit boot phase — buy + equip starter
+        // weapons before the strategic loop begins. Best-effort: any failure
+        // logs and falls through. Only fires when optional vision deps are
+        // wired in by the caller; otherwise silently skipped.
+        try {
+            runOutfitBootPhase()
+        } catch (e: Exception) {
+            println("[boot_outfit] uncaught: ${e.message}")
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_outfit_summary failed: ${e.message}"))
+        }
         var previousPhase: FfPhase? = null
         var currentPlan = "Start the game from the title screen and begin a new game."
         var idleTurns = 0
@@ -491,6 +529,175 @@ class AgentSession(
             }
         } finally {
             trace.close()
+        }
+    }
+
+    /**
+     * Spec 2 / Task 9: outfit boot phase orchestrator. Runs once at session
+     * start before the strategic loop. Steps:
+     *   1. Entry guards via OutfitBootPhase: skip if savestate hash matches
+     *      OutfitState flag, or if RAM already shows all 4 chars equipped.
+     *   2. Walk to Coneria town entry.
+     *   3. Use cached weapon shop landmark, or probe candidates with DiscoverShop.
+     *   4. Per-character buy loop (BuyAtShop), retrying on WrongClass.
+     *   5. Exit shop interior, then per-character equip loop (EquipWeapon)
+     *      on the overworld.
+     *   6. Persist OutfitState + log boot_outfit_summary.
+     *
+     * Best-effort: any failure logs and falls through to the strategic loop
+     * without bailing. Silently no-ops when optional vision deps are absent.
+     */
+    private suspend fun runOutfitBootPhase() {
+        val outfitState = OutfitState()
+        val savestateHash = computeSavestateHash()
+        val phase = OutfitBootPhase(
+            toolset = toolset,
+            landmarks = landmarkMemory,
+            outfitState = outfitState,
+            savestateHash = savestateHash,
+            trace = { kind, msg ->
+                println("[boot_outfit] $kind: $msg")
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "$kind: $msg"))
+            }
+        )
+        val pre = phase.run()
+        if (pre.skipped || pre.reason == "no_town_entry") return
+
+        // Full orchestration requires vision + mapSession + viewportSource (all optional
+        // constructor params — fall through if any missing so existing tests keep working).
+        if (outfitVision == null || outfitNavigator == null ||
+            outfitViewportSource == null || outfitMapSession == null || fog == null) {
+            println("[boot_outfit] dependencies_unavailable — skipping full orchestration")
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_outfit_summary: dependencies_unavailable"))
+            return
+        }
+
+        val coneriaEntry = landmarkMemory.findByKind(LandmarkKind.TOWN_ENTRY)
+            .firstOrNull { it.note.contains("coneria", ignoreCase = true) }
+            ?: landmarkMemory.findByKind(LandmarkKind.TOWN_ENTRY).first()
+
+        // 2. Walk to Coneria
+        val walkResult = WalkOverworldTo(toolset, outfitViewportSource, fog).invoke(mapOf(
+            "targetX" to (coneriaEntry.worldX ?: 0).toString(),
+            "targetY" to (coneriaEntry.worldY ?: 0).toString(),
+        ))
+        if (!walkResult.ok) {
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_outfit_summary: walk_to_coneria_failed: ${walkResult.message}"))
+            return
+        }
+
+        // 3. Cached weapon shop or probe via DiscoverShop on candidate NPC_SHOPKEEPERs.
+        val cachedShop = landmarkMemory.findByKind(LandmarkKind.NPC_SHOPKEEPER)
+            .firstOrNull { it.note.contains("kind=weapon") }
+        val activeShop = cachedShop ?: discoverWeaponShop(outfitVision, outfitNavigator,
+            outfitMapSession, fog)
+        if (activeShop == null) {
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_outfit_summary: boot_shop_not_found"))
+            return
+        }
+
+        // 4. Per-char buy loop.
+        val buySkill = BuyAtShop(toolset, landmarkMemory)
+        val charsBought = mutableListOf<Int>()
+        val initialGold = StrategyContext.totalGold(toolset.getState().ram)
+        // Default mapping: each char gets one of the 4 first inventory slots.
+        val weaponSlotByChar = mapOf(1 to 0, 2 to 1, 3 to 2, 4 to 3)
+        for (charSlot in 1..4) {
+            if (StrategyContext.anyWeaponEquipped(toolset.getState().ram, charSlot)) continue
+            var slot = weaponSlotByChar[charSlot] ?: continue
+            var retries = 0
+            while (retries < 3) {
+                val r = buySkill.invoke(mapOf(
+                    "itemSlot" to slot.toString(),
+                    "forCharSlot" to charSlot.toString(),
+                    "expectedKeeperKind" to "weapon",
+                ))
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_purchase: char$charSlot slot=$slot result=${r.message}"))
+                if (r.ok) { charsBought += charSlot; break }
+                if (r.message.contains("WrongClass")) {
+                    slot = (slot + 1) % 4
+                    retries++
+                    continue
+                }
+                break
+            }
+        }
+
+        // 5. Exit shop interior; equip on overworld.
+        ExitInterior(toolset, outfitMapSession, fog).invoke(emptyMap())
+
+        val equipSkill = EquipWeapon(toolset)
+        val charsEquipped = mutableListOf<Int>()
+        for (charSlot in 1..4) {
+            val ram = toolset.getState().ram
+            val ownedSlot = (0..3).firstOrNull {
+                StrategyContext.weaponId(StrategyContext.weaponSlot(ram, charSlot, it)) != 0
+            } ?: continue
+            if (StrategyContext.isEquipped(StrategyContext.weaponSlot(ram, charSlot, ownedSlot))) {
+                charsEquipped += charSlot
+                continue
+            }
+            val r = equipSkill.invoke(mapOf(
+                "charSlot" to charSlot.toString(),
+                "weaponSlot" to ownedSlot.toString(),
+            ))
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_equip: char$charSlot slot=$ownedSlot result=${r.message}"))
+            if (r.ok) charsEquipped += charSlot
+        }
+
+        // 6. Persist + summary.
+        val finalGold = StrategyContext.totalGold(toolset.getState().ram)
+        val goldSpent = (initialGold - finalGold).coerceAtLeast(0)
+        val shopsClassified = listOf(
+            "weapon@map${activeShop.mapId}-(${activeShop.localX},${activeShop.localY})"
+        )
+        if (charsEquipped.isNotEmpty()) {
+            outfitState.markBought(savestateHash, charsEquipped, goldSpent, shopsClassified)
+        }
+        val summary = "candidatesProbed=${if (cachedShop == null) 1 else 0} " +
+            "weaponShopFound=true weaponsBought=${charsBought.size} " +
+            "weaponsEquipped=${charsEquipped.size} totalGoldSpent=$goldSpent"
+        println("[boot_outfit] boot_outfit_summary: $summary")
+        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+            note = "boot_outfit_summary: $summary"))
+    }
+
+    private suspend fun discoverWeaponShop(
+        vision: HaikuConsult,
+        navigator: VisionInteriorNavigator,
+        mapSession: MapSession,
+        fog: FogOfWar,
+    ): Landmark? {
+        val candidates = landmarkMemory.findByKind(LandmarkKind.NPC_SHOPKEEPER).take(4)
+        val discoverSkill = DiscoverShop(toolset, landmarkMemory, vision)
+        for (cand in candidates) {
+            val walk = WalkInteriorVision(toolset, navigator, mapSession = mapSession).invoke(emptyMap())
+            if (!walk.ok) continue
+            val classify = discoverSkill.invoke(emptyMap())
+            if (classify.ok && classify.message.contains("kind=weapon")) {
+                return landmarkMemory.findByKind(LandmarkKind.NPC_SHOPKEEPER)
+                    .firstOrNull { it.note.contains("kind=weapon") }
+            }
+            // Exit current interior to try next candidate.
+            ExitInterior(toolset, mapSession, fog).invoke(emptyMap())
+        }
+        return null
+    }
+
+    private fun computeSavestateHash(): String {
+        val path = outfitSavestatePath ?: return "no-savestate"
+        return try {
+            val bytes = java.io.File(path).readBytes()
+            java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+                .joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            "savestate-error:${e.message}"
         }
     }
 
