@@ -320,6 +320,12 @@ class SingleRun(
             val partyHpSum = (1..4).sumOf { ram["char${it}_hpLow"] ?: 0 }
             return when {
                 partyHpSum == 0 && mapflags == 1 -> StopReason.PartyWiped
+                // mapId=0 + mapflags=1 = UnknownMapTrap engine void state. Bail
+                // immediately without waiting for 3 idle turns — there's no
+                // useful exploration to do in void state, and the savestate
+                // reload at the start of the next run is cheaper than burning
+                // ~80 frames of fruitless exploreInteriorFrontier here.
+                mapflags == 1 && mapId == 0 -> StopReason.UnknownMapTrap
                 mapflags == 1 && mapId !in knownMapIds && consecutiveIdleInTrap >= 3 -> StopReason.UnknownMapTrap
                 idleTurns >= 10 -> StopReason.Idle
                 coverageDeltaInWindow == 0 && stepsTaken > coverageWindow -> StopReason.LocalPlateau
