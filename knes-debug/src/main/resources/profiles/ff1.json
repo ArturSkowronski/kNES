@@ -87,6 +87,26 @@
     "char4_luck": {"address": "0x61D4", "description": "Char 4 luck"},
     "char4_level": {"address": "0x61E6", "description": "Char 4 level (stored as level-1)"},
 
+    "char1_weapon0": {"address": "0x6118", "description": "Char 1 weapon slot 0 (high bit=equipped, low 7=weaponId)"},
+    "char1_weapon1": {"address": "0x6119", "description": "Char 1 weapon slot 1"},
+    "char1_weapon2": {"address": "0x611A", "description": "Char 1 weapon slot 2"},
+    "char1_weapon3": {"address": "0x611B", "description": "Char 1 weapon slot 3"},
+
+    "char2_weapon0": {"address": "0x6158", "description": "Char 2 weapon slot 0 (high bit=equipped, low 7=weaponId)"},
+    "char2_weapon1": {"address": "0x6159", "description": "Char 2 weapon slot 1"},
+    "char2_weapon2": {"address": "0x615A", "description": "Char 2 weapon slot 2"},
+    "char2_weapon3": {"address": "0x615B", "description": "Char 2 weapon slot 3"},
+
+    "char3_weapon0": {"address": "0x6198", "description": "Char 3 weapon slot 0 (high bit=equipped, low 7=weaponId)"},
+    "char3_weapon1": {"address": "0x6199", "description": "Char 3 weapon slot 1"},
+    "char3_weapon2": {"address": "0x619A", "description": "Char 3 weapon slot 2"},
+    "char3_weapon3": {"address": "0x619B", "description": "Char 3 weapon slot 3"},
+
+    "char4_weapon0": {"address": "0x61D8", "description": "Char 4 weapon slot 0 (high bit=equipped, low 7=weaponId)"},
+    "char4_weapon1": {"address": "0x61D9", "description": "Char 4 weapon slot 1"},
+    "char4_weapon2": {"address": "0x61DA", "description": "Char 4 weapon slot 2"},
+    "char4_weapon3": {"address": "0x61DB", "description": "Char 4 weapon slot 3"},
+
     "battleTurn": {"address": "0x6830", "description": "Battle turn indicator (0x55=player turn)"},
     "battleInitCounter": {"address": "0x685E", "description": "Battle init counter (0-4, counts up during battle start)"},
     "preemptiveAmbush": {"address": "0x6856", "description": "Pre-emptive/ambush indicator", "hidden": true},
