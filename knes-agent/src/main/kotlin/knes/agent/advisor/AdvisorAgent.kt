@@ -26,7 +26,7 @@ import knes.agent.tools.EmulatorToolset
  *
  * V2.4: extended to also render ASCII map for Indoors phase when interiorSource is provided.
  */
-class AdvisorAgent(
+open class AdvisorAgent(
     private val anthropic: AnthropicSession,
     private val modelRouter: ModelRouter,
     private val toolset: EmulatorToolset,
@@ -67,7 +67,7 @@ class AdvisorAgent(
      * (StrategyAdvice.SYSTEM_PROMPT, no Koog tools, single-token output).
      * See spec §3.3.
      */
-    suspend fun consultStrategy(prompt: String): String {
+    open suspend fun consultStrategy(prompt: String): String {
         val agent = AIAgent(
             promptExecutor = anthropic.executor,
             llmModel = modelRouter.modelFor(FfPhase.Overworld(0, 0), AgentRole.ADVISOR),

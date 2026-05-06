@@ -18,7 +18,7 @@ import knes.agent.runtime.ToolCallLog
 import knes.agent.skills.SkillRegistry
 import knes.agent.tools.EmulatorToolset
 
-class ExecutorAgent(
+open class ExecutorAgent(
     private val anthropic: AnthropicSession,
     private val modelRouter: ModelRouter,
     private val toolset: EmulatorToolset,
@@ -59,7 +59,7 @@ class ExecutorAgent(
         maxIterations = 24,   // V5.23.2: 10 still hit ITERATION_CAP (iter6). Even single-tool calls in Koog 0.6.1 singleRunStrategy can take 8-10 nodes when tool result triggers extra LLM reasoning. 2026-05-06 Garland attempt: 16 hit ITERATION_CAP repeatedly when executor chained walkOverworldTo retries + battleFightAll + askAdvisor in same turn. Bumped to 24 — small step above 20-cap risk but within range that V2-V5 occasionally tolerated. Tracking ITERATION_CAP rate across iterations.
     )
 
-    suspend fun run(phase: FfPhase, input: String): String = try {
+    open suspend fun run(phase: FfPhase, input: String): String = try {
         newAgent(phase).run(input)
     } catch (e: Exception) {
         // singleRunStrategy + maxIterations=2 should rarely cap, but if the model keeps
