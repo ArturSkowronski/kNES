@@ -3,6 +3,7 @@ package knes.agent.skills
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import knes.agent.perception.LandmarkKind
 import knes.agent.perception.LandmarkMemory
@@ -16,7 +17,7 @@ class DiscoverInnTest : FunSpec({
 
     test("returns Rested AND persists NPC_INNKEEPER landmark when heal validates") {
         val pre = mapOf(
-            "currentMapId" to 12, "worldX" to 7, "worldY" to 4,
+            "currentMapId" to 12, "smPlayerX" to 7, "smPlayerY" to 4,
             "char1_hpLow" to 10, "char1_hpHigh" to 0,
             "char1_maxHpLow" to 20, "char1_maxHpHigh" to 0,
             "goldLow" to 0x90, "goldMid" to 0x01, "goldHigh" to 0,  // 400
@@ -39,6 +40,13 @@ class DiscoverInnTest : FunSpec({
         saved.localX shouldBe 7
         saved.localY shouldBe 4
         saved.note shouldContain "cost=30"
+
+        val reloaded = LandmarkMemory(file = tmpFile)
+        val reloadedSaved = reloaded.findInnkeeper()
+        reloadedSaved shouldNotBe null
+        reloadedSaved!!.mapId shouldBe 12
+        reloadedSaved.localX shouldBe 7
+        reloadedSaved.localY shouldBe 4
     }
 
     test("returns WrongBuilding after 30 taps without heal — does NOT persist") {

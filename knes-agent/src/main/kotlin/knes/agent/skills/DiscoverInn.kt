@@ -20,6 +20,7 @@ import knes.agent.tools.EmulatorToolset
 class DiscoverInn(
     private val toolset: EmulatorToolset,
     private val landmarks: LandmarkMemory,
+    private val runId: String = "discover_inn",
 ) : Skill {
     override val id = "discover_inn"
     override val description =
@@ -52,14 +53,14 @@ class DiscoverInn(
             val curHpPct = StrategyContext.minHpPct(ram)
             if (curGold < preGold && curHpPct == 100 && preHpPct < 100) {
                 val cost = preGold - curGold
-                val localX = ram["worldX"] ?: 0
-                val localY = ram["worldY"] ?: 0
+                val localX = ram["smPlayerX"] ?: 0
+                val localY = ram["smPlayerY"] ?: 0
                 val landmark = Landmark(
                     id = "innkeeper-map$mapId-$localX-$localY",
                     kind = LandmarkKind.NPC_INNKEEPER,
                     mapId = mapId, localX = localX, localY = localY,
                     note = "cost=$cost",
-                    discoveredRunId = "discover_inn",
+                    discoveredRunId = runId,
                 )
                 landmarks.recordIfNew(landmark)
                 landmarks.save()
