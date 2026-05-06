@@ -39,6 +39,7 @@ object StrategyAdvice {
         isThrashing: Boolean,
     ): StrategicDecision {
         if (isThrashing) return StrategicDecision.GRIND
+        // L0/L1 can never cross safely; L2+ deferred to advisor judgement
         if (decision == StrategicDecision.BRIDGE && StrategyContext.minLevel(ram) < 2) {
             return StrategicDecision.GRIND
         }
