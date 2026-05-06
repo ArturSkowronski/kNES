@@ -73,9 +73,7 @@ class AgentSession(
         // here and inject into both advisor and executor observations so neither suggests
         // routing back through a known warp.
         val failedWarpTiles: MutableSet<Pair<Int, Int>> = mutableSetOf()
-        // Match toolCallLog format: "entered interior after N steps; world=(X,Y) ... targeted=false"
-        // (set by WalkOverworldTo.kt when an UNEXPECTED interior was entered mid-route).
-        val failedRegex = Regex("""world=\((\d+),(\d+)\)[^|]*targeted=false""")
+        val failedRegex = FAILED_WARP_REGEX
         // V5.25: pre-seed from persistent memory so the very first walk in
         // this run already knows about warps detected in earlier sessions.
         // Both the LLM hint (text injection) and the deterministic fog block
@@ -193,6 +191,13 @@ class AgentSession(
                 drainedCalls.forEach { call ->
                     failedRegex.findAll(call).forEach { m ->
                         val tile = m.groupValues[1].toInt() to m.groupValues[2].toInt()
+                        val transitionMapId = m.groupValues[3].toInt()
+                        // mapId=0 + mapflags=1 is UnknownMapTrap (engine void), not a real
+                        // interior. Recording it as a warp would dead-end priority-0 targeting.
+                        if (transitionMapId == 0) {
+                            println("[session-memory] skip warp record at $tile (mapId=0 trap, not real interior)")
+                            return@forEach
+                        }
                         if (failedWarpTiles.add(tile)) {
                             println("[session-memory] +failedWarpTile=$tile (total=${failedWarpTiles.size})")
                             // V5.28: 1x1 block. Was 3x3 in V5.24 on the assumption
@@ -207,6 +212,7 @@ class AgentSession(
                             // V5.25: persist for future sessions. Save immediately
                             // so a crash mid-run doesn't lose the discovery.
                             warpMemory.record(tile.first, tile.second,
+                                mapId = transitionMapId,
                                 note = "auto-detected ${java.time.Instant.now()}")
                             warpMemory.save()
                         }
@@ -239,5 +245,16 @@ class AgentSession(
         } finally {
             trace.close()
         }
+    }
+
+    companion object {
+        /** Matches `WalkOverworldTo`'s `aborted` toolCallLog entry:
+         *  `"entered interior after N steps; world=(X,Y) mapId=M party=(...) targeted=false"`.
+         *  Capture groups: 1=worldX, 2=worldY, 3=mapId.
+         *
+         *  The mapId capture lets the auto-detect filter out UnknownMapTrap (mapId=0)
+         *  transitions — they don't lead to a real interior, just engine void state, and
+         *  recording them as warps would dead-end priority-0 warp targeting next campaign. */
+        val FAILED_WARP_REGEX = Regex("""world=\((\d+),(\d+)\) mapId=(-?\d+)[^|]*targeted=false""")
     }
 }
