@@ -64,9 +64,10 @@ class AgentSession(
     private var grindModeActive: Boolean = true
     private val recentDecisions: RecentDecisionsBuffer = RecentDecisionsBuffer()
 
-    /** Coneria spawn anchor for grind corridor. Pre-bridge target (157,141). */
+    /** Coneria spawn anchor for grind corridor (157,158). */
     private val GRIND_ANCHOR_X: Int = 157
     private val GRIND_ANCHOR_Y: Int = 158
+    /** Pre-bridge target — separate waypoint, distinct from grind anchor. */
     private val BRIDGE_TILE: Pair<Int, Int> = 157 to 141
     private val TARGET_MIN_LEVEL: Int = 3
 
@@ -75,7 +76,7 @@ class AgentSession(
         data object Rest : SkillInvocation
     }
 
-    private suspend fun runStrategicTick(ram: Map<String, Int>): SkillInvocation? {
+    private suspend fun runStrategicTick(phase: FfPhase, ram: Map<String, Int>): SkillInvocation? {
         // Coneria entry tile for inn-distance calc — fall back to overworld center if absent.
         val coneriaEntry = landmarkMemory.all()
             .firstOrNull { it.kind == knes.agent.perception.LandmarkKind.TOWN_ENTRY }
@@ -90,7 +91,7 @@ class AgentSession(
         val guarded = StrategyAdvice.applySanityGuards(parsed, ram, recentDecisions.isThrashing())
         recentDecisions.record(guarded)
         println("[strategy] raw='${raw.take(40)}' parsed=$parsed guarded=$guarded recent=${recentDecisions.snapshot()}")
-        trace.record(TraceEvent(turn = 0, role = "strategy", phase = "Overworld",
+        trace.record(TraceEvent(turn = 0, role = "strategy", phase = phase.toString(),
             input = prompt, output = "raw=$raw parsed=$parsed guarded=$guarded"))
         return when (guarded) {
             StrategicDecision.GRIND -> SkillInvocation.Grind
@@ -242,10 +243,13 @@ class AgentSession(
                 // REST falls through to existing advisor flow until heal-cycle integration ships.
                 // See spec §2 + §9.
                 if (grindModeActive && phase is FfPhase.Overworld) {
-                    val invocation = runStrategicTick(ram)
+                    val invocation = runStrategicTick(phase, ram)
                     when (invocation) {
                         SkillInvocation.Grind -> {
-                            val res = GrindLoop(toolset).invoke(emptyMap())
+                            val res = GrindLoop(toolset).invoke(mapOf(
+                                "anchorX" to GRIND_ANCHOR_X.toString(),
+                                "anchorY" to GRIND_ANCHOR_Y.toString(),
+                            ))
                             println("[strategy:grind] ok=${res.ok} ${res.message.take(120)}")
                             continue
                         }
