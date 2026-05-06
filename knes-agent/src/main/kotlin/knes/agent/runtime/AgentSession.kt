@@ -264,9 +264,18 @@ class AgentSession(
                                 println("[strategy:grind] captured anchor=($wx,$wy) on first GRIND")
                             }
                             val (ax, ay) = grindAnchor!!
+                            // V5.36.1: corridor radius 3→6 + max steps 6→12.
+                            // Validation run 2 evidence: spawn at (146,158) sits in
+                            // a no-encounter pocket near Coneria castle; with the
+                            // default 3-tile radius the party oscillated y=157-159
+                            // for 50+ grind cycles without ever triggering a battle.
+                            // Larger corridor reaches into the encounter-bearing
+                            // grass to the north of the safe zone.
                             val res = GrindLoop(toolset).invoke(mapOf(
                                 "anchorX" to ax.toString(),
                                 "anchorY" to ay.toString(),
+                                "corridorRadius" to "6",
+                                "maxStepsWithoutEncounter" to "12",
                             ))
                             println("[strategy:grind] ok=${res.ok} ${res.message.take(120)}")
                             continue
