@@ -59,6 +59,27 @@ class RestAtInnTest : FunSpec({
         r.ok shouldBe false
         r.message shouldContain "InnNotFound"
     }
+
+    test("returns Rested immediately when party is already at full HP inside inn") {
+        val full = mapOf(
+            "currentMapId" to 8, "worldX" to 5, "worldY" to 3,
+            "char1_hpLow" to 20, "char1_hpHigh" to 0,
+            "char1_maxHpLow" to 20, "char1_maxHpHigh" to 0,
+            "char2_hpLow" to 20, "char2_hpHigh" to 0,
+            "char2_maxHpLow" to 20, "char2_maxHpHigh" to 0,
+            "char3_hpLow" to 20, "char3_hpHigh" to 0,
+            "char3_maxHpLow" to 20, "char3_maxHpHigh" to 0,
+            "char4_hpLow" to 20, "char4_hpHigh" to 0,
+            "char4_maxHpLow" to 20, "char4_maxHpHigh" to 0,
+            "goldLow" to 0x90, "goldMid" to 0x01, "goldHigh" to 0,
+            "screenState" to 0x00,
+        )
+        val toolset = ScriptedRestToolset(List(10) { full })
+        val skill = RestAtInn(toolset)
+        val r = skill.invoke(mapOf("innInteriorMapId" to "8"))
+        r.ok shouldBe true
+        r.message shouldContain "already at full HP"
+    }
 })
 
 /**

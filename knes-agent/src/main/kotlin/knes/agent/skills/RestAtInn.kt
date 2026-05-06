@@ -52,6 +52,7 @@ class RestAtInn(private val toolset: EmulatorToolset) : Skill {
                     framesElapsed = framesElapsed, ramAfter = ram,
                 )
             }
+            // ~3-4 A presses dismiss the "party is fine, no payment" innkeeper dialog
             if (preHpPct == 100 && curGold == preGold && taps >= 4) {
                 return SkillResult(
                     ok = true,
