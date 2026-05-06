@@ -70,9 +70,14 @@ class AgentSession(
     private var strategicPlanTurns: Int = 0
     private val STRATEGIC_PLAN_MAX_TURNS = 12
 
-    /** Coneria spawn anchor for grind corridor (157,158). */
-    private val GRIND_ANCHOR_X: Int = 157
-    private val GRIND_ANCHOR_Y: Int = 158
+    /**
+     * Grind corridor anchor — captured from party's actual worldX/Y on the first
+     * GRIND decision in this session, instead of a hardcoded value. Spawn drifts
+     * across savestates / ROM versions (observed: 146,158 vs originally-planned
+     * 157,158); hardcoded anchor immediately fired WanderedOff and burned the
+     * strategic budget without ever entering a fight.
+     */
+    private var grindAnchor: Pair<Int, Int>? = null
     /** Pre-bridge target — separate waypoint, distinct from grind anchor. */
     private val BRIDGE_TILE: Pair<Int, Int> = 157 to 141
     private val TARGET_MIN_LEVEL: Int = 3
@@ -252,9 +257,16 @@ class AgentSession(
                     val invocation = runStrategicTick(phase, ram)
                     when (invocation) {
                         SkillInvocation.Grind -> {
+                            if (grindAnchor == null) {
+                                val wx = ram["worldX"] ?: 0
+                                val wy = ram["worldY"] ?: 0
+                                grindAnchor = wx to wy
+                                println("[strategy:grind] captured anchor=($wx,$wy) on first GRIND")
+                            }
+                            val (ax, ay) = grindAnchor!!
                             val res = GrindLoop(toolset).invoke(mapOf(
-                                "anchorX" to GRIND_ANCHOR_X.toString(),
-                                "anchorY" to GRIND_ANCHOR_Y.toString(),
+                                "anchorX" to ax.toString(),
+                                "anchorY" to ay.toString(),
                             ))
                             println("[strategy:grind] ok=${res.ok} ${res.message.take(120)}")
                             continue
