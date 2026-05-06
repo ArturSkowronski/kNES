@@ -28,26 +28,26 @@ class GrindLoop(private val toolset: EmulatorToolset) : Skill {
         val maxStepsWithoutEncounter = args["maxStepsWithoutEncounter"]?.toIntOrNull() ?: 6
 
         val driftLimit = corridorRadius * 2
-        var totalFrames = 0
+        val startFrame = toolset.getState().frame
         var steps = 0
         var goingNorth = true
 
         while (steps < maxStepsWithoutEncounter) {
             val targetY = if (goingNorth) anchorY - corridorRadius else anchorY + corridorRadius
-            val tap = toolset.tap(
+            toolset.tap(
                 button = if (goingNorth) "UP" else "DOWN",
                 count = 1, pressFrames = 5, gapFrames = 30
             )
-            totalFrames += tap.frame
             steps++
 
-            val ram = toolset.getState().ram
+            val stateAfter = toolset.getState()
+            val ram = stateAfter.ram
             val ss = ram["screenState"] ?: 0
             if (ss == 0x68 || ss == 0x63) {
                 return SkillResult(
                     ok = true,
                     message = "EncounteredBattle: screenState=0x${ss.toString(16)} after $steps steps",
-                    framesElapsed = totalFrames, ramAfter = ram,
+                    framesElapsed = stateAfter.frame - startFrame, ramAfter = ram,
                 )
             }
             val mapId = ram["currentMapId"] ?: 0
@@ -56,7 +56,7 @@ class GrindLoop(private val toolset: EmulatorToolset) : Skill {
                     ok = false,
                     message = "Blocked: entered interior mapId=$mapId after $steps steps " +
                         "(world=(${ram["worldX"]},${ram["worldY"]}))",
-                    framesElapsed = totalFrames, ramAfter = ram,
+                    framesElapsed = stateAfter.frame - startFrame, ramAfter = ram,
                 )
             }
             val wx = ram["worldX"] ?: anchorX
@@ -66,7 +66,7 @@ class GrindLoop(private val toolset: EmulatorToolset) : Skill {
                     ok = false,
                     message = "WanderedOff: world=($wx,$wy) outside corridor anchor=($anchorX,$anchorY) " +
                         "± $driftLimit after $steps steps",
-                    framesElapsed = totalFrames, ramAfter = ram,
+                    framesElapsed = stateAfter.frame - startFrame, ramAfter = ram,
                 )
             }
             if ((goingNorth && wy <= targetY) || (!goingNorth && wy >= targetY)) {
@@ -74,12 +74,13 @@ class GrindLoop(private val toolset: EmulatorToolset) : Skill {
             }
         }
 
-        val ram = toolset.getState().ram
+        val stateAfter = toolset.getState()
+        val ram = stateAfter.ram
         return SkillResult(
             ok = true,
             message = "NoEncounter: walked $steps steps without encounter " +
                 "(world=(${ram["worldX"]},${ram["worldY"]}))",
-            framesElapsed = totalFrames, ramAfter = ram,
+            framesElapsed = stateAfter.frame - startFrame, ramAfter = ram,
         )
     }
 }

@@ -56,6 +56,20 @@ class GrindLoopTest : FunSpec({
         r.ok shouldBe false
         r.message shouldContain "Blocked"
     }
+
+    test("returns EncounteredBattle when screenState is 0x63 (PostBattle)") {
+        val ramSeq = listOf(
+            mapOf("worldX" to 157, "worldY" to 158, "screenState" to 0x00, "currentMapId" to 0),
+            mapOf("worldX" to 157, "worldY" to 157, "screenState" to 0x63, "currentMapId" to 0),
+        )
+        val toolset = ScriptedToolset(ramSeq)
+        val skill = GrindLoop(toolset)
+
+        val r = skill.invoke(emptyMap())
+        r.ok shouldBe true
+        r.message shouldContain "EncounteredBattle"
+        r.message shouldContain "0x63"
+    }
 })
 
 /**
