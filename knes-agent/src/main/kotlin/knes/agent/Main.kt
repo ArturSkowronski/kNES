@@ -47,10 +47,12 @@ fun main(args: Array<String>) {
             val visionOverworldNavigator = AnthropicVisionOverworldNavigator(apiKey = key)
             val observer = RamObserver(toolset, overworldMap, vision = visionClassifier)
             val toolCallLog = knes.agent.runtime.ToolCallLog()
+            val landmarkMemory = LandmarkMemory()
             val advisor = AdvisorAgent(anthropic, router, toolset, viewportSource = overworldMap, interiorSource = mapSession, fog = fog)
             val executor = ExecutorAgent(
                 anthropic, router, toolset, advisor, overworldMap, mapSession, fog,
                 toolCallLog, visionInteriorNavigator, visionOverworldNavigator,
+                landmarks = landmarkMemory,
             )
 
             AgentSession(
@@ -61,7 +63,7 @@ fun main(args: Array<String>) {
                 toolCallLog = toolCallLog,
                 budget = Budget(maxSkillInvocations = maxSkills, costCapUsd = costCap, wallClockCapSeconds = wallCap),
                 fog = fog,
-                landmarkMemory = LandmarkMemory(),
+                landmarkMemory = landmarkMemory,
             ).run()
         }
     }

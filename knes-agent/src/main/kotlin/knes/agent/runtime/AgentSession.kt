@@ -64,6 +64,12 @@ class AgentSession(
     private var grindModeActive: Boolean = true
     private val recentDecisions: RecentDecisionsBuffer = RecentDecisionsBuffer()
 
+    /** Set when REST is chosen; cleared when heal completes or fallback timer expires. */
+    private var strategicPlan: String? = null
+    /** Counts executor turns spent on the strategic plan (timeout safeguard). */
+    private var strategicPlanTurns: Int = 0
+    private val STRATEGIC_PLAN_MAX_TURNS = 12
+
     /** Coneria spawn anchor for grind corridor (157,158). */
     private val GRIND_ANCHOR_X: Int = 157
     private val GRIND_ANCHOR_Y: Int = 158
@@ -239,10 +245,10 @@ class AgentSession(
                 }
                 consecutivePostBattle = 0  // reset when phase leaves PostBattle
 
-                // V5.35: strategic decision gate (MVP scope: GRIND + BRIDGE only).
-                // REST falls through to existing advisor flow until heal-cycle integration ships.
+                // V5.35/V5.36: strategic decision gate. Guard: do not fire while a
+                // strategic plan is active (REST heal cycle in progress).
                 // See spec §2 + §9.
-                if (grindModeActive && phase is FfPhase.Overworld) {
+                if (grindModeActive && phase is FfPhase.Overworld && strategicPlan == null) {
                     val invocation = runStrategicTick(phase, ram)
                     when (invocation) {
                         SkillInvocation.Grind -> {
@@ -254,13 +260,62 @@ class AgentSession(
                             continue
                         }
                         SkillInvocation.Rest -> {
-                            // MVP: heal cycle (walk-to-inn + RestAtInn / DiscoverInn) deferred.
-                            // For now, REST falls through to existing advisor flow so the agent
-                            // doesn't deadlock; landmark-aware REST integration is a follow-up.
                             val cached = landmarkMemory.findInnkeeper()
-                            println("[strategy:rest] cache=${if (cached != null) "HIT mapId=${cached.mapId}" else "MISS"} — heal cycle deferred to follow-up")
+                            val coneriaEntry = landmarkMemory.all()
+                                .firstOrNull { it.kind == knes.agent.perception.LandmarkKind.TOWN_ENTRY }
+                            val coneriaCoords = coneriaEntry?.let { (it.worldX ?: 152) to (it.worldY ?: 159) }
+                                ?: (152 to 159)
+
+                            strategicPlan = if (cached != null && cached.mapId != null) {
+                                """
+                                REST CYCLE — known innkeeper landmark.
+                                Goal: heal the party at the Coneria inn, then resume.
+                                Sub-steps:
+                                  1. walkOverworldTo target=(${coneriaCoords.first},${coneriaCoords.second}) — Coneria town entry on the overworld.
+                                  2. After entering Coneria town interior, walkInteriorVision toward the inn building (mapId=${cached.mapId}, innkeeper at local=(${cached.localX},${cached.localY})).
+                                  3. Once inside the inn (currentMapId == ${cached.mapId}), call rest_at_inn with innInteriorMapId=${cached.mapId}.
+                                  4. After Rested, exit and return to grind area.
+                                Budget: complete within ${STRATEGIC_PLAN_MAX_TURNS} executor turns.
+                                """.trimIndent()
+                            } else {
+                                """
+                                REST CYCLE — discovery mode (no innkeeper landmark cached).
+                                Goal: find the Coneria inn, heal the party, persist the landmark for future runs.
+                                Sub-steps:
+                                  1. walkOverworldTo target=(${coneriaCoords.first},${coneriaCoords.second}) — Coneria town entry.
+                                  2. Once inside Coneria town interior, exploreInteriorFrontier or walkInteriorVision to enter candidate buildings.
+                                  3. Each time you enter a sub-building (currentMapId changes to a new value), call discover_inn (no args).
+                                     - If it returns Rested, the inn is found and persisted; exit and resume grind.
+                                     - If it returns WrongBuilding, exit (exitInterior) and try the next building.
+                                  4. After ${STRATEGIC_PLAN_MAX_TURNS} turns without success, give up and let strategic-tick reconsider.
+                                """.trimIndent()
+                            }
+                            strategicPlanTurns = 0
+                            println("[strategy:rest] plan injected (cache=${if (cached != null) "HIT mapId=${cached.mapId}" else "MISS"})")
+                            // Fall through to existing advisor/executor flow — no `continue`.
                         }
                         null -> { /* BRIDGE: grindModeActive flipped, fall through */ }
+                    }
+                }
+
+                // V5.36: strategic plan override. When REST has injected a plan, force it
+                // into currentPlan and skip the regular advisor consult. Increment turn
+                // counter; clear the plan after success (HP=100%) or timeout.
+                if (strategicPlan != null) {
+                    val minHpPct = knes.agent.runtime.StrategyContext.minHpPct(ram)
+                    if (minHpPct == 100 && strategicPlanTurns >= 2) {
+                        // Heal complete — return to grind.
+                        println("[strategy:rest] heal complete (minHp%=100) after $strategicPlanTurns turns; clearing plan")
+                        strategicPlan = null
+                        strategicPlanTurns = 0
+                    } else if (strategicPlanTurns >= STRATEGIC_PLAN_MAX_TURNS) {
+                        println("[strategy:rest] timeout after $strategicPlanTurns turns; clearing plan, resuming strategic tick")
+                        strategicPlan = null
+                        strategicPlanTurns = 0
+                    } else {
+                        currentPlan = strategicPlan!!
+                        strategicPlanTurns++
+                        println("[strategy:rest] injecting plan (turn $strategicPlanTurns/$STRATEGIC_PLAN_MAX_TURNS)")
                     }
                 }
 

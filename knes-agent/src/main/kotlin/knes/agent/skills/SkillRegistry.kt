@@ -5,6 +5,7 @@ import ai.koog.agents.core.tools.annotations.Tool
 import ai.koog.agents.core.tools.reflect.ToolSet
 import knes.agent.perception.FogOfWar
 import knes.agent.perception.InteriorMemory
+import knes.agent.perception.LandmarkMemory
 import knes.agent.perception.MapSession
 import knes.agent.perception.OverworldMap
 import knes.agent.perception.VisionInteriorNavigator
@@ -35,6 +36,7 @@ class SkillRegistry(
         memory = interiorMemory,
         mapIdProvider = { toolset.getState().ram["currentMapId"] ?: -1 },
     ),
+    private val landmarks: LandmarkMemory = LandmarkMemory(),
 ) : ToolSet {
 
     private val pressStartSkill = PressStartUntilOverworld(toolset)
@@ -207,6 +209,35 @@ class SkillRegistry(
     @Tool
     @LLMDescription("Return frame count, watched RAM, CPU regs, held buttons.")
     fun getState(): StateSnapshot = toolset.getState()
+
+    @Tool
+    @LLMDescription(
+        "Rest the party at the Coneria inn. Pre-condition: party must already be inside " +
+            "the inn interior (currentMapId == innInteriorMapId). Taps A up to 30 times " +
+            "until gold drops AND minHp% reaches 100 (Rested), or returns InnNotFound " +
+            "if no heal observed. Use after walkInteriorVision navigates into the inn."
+    )
+    suspend fun restAtInn(innInteriorMapId: String): String {
+        toolCallLog.append("restAtInn", "innInteriorMapId=$innInteriorMapId")
+        val skill = RestAtInn(toolset)
+        val result = skill.invoke(mapOf("innInteriorMapId" to innInteriorMapId))
+        return result.message
+    }
+
+    @Tool
+    @LLMDescription(
+        "Probe the current building for inn behavior. Pre-condition: party must be inside " +
+            "a candidate building (currentMapId != 0). Taps A up to 30 times watching for " +
+            "gold drop + HP=100. On success, persists an NPC_INNKEEPER landmark and returns " +
+            "Rested. On failure, returns WrongBuilding — caller should exitInterior and try " +
+            "the next candidate building. Use during discovery mode when innkeeper is not cached."
+    )
+    suspend fun discoverInn(): String {
+        toolCallLog.appendNoArgs("discoverInn")
+        val skill = DiscoverInn(toolset, landmarks)
+        val result = skill.invoke(emptyMap())
+        return result.message
+    }
 
     private val exploreOverworldFrontierSkill =
         ExploreOverworldFrontier(toolset, overworldMap, fog, overworldPathfinder, toolCallLog)

@@ -10,6 +10,7 @@ import knes.agent.llm.AnthropicSession
 import knes.agent.llm.ModelRouter
 import knes.agent.perception.FfPhase
 import knes.agent.perception.FogOfWar
+import knes.agent.perception.LandmarkMemory
 import knes.agent.perception.MapSession
 import knes.agent.perception.OverworldMap
 import knes.agent.perception.VisionInteriorNavigator
@@ -36,6 +37,12 @@ open class ExecutorAgent(
      * narrower task. When null, the production prompt with Garland goal is used.
      */
     private val goalOverride: String? = null,
+    /**
+     * Shared landmark memory. Injected so DiscoverInn / RestAtInn registered
+     * in SkillRegistry use the same instance as AgentSession (same JSON file on
+     * disk as fallback, but injected instance avoids re-reads mid-run).
+     */
+    private val landmarks: LandmarkMemory = LandmarkMemory(),
 ) {
     private val systemPrompt: String =
         if (goalOverride == null) ff1ExecutorSystemPrompt
@@ -43,7 +50,8 @@ open class ExecutorAgent(
     private val skillRegistry = SkillRegistry(toolset, overworldMap, mapSession, fog,
         toolCallLog = toolCallLog,
         visionInteriorNavigator = visionInteriorNavigator,
-        visionOverworldNavigator = visionOverworldNavigator)
+        visionOverworldNavigator = visionOverworldNavigator,
+        landmarks = landmarks)
     private val advisorTool = AdvisorToolset(advisor)
     private val registry = ToolRegistry {
         tools(skillRegistry)
