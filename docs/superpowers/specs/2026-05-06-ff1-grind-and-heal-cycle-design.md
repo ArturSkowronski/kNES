@@ -286,6 +286,26 @@ Reaching Garland requires both specs plus existing bridge traversal (already imp
 
 ## 8. Open items (resolved in plan, not spec)
 
-- `innInteriorMapId` and innkeeper tile (TBD: one explorer run).
-- Inn cost (TBD: 30 GP per FF1 standard, but verify in RAM after one heal).
-- Coneria entry tile from spawn (likely already in landmark memory).
+- `innInteriorMapId` and innkeeper tile — autonomously discovered (see §9).
+- Inn cost — observed at first heal, persisted as part of landmark `note`.
+- Coneria entry tile from spawn — already in landmark memory from Phase 1 explorer.
+
+## 9. Revision: autonomous inn discovery (replaces manual probe)
+
+Original §3.2 assumed a one-shot manual probe to capture `innInteriorMapId` + innkeeper coords. **Revised:** the agent must discover the inn itself — hardcoding a manual-probe value defeats the autonomous-play premise.
+
+**New skill `DiscoverInn`** (sibling to `RestAtInn`, same shape — Skill interface, deterministic A-tapping, RAM validation):
+- Pre-condition: party is inside a candidate building (caller has already walked to a building entry tile and crossed into a non-zero mapId).
+- Behavior: tap A up to 30× watching RAM. If `gold` drops AND `min_hp%` reaches 100 → SUCCESS: persist `Landmark(kind=NPC_INNKEEPER, mapId=<current>, localX/Y=<current>, note="cost=$X")` to `LandmarkMemory` (using `recordIfNew`), return `Rested`.
+- If 30 taps elapse without delta → return `WrongBuilding` (caller exits and tries next candidate).
+
+**`LandmarkKind` extension:** add `NPC_INNKEEPER` (existing enum already has `NPC_KING`, `NPC_SHOPKEEPER`, `NPC_GENERIC`).
+
+**AgentSession REST handler revision:**
+1. Check `LandmarkMemory.findInnkeeper()`:
+   - **Hit:** `walkOverworldTo(coneriaEntry)` + walk to landmark's `(localX, localY)` + `RestAtInn(innInteriorMapId=landmark.mapId)`. Fast path; uses existing skill.
+   - **Miss:** advisor vision consult ("you see a town interior; list candidate inn-building tiles from this screen") → for each candidate: walk to entry, enter (mapId change), invoke `DiscoverInn`. On `Rested`, done. On `WrongBuilding`, exit and try next. Exhausted candidates → log + return to advisor (next REST decision retries).
+
+This keeps `RestAtInn` (Task 6) intact as the cached-hit path. `DiscoverInn` adds discovery + persistence for first encounter. After the first successful discovery in any run, all subsequent REST calls — in this and future sessions — use the fast path because `LandmarkMemory` is persistent JSON on disk.
+
+**Coneria entry coords:** assumed already in `LandmarkMemory` from Phase 1 explorer (`TOWN_ENTRY` kind). If absent, AgentSession falls back to existing advisor flow (out of scope for this spec).

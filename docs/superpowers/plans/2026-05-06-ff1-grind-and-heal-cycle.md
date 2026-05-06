@@ -697,7 +697,278 @@ No LLM inside; AgentSession PostBattle handler resolves resulting battle."
 
 ---
 
-## Task 5: Inn discovery probe — find Coneria inn mapId, innkeeper tile, cost
+## Task 5 (REVISED): DiscoverInn skill + LandmarkKind.NPC_INNKEEPER
+
+> **Replaces the manual inn-discovery probe.** The agent must discover the inn autonomously — hardcoding a probe value defeats the autonomous-play premise. See spec §9.
+
+**Files:**
+- Modify: `knes-agent/src/main/kotlin/knes/agent/perception/LandmarkMemory.kt` — add `NPC_INNKEEPER` to `LandmarkKind` enum + helper `findInnkeeper(): Landmark?`
+- Create: `knes-agent/src/main/kotlin/knes/agent/skills/DiscoverInn.kt`
+- Create: `knes-agent/src/test/kotlin/knes/agent/skills/DiscoverInnTest.kt`
+
+### Step 1: Add NPC_INNKEEPER to LandmarkKind + findInnkeeper helper
+
+Edit `knes-agent/src/main/kotlin/knes/agent/perception/LandmarkMemory.kt`. The existing enum:
+
+```kotlin
+enum class LandmarkKind {
+    TOWN_ENTRY, CASTLE_ENTRY, DUNGEON_ENTRY,
+    NPC_KING, NPC_SHOPKEEPER, NPC_GENERIC,
+    STAIRS_UP, STAIRS_DOWN, EXIT_TILE,
+    UNKNOWN,
+}
+```
+
+Add `NPC_INNKEEPER` as a new variant (place next to other NPCs):
+
+```kotlin
+enum class LandmarkKind {
+    TOWN_ENTRY, CASTLE_ENTRY, DUNGEON_ENTRY,
+    NPC_KING, NPC_SHOPKEEPER, NPC_INNKEEPER, NPC_GENERIC,
+    STAIRS_UP, STAIRS_DOWN, EXIT_TILE,
+    UNKNOWN,
+}
+```
+
+In `class LandmarkMemory`, add a finder helper near `all()`:
+
+```kotlin
+fun findInnkeeper(): Landmark? = byId.values.firstOrNull { it.kind == LandmarkKind.NPC_INNKEEPER }
+```
+
+### Step 2: Write the failing test
+
+Create `knes-agent/src/test/kotlin/knes/agent/skills/DiscoverInnTest.kt`:
+
+```kotlin
+package knes.agent.skills
+
+import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import knes.agent.perception.Landmark
+import knes.agent.perception.LandmarkKind
+import knes.agent.perception.LandmarkMemory
+import knes.agent.tools.EmulatorToolset
+import knes.agent.tools.results.StateSnapshot
+import knes.agent.tools.results.StepResult
+import knes.api.EmulatorSession
+import java.io.File
+import java.nio.file.Files
+
+class DiscoverInnTest : FunSpec({
+
+    test("returns Rested AND persists NPC_INNKEEPER landmark when heal validates") {
+        val pre = mapOf(
+            "currentMapId" to 12, "worldX" to 7, "worldY" to 4,
+            "char1_hpLow" to 10, "char1_hpHigh" to 0,
+            "char1_maxHpLow" to 20, "char1_maxHpHigh" to 0,
+            "goldLow" to 0x90, "goldMid" to 0x01, "goldHigh" to 0,  // 400
+        )
+        val post = pre.toMutableMap().apply {
+            put("char1_hpLow", 20)
+            put("goldLow", 0x72); put("goldMid", 0x01)  // 370 → cost 30
+        }
+        val toolset = ScriptedDiscoverToolset(listOf(pre, pre, post, post, post))
+        val tmpFile = Files.createTempFile("discover-inn-", ".json").toFile().apply { deleteOnExit() }
+        val landmarks = LandmarkMemory(file = tmpFile)
+        val skill = DiscoverInn(toolset, landmarks)
+
+        val r = skill.invoke(emptyMap())
+        r.ok shouldBe true
+        r.message shouldContain "Rested"
+        landmarks.all().filter { it.kind == LandmarkKind.NPC_INNKEEPER } shouldHaveSize 1
+        val saved = landmarks.findInnkeeper()!!
+        saved.mapId shouldBe 12
+        saved.localX shouldBe 7
+        saved.localY shouldBe 4
+        saved.note shouldContain "cost=30"
+    }
+
+    test("returns WrongBuilding after 30 taps without heal — does NOT persist") {
+        val stuck = mapOf(
+            "currentMapId" to 9, "worldX" to 5, "worldY" to 3,
+            "char1_hpLow" to 15, "char1_hpHigh" to 0,
+            "char1_maxHpLow" to 20, "char1_maxHpHigh" to 0,
+            "goldLow" to 0x90, "goldMid" to 0x01, "goldHigh" to 0,
+        )
+        val toolset = ScriptedDiscoverToolset(List(40) { stuck })
+        val tmpFile = Files.createTempFile("discover-inn-", ".json").toFile().apply { deleteOnExit() }
+        val landmarks = LandmarkMemory(file = tmpFile)
+        val skill = DiscoverInn(toolset, landmarks)
+
+        val r = skill.invoke(emptyMap())
+        r.ok shouldBe false
+        r.message shouldContain "WrongBuilding"
+        landmarks.all().filter { it.kind == LandmarkKind.NPC_INNKEEPER } shouldHaveSize 0
+    }
+
+    test("returns NotInBuilding when currentMapId is 0 (still on overworld)") {
+        val outside = mapOf(
+            "currentMapId" to 0, "worldX" to 152, "worldY" to 159,
+            "char1_hpLow" to 5, "char1_hpHigh" to 0,
+            "char1_maxHpLow" to 20, "char1_maxHpHigh" to 0,
+            "goldLow" to 0x90, "goldMid" to 0x01, "goldHigh" to 0,
+        )
+        val toolset = ScriptedDiscoverToolset(listOf(outside))
+        val tmpFile = Files.createTempFile("discover-inn-", ".json").toFile().apply { deleteOnExit() }
+        val landmarks = LandmarkMemory(file = tmpFile)
+        val skill = DiscoverInn(toolset, landmarks)
+
+        val r = skill.invoke(emptyMap())
+        r.ok shouldBe false
+        r.message shouldContain "NotInBuilding"
+        landmarks.all() shouldHaveSize 0
+    }
+})
+
+private class ScriptedDiscoverToolset(
+    private val ramSequence: List<Map<String, Int>>
+) : EmulatorToolset(EmulatorSession()) {
+    private var idx = 0
+    override fun getState() = StateSnapshot(
+        frame = idx, ram = ramSequence.getOrNull(idx) ?: ramSequence.last(),
+        cpu = emptyMap(), heldButtons = emptyList()
+    )
+    override fun tap(button: String, count: Int, pressFrames: Int, gapFrames: Int): StepResult {
+        idx = (idx + 1).coerceAtMost(ramSequence.size - 1)
+        return StepResult(frame = idx, ram = ramSequence.getOrNull(idx) ?: ramSequence.last(),
+            heldButtons = emptyList(), screenshot = null)
+    }
+}
+```
+
+> **Note:** Verify `LandmarkMemory(file = tmpFile)` constructor — peek the actual class to confirm signature. If the ctor takes `file: File` it's fine; if it takes a `Path`, adjust. Likely `LandmarkMemory(file: File = File(System.getProperty("user.home"), ".knes/ff1-landmarks.json"))` based on existing patterns. Adjust the test ctor call to match what compiles.
+
+### Step 3: Run failing test
+
+```bash
+./gradlew :knes-agent:test --tests 'knes.agent.skills.DiscoverInnTest' 2>&1 | tail -10
+```
+
+### Step 4: Implement DiscoverInn
+
+Create `knes-agent/src/main/kotlin/knes/agent/skills/DiscoverInn.kt`:
+
+```kotlin
+package knes.agent.skills
+
+import knes.agent.perception.Landmark
+import knes.agent.perception.LandmarkKind
+import knes.agent.perception.LandmarkMemory
+import knes.agent.runtime.StrategyContext
+import knes.agent.tools.EmulatorToolset
+
+/**
+ * Probe the current building for inn behavior. Pre-condition: party is inside
+ * a candidate building (currentMapId != 0). Taps A up to 30× watching RAM. If
+ * gold drops AND minHp% reaches 100, persists an NPC_INNKEEPER landmark
+ * (idempotent via recordIfNew) and returns Rested. Otherwise WrongBuilding.
+ *
+ * Caller (AgentSession REST handler) is responsible for entering the candidate
+ * building and exiting on WrongBuilding to try the next candidate.
+ *
+ * See spec §9 for the autonomous-discovery flow.
+ */
+class DiscoverInn(
+    private val toolset: EmulatorToolset,
+    private val landmarks: LandmarkMemory,
+) : Skill {
+    override val id = "discover_inn"
+    override val description =
+        "Probe current building for inn behavior. Tap A up to 30x watching for " +
+        "gold drop + HP=100. Persists NPC_INNKEEPER landmark on success."
+
+    private val maxTaps = 30
+
+    override suspend fun invoke(args: Map<String, String>): SkillResult {
+        val pre = toolset.getState().ram
+        val mapId = pre["currentMapId"] ?: 0
+        if (mapId == 0) {
+            return SkillResult(ok = false,
+                message = "NotInBuilding: currentMapId=0 (still on overworld)", ramAfter = pre)
+        }
+        val preGold = StrategyContext.totalGold(pre)
+        val preHpPct = StrategyContext.minHpPct(pre)
+        val startFrame = toolset.getState().frame
+
+        var taps = 0
+        while (taps < maxTaps) {
+            toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 30)
+            taps++
+            val state = toolset.getState()
+            val ram = state.ram
+            val curGold = StrategyContext.totalGold(ram)
+            val curHpPct = StrategyContext.minHpPct(ram)
+            if (curGold < preGold && curHpPct == 100 && preHpPct < 100) {
+                val cost = preGold - curGold
+                val localX = ram["worldX"] ?: 0
+                val localY = ram["worldY"] ?: 0
+                val landmark = Landmark(
+                    id = "innkeeper-map$mapId-$localX-$localY",
+                    kind = LandmarkKind.NPC_INNKEEPER,
+                    mapId = mapId, localX = localX, localY = localY,
+                    note = "cost=$cost",
+                    discoveredRunId = "discover_inn"
+                )
+                landmarks.recordIfNew(landmark)
+                landmarks.save()
+                return SkillResult(
+                    ok = true,
+                    message = "Rested: discovered innkeeper at map=$mapId local=($localX,$localY) " +
+                        "cost=$cost (gold ${preGold}->${curGold}, hp% ${preHpPct}->100) after $taps taps",
+                    framesElapsed = state.frame - startFrame, ramAfter = ram,
+                )
+            }
+        }
+        val final = toolset.getState()
+        return SkillResult(
+            ok = false,
+            message = "WrongBuilding: $maxTaps taps in mapId=$mapId without heal " +
+                "(gold=${StrategyContext.totalGold(final.ram)}, hp%=${StrategyContext.minHpPct(final.ram)})",
+            framesElapsed = final.frame - startFrame, ramAfter = final.ram,
+        )
+    }
+}
+```
+
+> **Note on `Landmark.id` uniqueness:** the id `"innkeeper-map$mapId-$localX-$localY"` is deterministic so calling DiscoverInn twice on the same tile is idempotent (recordIfNew skips). Different inns in different towns get distinct ids.
+>
+> **Note on `LandmarkMemory.save()`:** confirm method name in actual class. Existing AgentSession calls `warpMemory.save()` — likely matching pattern.
+
+### Step 5: Run tests
+
+```bash
+./gradlew :knes-agent:test --tests 'knes.agent.skills.DiscoverInnTest' 2>&1 | tail -10
+```
+
+Expected: 3 tests passed.
+
+### Step 6: Verify LandmarkMemory tests still pass (regression check)
+
+```bash
+./gradlew :knes-agent:test --tests 'knes.agent.perception.*' 2>&1 | tail -10
+```
+
+Expected: same baseline as before (no regression from enum change).
+
+### Step 7: Commit
+
+```bash
+git add knes-agent/src/main/kotlin/knes/agent/perception/LandmarkMemory.kt \
+        knes-agent/src/main/kotlin/knes/agent/skills/DiscoverInn.kt \
+        knes-agent/src/test/kotlin/knes/agent/skills/DiscoverInnTest.kt
+git commit -m "feat(skill): DiscoverInn — autonomous inn discovery + persist landmark
+
+Replaces the original manual inn-discovery probe (Task 5) with a
+self-contained skill: tap A in candidate building, validate via gold
+drop + HP=100, persist NPC_INNKEEPER landmark on success. Adds
+NPC_INNKEEPER to LandmarkKind enum + findInnkeeper() helper. Caller
+(AgentSession) orchestrates building selection via vision advisor."
+```
+
+## Task 5: Inn discovery probe — find Coneria inn mapId, innkeeper tile, cost (DEPRECATED)
 
 **Files:**
 - Create: `knes-agent/src/test/kotlin/knes/agent/runtime/InnDiscoveryProbe.kt` (one-shot probe, NOT a regression test)
