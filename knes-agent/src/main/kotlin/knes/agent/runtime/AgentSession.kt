@@ -78,6 +78,12 @@ class AgentSession(
      * strategic budget without ever entering a fight.
      */
     private var grindAnchor: Pair<Int, Int>? = null
+    /** Adaptive anchor: count consecutive Blocked/NoEncounter to detect dead-zone. */
+    private var grindNoProgress: Int = 0
+    /** Number of times the anchor has been shifted; cap to avoid runaway drift. */
+    private var grindAnchorShifts: Int = 0
+    private val GRIND_NOPROGRESS_THRESHOLD = 3
+    private val GRIND_MAX_ANCHOR_SHIFTS = 5
     /** Pre-bridge target — separate waypoint, distinct from grind anchor. */
     private val BRIDGE_TILE: Pair<Int, Int> = 157 to 141
     private val TARGET_MIN_LEVEL: Int = 3
@@ -278,6 +284,32 @@ class AgentSession(
                                 "maxStepsWithoutEncounter" to "12",
                             ))
                             println("[strategy:grind] ok=${res.ok} ${res.message.take(120)}")
+                            // V5.36.2: adaptive anchor. Validation run 3 evidence:
+                            // spawn area (146,158) + corridor radius 6 still landed
+                            // entirely in the Coneria peninsula no-encounter pocket.
+                            // After N consecutive non-progress results (NoEncounter
+                            // or Blocked), shift anchor (+2 E, -4 N) toward the
+                            // bridge — that's the empirically encounter-rich path
+                            // per prior session memory. Cap shifts so we don't
+                            // walk off the map.
+                            val msg = res.message
+                            val noProgress = msg.startsWith("NoEncounter") || msg.startsWith("Blocked")
+                            if (noProgress) {
+                                grindNoProgress++
+                                if (grindNoProgress >= GRIND_NOPROGRESS_THRESHOLD &&
+                                    grindAnchorShifts < GRIND_MAX_ANCHOR_SHIFTS) {
+                                    val (oax, oay) = grindAnchor!!
+                                    val nax = oax + 2
+                                    val nay = oay - 4
+                                    grindAnchor = nax to nay
+                                    grindAnchorShifts++
+                                    grindNoProgress = 0
+                                    println("[strategy:grind] adaptive shift #${grindAnchorShifts}: " +
+                                        "anchor ($oax,$oay) -> ($nax,$nay)")
+                                }
+                            } else {
+                                grindNoProgress = 0
+                            }
                             continue
                         }
                         SkillInvocation.Rest -> {
