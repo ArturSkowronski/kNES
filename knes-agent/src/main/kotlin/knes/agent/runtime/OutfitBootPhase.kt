@@ -24,7 +24,12 @@ class OutfitBootPhase(
     private val savestateHash: String,
     private val trace: (String, String) -> Unit,
 ) {
-    data class Result(val skipped: Boolean, val reason: String, val charsEquipped: List<Int> = emptyList())
+    data class Result(
+        val skipped: Boolean,
+        val reason: String,
+        val charsEquipped: List<Int> = emptyList(),
+        val coneriaEntry: knes.agent.perception.Landmark? = null,
+    )
 
     fun run(): Result {
         if (outfitState.weaponsBoughtFor(savestateHash)) {
@@ -51,6 +56,6 @@ class OutfitBootPhase(
         // AgentSession.runOutfitBootPhase which has access to all skills.
         // This unit returns a sentinel to indicate ready-for-compose.
         trace("boot_outfit_summary", "phase ready, delegating to AgentSession composer")
-        return Result(skipped = false, reason = "ready_for_compose")
+        return Result(skipped = false, reason = "ready_for_compose", coneriaEntry = coneriaEntry)
     }
 }

@@ -574,9 +574,12 @@ class AgentSession(
             return
         }
 
-        val coneriaEntry = landmarkMemory.findByKind(LandmarkKind.TOWN_ENTRY)
-            .firstOrNull { it.note.contains("coneria", ignoreCase = true) }
-            ?: landmarkMemory.findByKind(LandmarkKind.TOWN_ENTRY).first()
+        val coneriaEntry = pre.coneriaEntry
+            ?: run {
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_outfit_summary: internal_error_no_coneria_entry_after_guard"))
+                return
+            }
 
         // 2. Walk to Coneria
         val walkResult = WalkOverworldTo(toolset, outfitViewportSource, fog).invoke(mapOf(
@@ -674,15 +677,27 @@ class AgentSession(
         mapSession: MapSession,
         fog: FogOfWar,
     ): Landmark? {
-        val candidates = landmarkMemory.findByKind(LandmarkKind.NPC_SHOPKEEPER).take(4)
+        // Vision-driven retry probe: WalkInteriorVision navigates to whatever the
+        // vision system identifies, with no coordinate hint. We retry up to N
+        // times, calling DiscoverShop after each navigation in hopes of landing
+        // at a shopkeeper tile. If Spec 2 e2e validation shows this is unreliable,
+        // a follow-up spec should add coord-targeted interior navigation.
+        val maxAttempts = landmarkMemory.findByKind(LandmarkKind.NPC_SHOPKEEPER).size
+            .coerceAtLeast(1).coerceAtMost(4)
         val discoverSkill = DiscoverShop(toolset, landmarkMemory, vision)
-        for (cand in candidates) {
+        repeat(maxAttempts) { attemptIdx ->
             val walk = WalkInteriorVision(toolset, navigator, mapSession = mapSession).invoke(emptyMap())
-            if (!walk.ok) continue
+            if (!walk.ok) {
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_shop_probe: attempt=$attemptIdx walk_failed: ${walk.message}"))
+                return@repeat
+            }
             val classify = discoverSkill.invoke(emptyMap())
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_shop_probe: attempt=$attemptIdx classify=${classify.message}"))
             if (classify.ok && classify.message.contains("kind=weapon")) {
                 return landmarkMemory.findByKind(LandmarkKind.NPC_SHOPKEEPER)
-                    .firstOrNull { it.note.contains("kind=weapon") }
+                    .first { it.note.contains("kind=weapon") }
             }
             // Exit current interior to try next candidate.
             ExitInterior(toolset, mapSession, fog).invoke(emptyMap())
