@@ -53,15 +53,30 @@ fun main() {
     )
 
     val haiku: HaikuConsult = try {
-        val apiKey = System.getenv("ANTHROPIC_API_KEY")
-        if (apiKey.isNullOrBlank()) {
-            System.err.println("[explorer] no ANTHROPIC_API_KEY — using FakeHaikuConsult (zero classification)")
-            FakeHaikuConsult()
-        } else {
-            AnthropicHaikuConsult(apiKey = apiKey)
+        when (System.getenv("KNES_VISION")?.lowercase()) {
+            "gemini-pro", "gemini" -> {
+                val key = System.getenv("GEMINI_API_KEY")
+                if (key.isNullOrBlank()) {
+                    System.err.println("[explorer] KNES_VISION=gemini but GEMINI_API_KEY unset — using FakeHaikuConsult")
+                    FakeHaikuConsult()
+                } else {
+                    System.err.println("[explorer] vision backend: Gemini 2.5 Pro")
+                    GeminiVisionConsult(apiKey = key)
+                }
+            }
+            else -> {
+                val key = System.getenv("ANTHROPIC_API_KEY")
+                if (key.isNullOrBlank()) {
+                    System.err.println("[explorer] no ANTHROPIC_API_KEY — using FakeHaikuConsult (zero classification)")
+                    FakeHaikuConsult()
+                } else {
+                    System.err.println("[explorer] vision backend: Claude Haiku 4.5 (default; KNES_VISION=gemini-pro to switch)")
+                    AnthropicHaikuConsult(apiKey = key)
+                }
+            }
         }
     } catch (e: Exception) {
-        System.err.println("[explorer] Haiku init failed (${e.message}) — using FakeHaikuConsult")
+        System.err.println("[explorer] vision init failed (${e.message}) — using FakeHaikuConsult")
         FakeHaikuConsult()
     }
 
