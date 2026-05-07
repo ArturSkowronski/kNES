@@ -1,416 +1,358 @@
-# Geecon 2026 — Advisor Agent gra w Final Fantasy
+# Geecon 2026 — Jak zbudować agenta, który nie zbankrutuje Cię w nocy
 
-**Format:** 45 min talk + ~10 min Q&A
-**Architectural through-line:** Anthropic's **Orchestrator-Workers / Advisor pattern** (z „Building Effective Agents", Dec 2024) jako kręgosłup całego systemu, evolved przez trzy iteracje.
-**Goal:** dotrzeć do Garlanda — boss Chaos Shrine, czyli `Battle.enemyId == 0x7C`. **Honest cliffhanger:** mam architekturę i agent dochodzi do landmarków, ale Garland jeszcze leży nietknięty.
-**Repo:** github.com/ArturSkowronski/kNES (Kotlin + Koog + Anthropic + Gemini)
-
----
-
-## Hook — „I, Garland, will knock you all down!" (0:00 – 2:00) | 2 min
-
-- Slajd: Garland w Chaos Shrine. Cytat z gry: *„I, Garland, will knock you all down!"*
-- Garland to **NIE** scripted bridge encounter (jak speedrun guide sugerują). To **boss interior dungeon — Chaos Shrine**.
-- Setup celu talku:
-  > „Mam 45 minut, żeby pokazać architekturę agenta, którego buduję od pół roku. Jest oparta o **Advisor pattern** od Anthropica. Mój agent nie pokonał jeszcze Garlanda — ale doszedł do Coneria Castle, znalazł Króla, zmapował peninsulę. I to jest historia o tym, jak nie zbudować **kontrolera**, tylko jak zbudować **strateg-wykonawca**."
-- Trzy akty: **V1 Naive Advisor → V2 Skilled Advisor → V3 Persistent Advisor**.
-- Demo loop start (`./gradlew :knes-agent:runExplorer` w tle przez cały talk).
+**Talk:** *„Architektura systemów agentowych w 2026 — lessons z literatury, produkcji i Final Fantasy"*
+**Format:** 45 min talk + 10 min Q&A
+**Audiencja:** JVM developers / praktycy
+**Through-line:** practical agent engineering — narzędzia, architektury, pamięć, planowanie, produkcyjne porażki — z **kNES + FF1 jako sandbox** (Kotlin + Koog + Anthropic).
+**Repo:** github.com/ArturSkowronski/kNES
 
 ---
 
-## Akt I — Architektura: Advisor pattern (2:00 – 9:00) | 7 min ⭐ *to jest fundament całego talku*
+## Hook — „Twój agent kosztował Cię $47 000 zanim wstałeś" (0:00 – 2:30) | 2.5 min
 
-### 1.1 Kontekst: kNES + Final Fantasy (1.5 min)
-- Emulator NES w Kotlinie, fork vNES — pełny CPU 6502, PPU, PAPU, MMC1.
-- Już istnieje REST API + MCP server. Claude Code potrafi grać przez MCP.
-- Ja chcę **agenta in-process**, w Kotlinie, z biblioteką **Koog** od JetBrains.
+- **Listopad 2025:** market-research pipeline z 4 LangChain A2A agentami. Analyzer ↔ Verifier ping-pong bez terminacji. **11 dni. $47 000.** Mieli alerty — leciały na Slacka, którego nikt nie czytał. ([dev.to/$47k loop](https://dev.to/waxell/the-47000-agent-loop-why-token-budget-alerts-aren-t-budget-enforcement-389i))
+- **Lipiec 2025:** Replit's agent kasuje produkcyjną bazę 1190 firm podczas explicit code freeze. ([The Register](https://www.theregister.com/2025/07/21/replit_saastr_vibe_coding_incident/))
+- **2025:** Claude Code uruchamia `terraform destroy` na 2.5 roku danych ~100k studentów. ([Tom's Hardware](https://www.tomshardware.com/tech-industry/artificial-intelligence/claude-code-deletes-developers-production-setup-including-its-database-and-snapshots-2-5-years-of-records-were-nuked-in-an-instant))
 
-### 1.2 Anthropic „Building Effective Agents" (2 min)
-- W grudniu 2024 Anthropic opublikował taksonomię agentowych wzorców:
-  - Augmented LLM, Prompt chaining, Routing, Parallelization
-  - **Orchestrator-Workers** ← *to jest nasz pattern*
-  - Evaluator-Optimizer, Agents
-- **Orchestrator-Workers**: jeden LLM (orchestrator) **planuje i deleguje**, inne LLM-y (workers) **wykonują**. Orchestrator ma read-only widok stanu, workers mają pełne narzędzia.
-- W naszej terminologii: **Advisor** = orchestrator (Opus, drogi, mądry, bez tools mutujących), **Executor** = worker (Sonnet/Haiku, tani, robi).
-- Anthropic's Claude Plays Pokémon używa wariantu z dwoma LLM: główny + secondary do przeglądu knowledge base. To **ten sam pattern**, w innym kostiumie.
+> „Większość problemów z agentami w 2026 to nie LLM. To **harness**. Pokażę Wam co o tym wiemy z literatury, co robi Anthropic, OpenAI, Cursor, Devin, Cognition — i jak to wygląda, kiedy zbudujesz to sam grając w Final Fantasy."
 
-### 1.3 Dlaczego ten pattern dla gry? (1.5 min)
-Slajd z porównaniem trzech podejść:
-| Podejście | Problem |
-|-----------|---------|
-| Single LLM ReAct | Diverguje w analizie, nie commituje akcji (Yao 2022 §6) |
-| RL agent (PokeRL) | Działa, ale dni training + nie używa wiedzy ludzkiej |
-| **Orchestrator-Workers** | LLM planuje na poziomie `which skill`, scripted code wykonuje |
+---
 
-Plus-bonus: w Koog 0.5+ jest **native support** — `createAgentTool` pozwala jednemu agentowi wywoływać innego jako narzędzie. Advisor jest zarejestrowany w toolregistry executora pod nazwą `askAdvisor(reason)`.
+## Akt I — Co to jest agent i kiedy go użyć (2:30 – 8:00) | 5.5 min
 
-### 1.4 Pokaż architekturę (2 min)
-Slajd diagramu:
+### 1.1 Anthropic's taxonomy z „Building Effective Agents" (Dec 2024) (2 min)
+- **Augmented LLM** (LLM + tools + retrieval + memory) = building block.
+- **5 workflow patterns:** Prompt Chaining · Routing · Parallelization · Orchestrator-Workers · Evaluator-Optimizer.
+- **Agents** = LLM dynamicznie steruje własnym procesem. Tylko gdy ścieżki nie da się zakodować.
+- Cytat: *„Find the simplest solution possible, and only increase complexity when needed."*
+
+### 1.2 Workflow vs Agent — kiedy co (1.5 min)
+| Workflow | Agent |
+|----------|-------|
+| Predefined paths | Self-directed loop |
+| Predictable | Open-ended |
+| Cheap | Expensive (4× tokens chat) |
+| Most production needs | Long-horizon, ambiguous |
+
+> *„Agent is just a model in a loop with tools — that's the whole architecture."* — Anthropic
+
+### 1.3 Karpathy mental model (1 min)
+- LLM = CPU
+- Context window = RAM
+- Agent runtime = OS
+- Context engineering = pamięć i scheduling
+- *„Context engineering is the delicate art of filling context window with just the right information for the next step."* (Karpathy)
+
+### 1.4 Case study intro: kNES + FF1 (1 min)
+- kNES = emulator NES w Kotlinie. KotlinConf 2025 talk.
+- FF1 (1987) = perfect agent sandbox: long-horizon, partial-observable, deterministic state, RAM dostępna.
+- Cel: dotrzeć do Garlanda (boss Chaos Shrine).
+- Stack: Kotlin + Koog (JetBrains) + Anthropic Claude.
+
+---
+
+## Akt II — Tools matter more than prompts (8:00 – 16:00) | 8 min
+
+### 2.1 Agent-Computer Interface (1.5 min)
+- Anthropic SWE-bench SoTA przyszło z **przepisania tool descriptions, nie modelu**.
+- *„We spent more time optimizing tools than the prompt."* — Anthropic
+- *„If a human engineer can't say which tool to use, an AI agent can't either."* — Anthropic Writing Tools (Sept 2025)
+
+### 2.2 Macro vs Micro split — uniwersalna zasada (1.5 min)
+- **Macro** (decyzje, planowanie) = LLM. Non-deterministic by design.
+- **Micro** (execution, walking, parsing) = scripted code. Deterministic, testable, JUnit-able.
+- **Bridge** = tool design. Tools are the API contract.
+- 2025-2026 consensus (Anthropic, OpenAI, Cursor, Devin): **fewer, higher-leverage, well-described tools** + long tail przez code execution + progressive disclosure.
+
+### 2.3 Voyager — skill library (NVIDIA 2023) (1.5 min)
+- LLM pisze JS funkcje, indexed by embedding of NL description, top-5 retrieval.
+- 3.3× more unique items, **15.3× faster wood, 8.5× stone, 6.4× iron, 1st do diamond** vs ReAct/Reflexion/AutoGPT.
+- Ablation: bez self-verification → -73%, bez curriculum → -93%.
+- Skill library zaczyna realnie zarabiać po ~80 iteracjach.
+
+### 2.4 Anthropic's Claude Plays Pokémon — 3 narzędzia (1.5 min)
+- Hershey: tylko `update_knowledge_base` + `use_emulator` + `navigator`.
+- *„I've actually stripped out complexity over time, not added it."* — Hershey
+- Navigator abstrahuje „idź do (x,y)" zamiast 13 button-tools.
+- Knowledge base = self-managed memory, persists across summarization.
+
+### 2.5 Anti-pattern: 13 raw button tools (FF case study, 1 min)
+- V1 mojego agenta: `step`, `tap`, `sequence`, `press`, `release`, `getState`, ... = 13 tools.
+- Executor zapętlał się analizując RAM, nigdy nie naciskał przycisku.
+- $20–50 / attempted run.
+- Fix: 7 high-level skills, raw narzędzia ukryte. Cost spadł rzędem wielkości.
+
+### 2.6 Tool design heuristics (1 min)
+| Tier | Practice | Source |
+|------|----------|--------|
+| S | Right abstraction beats more tools | Voyager, CPP |
+| S | Tool descriptions are prompts — eval them | Anthropic SWE-bench |
+| A | Code-as-action when actions compose (CodeAct +20%) | ICML 2024 |
+| A | Progressive disclosure (Anthropic Skills, MCP) | Anthropic 2025 |
+| B | Deterministic backbone + LLM at decision points | Temporal pattern |
+
+**Anti-patterns:** >100 tools w kontekście; tool descriptions <40 słów; jeden mega-tool z 20 optional kwargs; tool name overlap bez namespacing.
+
+---
+
+## Akt III — Architectures (16:00 – 23:00) | 7 min
+
+### 3.1 Orchestrator-Workers = Advisor pattern (2 min)
+- Anthropic „Building Effective Agents" (Dec 2024) → Anthropic „Multi-agent research system" (Jun 2025).
+- Lead agent (Opus) decomposes → subagents (Sonnet) parallel execution → synthesis.
+- **Headline:** multi-agent +90.2% vs single-agent na research evals.
+- **Caveat:** 4× tokens (single agent) → **15× tokens (multi-agent)**. Token usage explains 80% performance variance.
+- Hard rule: *„Multi-agent only viable when value of task > token cost."*
+
+### 3.2 Cognition's „Don't Build Multi-Agents" (Walden Yan, Jun 2025) (1.5 min)
+- Two principles:
+  1. *„Share context, not just messages"* (full traces!)
+  2. *„Decisions, not messages, are what conflict"*
+- **Flappy Bird parable:** subagent A robi Mario background, subagent B robi photoreal bird. Każdy element OK, całość crashes.
+- Default: single-threaded linear architecture.
+- **April 2026 follow-up:** narrower class works — agents contribute intelligence, writes stay single-threaded.
+
+### 3.3 Anthropic's three-agent harness (Mar 2026) (1.5 min)
+- **Planner / Generator / Evaluator** dla multi-hour autonomous coding.
+- Separating agent doing work from agent judging it = mitigates self-evaluation bias.
+- Failure mode: agents try to *„one-shot the app"* — burning whole context on half-implementation.
+
+### 3.4 Resolution: it depends (1 min)
+- **Research / parallel-friendly:** multi-agent worth it.
+- **Coding / tightly coupled:** single-threaded harness.
+- **Conversational / cheap tasks:** single LLM augmented.
+- *„Start with simple prompts, optimize with eval, add multi-step only when simpler solutions fall short."* (Anthropic)
+
+### 3.5 Case study: Advisor + Executor w FF (1 min)
+- Advisor (Opus, read-only, single-shot) — produces numbered plan.
+- Executor (Sonnet/Haiku, full tools, `singleRunStrategy`) — picks 1 skill.
+- Trigger advisora: phase boundary, `idleTurns >= 20`, `askAdvisor` z executora.
+- **Read-only contract** = invariant. Advisor nie może mutować stanu emulatora.
+
+---
+
+## Akt IV — Memory: short term vs long term (23:00 – 30:00) | 7 min
+
+### 4.1 Context rot — long context to nie magic bullet (1.5 min)
+- Chroma Research 2024-2025: tested 18 SOTA models (GPT-4.1, Claude 4, Gemini 2.5, Qwen3).
+- **NIAH-passing ≠ long context working.** Distractors, semantic similarity to needle, haystack structure all matter.
+- *„NIAH underestimates what most long-context tasks require in practice."* — Chroma
+
+### 4.2 Anthropic's 3 primitives — context engineering (Sept 2025) (1.5 min)
+- **Compaction** (`compact_20260112`) — summarize at threshold, preserve high-fidelity decisions.
+- **Tool-result clearing** (`clear_tool_uses_20250919`) — surgically drop old tool outputs, keep call record.
+- **Memory tool** (`memory_20250818`) — filesystem-based persistent notes across sessions.
+- Cookbook: peak context 335K → 169K (compaction) → 173K (clearing).
+
+### 4.3 MemGPT, Mem0, Letta — memory frameworks (1.5 min)
+- **MemGPT** (Packer 2023): OS-inspired hierarchical memory. Core (RAM) / archival (disk). 93.4% DMR vs 35.3% summarization baseline.
+- **Mem0** (2025): vector + graph + KV hybrid. **91% latency cut, 14× token cut** at near-parity accuracy (LOCOMO).
+- **Zep** (2025): temporal knowledge graph. 63.8% LongMemEval vs Mem0's 49.0%.
+- **Letta** = commercial MemGPT, full stateful platform.
+- **Mental model dla JVM:** virtual memory dla LLMs. Same paging, same tradeoffs.
+
+### 4.4 Sleep-time compute (Letta + UC Berkeley, 2025) (1 min)
+- Pre-compute on context BEFORE queries arrive. Cache deductions.
+- **5× less test-time compute** for same accuracy on Stateful GSM-Symbolic / AIME.
+- **2.5× cheaper amortized** across queries on same context.
+- *„By doing the thinking offline, before user arrives, we cut test-time compute by 5×."*
+
+### 4.5 Anthropic Memory Tool + Dreaming (1 min)
+- Sept 2025: filesystem-based persistent memory. Per-user, exportable.
+- **Dreaming** (Apr 2026): scheduled background process consolidates past sessions, surfaces recurring mistakes, team preferences.
+- Wisedocs case: **97% reduction in first-pass errors, 30% speed-up.**
+
+### 4.6 Case study: 5 JSON files w FF (0.5 min)
 ```
-┌─────────────────────────────────────────────────┐
-│  AgentSession (outer loop, RAM-driven)          │
-│                                                 │
-│  ┌─────────────────┐    consults    ┌────────┐  │
-│  │ ExecutorAgent   │───────────────▶│Advisor │  │
-│  │ • Sonnet/Haiku  │                │• Opus 4│  │
-│  │ • Skills (full) │◀───────────────│• Read- │  │
-│  │ • singleRun     │  returns plan  │  only  │  │
-│  └─────────────────┘                └────────┘  │
-│           │                              │      │
-│           └──────── Koog ToolRegistry ───┘      │
-└─────────────────────────────────────────────────┘
-        │
-        ▼
-   EmulatorToolset (12 narzędzi: step, tap, getState, ...)
-        │
-        ▼
-   kNES (CPU, PPU, RAM)
+~/.knes/ff1-{terrain,landmarks,blockages,warps,interior-memory}.json
 ```
-- **Trigger advisora** (z `AgentSession.kt`):
-  1. Once at session start (initial plan).
-  2. By executor via `askAdvisor("I'm stuck because...")`.
-  3. By runtime watchdog: phase boundary (RAM detected) lub `idleTurns >= 20`.
-- Advisor **NIGDY** nie mutuje stanu emulatora. `ReadOnlyToolset` ma tylko `getState` + `getScreen`.
-- To jest invariant — naruszenie = utrata read-only contract = możliwe inconsistency state. Enforcowane na poziomie typu (`AdvisorAgent` nie dostaje `EmulatorToolset` w pełnej formie).
+- Atomic writes (3× JVM crash mid-write traciły kampanię).
+- Memory rośnie monotonicznie cross-session.
+- Phase 2 advisor czyta `LandmarkContext` w prompt → decisions w 1-2 turach zamiast 10-20.
 
 ---
 
-## Akt II — V1: Naive Advisor (9:00 – 18:00) | 9 min
+## Akt V — Planning: short vs long horizon (30:00 – 35:00) | 5 min
 
-### 2.1 Pierwsza implementacja Advisor pattern (2 min)
-- Architektura V1:
-  - **AdvisorAgent** = Opus 4, `single-shot`, read-only tools.
-  - **ExecutorAgent** = Sonnet 4.5, **`reActStrategy`** (max 10 iter), 13 raw narzędzi (step, tap, sequence, press, release, ...).
-- Advisor zwraca **numerowany plan tekstowy**, np.:
-  ```
-  1. Press START to leave title screen.
-  2. Choose NEW GAME, name party with default names.
-  3. Walk SOUTH from castle exit until worldY > 158.
-  4. Walk EAST until you see the bridge tile.
-  ```
-- Executor dostaje plan + recent observation w prompcie, ma rzucać tool calls.
+### 5.1 ReAct + jego failure modes (1.5 min)
+- Yao 2022: interleave reasoning + actions. AlfWorld +34% vs imitation/RL.
+- **Failure modes** (per TDS analysis 2025):
+  - Hallucinated tool names burn 3 retries each = **90.8% wasted retries**.
+  - **18% rate of „thinking instead of acting"** when history > 2.
+- Reflexion paper: ReAct without external termination signal **diverges** on long-horizon tasks.
 
-### 2.2 Live demo trace V1 (3 min)
-- Pokaż prawdziwy `trace.jsonl`:
-  ```
-  iter 1: getState() → ram dump
-  iter 2: "Let me analyze: goldLow=144 + goldMid×256 = 400 GP..."
-  iter 3: getState() ← AGAIN
-  iter 4: kolejny paragraf analizy
-  ...
-  iter 10: AIAgentMaxNumberOfIterationsReachedException
-  ```
-- **Executor nie nacisnął ani jednego przycisku.**
-- Koszt: $20–50 za attempted run.
+### 5.2 Reflexion — verbal RL (Shinn 2023) (1 min)
+- Agent reflects on failures, stores reflection in episodic memory buffer.
+- AlfWorld: **130/134 tasks (97%)**, +22% over baseline.
+- HumanEval pass@1: **91% vs GPT-4 baseline 80%.**
 
-### 2.3 Diagnoza — Advisor był OK, Executor był zły (2 min)
-Kluczowe rozróżnienie:
-- **Advisor pattern jest poprawny.** Plan jest sensowny. Read-only contract działa.
-- **Executor implementacja była zła.** `reActStrategy` bez external termination signal **diverguje** na long-horizon partially-observable taskach (Yao 2022 §6, Reflexion 2023 §4.1).
-- W każdej turze model znajduje powód, żeby **zinspekować stan jeszcze raz**, zamiast naciskać przyciski. Reasoning > action bias.
-- Anthropic's Claude Plays Pokémon ma to samo — 35 000 akcji do trzeciego badge'a, 140h compute. *„Stuck in Mt. Moon for 78 hours."*
+### 5.3 Tree of Thoughts, LATS, Plan-and-Solve (1 min)
+- ToT (Yao 2023): Game of 24 — **GPT-4 + CoT solves 4%; ToT solves 74%.** 18× improvement on combinatorial reasoning.
+- LATS: MCTS + LLM value function + Reflexion. **HumanEval 94.4% (GPT-4).**
+- Plan-and-Solve (Wang 2023): plan first, execute. Beats Zero-shot CoT, comparable to 8-shot.
 
-### 2.4 Detour: research dossier (2 min)
-- Trzy insighty z pełnego badania (`docs/superpowers/research/2026-05-01-llm-game-agents.md`):
-  1. **Anthropic's harness ma 3 narzędzia**: `update_knowledge_base`, `use_emulator`, `navigator`. Hershey: *„I've been stripping complexity out over time."*
-  2. **Voyager — skill library**: GPT-4 + reusable code units = 15.3× szybszy tech-tree progress.
-  3. **Macro vs Micro split**: LLM = makro decyzje, scripted Kotlin = mikro execution.
-- **Lesson #1:** Advisor pattern to nie magia. Bez właściwego executora i właściwej granularity narzędzi, advisor produkuje plany, których executor nie potrafi wykonać.
+### 5.4 Hierarchical planning (0.5 min)
+- LDB: hierarchical debugging by basic block — **+9.8%, up to 98.2% HumanEval w/ Reflexion seed**.
+- JARVIS-1: multimodal memory + hierarchical planning, **5× more reliable on ObtainDiamondPickaxe**.
+
+### 5.5 Case study: Skill library + Advisor pattern w FF (1 min)
+- Advisor planuje na poziomie skill names: `walkOverworldTo(146,152)`, `exploreInteriorFrontier`, `exitInterior`.
+- Executor wybiera 1 skill per turn (`singleRunStrategy`).
+- Skill = scripted Kotlin, ZERO tokens LLM w środku.
+- **Critical:** granularity narzędzi decyduje czy advisor pattern działa.
 
 ---
 
-## Akt III — V2: Skilled Advisor (18:00 – 28:00) | 10 min
+## Akt VI — Production: war stories i lessons (35:00 – 42:00) | 7 min
 
-### 3.1 Pięć precyzyjnych zmian (1 min — wstęp)
-Slajd:
-| # | Zmiana | Wpływ na Advisor pattern |
-|---|--------|--------------------------|
-| 1 | `singleRunStrategy` zamiast `reActStrategy` | Outer loop wraca do nas → advisor może być triggerowany deterministycznie |
-| 2 | Voyager-style skill library | Advisor planuje na poziomie *skill names*, nie button presses |
-| 3 | Long-lived `AnthropicLLMClient` + caching | Advisor system prompt (~2.5k tokenów) cached @ 10% price |
-| 4 | Phase-aware model routing | Advisor zostaje na Opusie; executor schodzi na Haiku/Sonnet |
-| 5 | Tool surface 13 → 7 | Advisor widzi mniejszą domenę do planowania |
+### 6.1 The $47k agent loop (1 min)
+- 4 LangChain A2A agents, ping-pong, no termination.
+- Budget *alerts* hit Slack — nikt nie czytał.
+- **Lesson:** alerts ≠ enforcement. Pre-call interceptor that throws BudgetExceeded *before* API call.
+- JVM mapping: **Resilience4j circuit breaker dla tokenów.**
 
-### 3.2 Zmiana #1 — `singleRunStrategy` (1.5 min)
-- Koog `singleRunStrategy()` = jeden LLM call → tool call lub text → koniec.
-- Outer loop wraca do **mojego** `AgentSession`, gdzie mam RAM-driven phase detection.
-- Pseudokod outer loopu:
-  ```
-  while not done:
-    phase = observer.observe(ram)
-    if phase changed OR idleTurns >= 20:
-      currentPlan = advisor.plan(phase, observation)   // ← Advisor trigger
-    result = executor.invoke(currentPlan, phase)        // single tool call
-    update budget, idle counter
-  ```
-- **Advisor jest triggerowany deterministycznie**, nie kiedy executor sam zdecyduje.
+### 6.2 Replit + terraform destroy stories (1.5 min)
+- Replit (Jul 2025): kasuje prod DB w czasie code freeze, fabrykuje rollback test results.
+- Claude Code (DataTalks.Club): `terraform destroy` na 2.5 roku danych studentów. Saved by hidden AWS snapshot.
+- **Lesson:** Read-only by default. Destructive verbs require human approval gate.
+- JVM mapping: **Spring Security `@PreAuthorize` na tool invocations.**
 
-### 3.3 Zmiana #2 — Skill library, Advisor zmienia językowy poziom (3 min) ⭐ *najważniejsze*
-- Skill interface (z `knes-agent/src/main/kotlin/knes/agent/skills/Skill.kt`):
-  ```kotlin
-  interface Skill {
-      val id: String
-      val description: String
-      suspend fun invoke(args: Map<String,String>): SkillResult
-  }
-  ```
-- Pierwsze skille:
-  - `pressStartUntilOverworld` — tap START aż `bootFlag=0x4D`
-  - `walkOverworldTo(x, y)` — BFS pathfinding na overworld, aborts on encounter
-  - `exitInterior` — BFS to nearest interior exit (~13% step success on town overlays)
-  - `exploreInteriorFrontier` — BFS do nearest unvisited tile, persists w `InteriorMemory`
-  - `battleFightAll` — 4× FIGHT loop
-  - `findPath` / `findPathToExit` — read-only path queries
-- **Każdy skill = scripted Kotlin code, ZERO tokenów LLM w środku.**
-- Advisor teraz produkuje plany na poziomie skill calls:
-  ```
-  1. pressStartUntilOverworld
-  2. walkOverworldTo(146, 152)   ← Coneria Castle entry
-  3. exploreInteriorFrontier      ← do King's throne room
-  4. exitInterior
-  5. walkOverworldTo(...)         ← Chaos Shrine
-  ```
-- **To jest critical insight:** advisor pattern działa o tyle, o ile worker ma narzędzia w odpowiedniej granularity. Surowe `step([RIGHT], 16)` = za nisko. `walkOverworldTo` = w sam raz.
+### 6.3 Air Canada + Klarna — legal & business (1 min)
+- Air Canada (Feb 2024): chatbot wymyślił bereavement-fare policy. **BC Tribunal ruled company liable.**
+- Klarna: zastąpili 700 agentów AI → repeat-contacts wzrosły → CEO admitted „cut too aggressively" → rehiring.
+- **Lesson:** Agents as filter + escalation > agents as replacement.
 
-### 3.4 Zmiana #3 — Prompt caching (1.5 min)
-- V1 grzech: `AnthropicLLMClient` budowany **per call**.
-- Advisor system prompt to ~2.5k tokenów (FF1 game knowledge, skill repertoire, ASCII map convention).
-- Pokaż na slajdzie fragment realnego advisor prompt z kodu (`AdvisorAgent.kt`):
-  ```
-  GROUND TRUTH ONLY (V5.21): your ONLY trustworthy sources are
-    (1) the RAM dump,
-    (2) the ASCII WORLD VIEW / interior map block,
-    (3) the screenshot if you call getScreen.
-  FF1 coordinates from your training data are UNRELIABLE...
-  ```
-- Cache breakpoint na końcu system prompt → **5–10× input cost reduction** na multi-turn.
+### 6.4 Cost optimization (1.5 min)
+- **Prompt caching:** ProjectDiscovery 59→70% input cost reduction. 74% cache hit rate. Multiple breakpoints (every 18 blocks).
+- Anthropic limits: **4 cache breakpoints**, **20-block lookback window**, 5-min default TTL (1.25× write), 1-h TTL (2× write), cache hits = 0.1× input price.
+- **Batch API:** 50% off, ~30 min SLA. Stacks z prompt caching → can be ~5% standard cost.
+- **Model routing:** Cursor Auto picks cheapest model that works per step.
 
-### 3.5 Zmiana #4 — Model routing + Advisor zostaje na Opusie (1.5 min)
-- Tabela:
-  | Phase | Executor | Advisor |
-  |-------|----------|---------|
-  | TitleOrMenu, NameEntry | Sonnet 4.5 | **Opus 4** |
-  | Overworld, Battle | Haiku 4.5 | Sonnet 4.5 |
-  | Watchdog escalation | n/a | **Opus 4** |
-- **Advisor zostaje na Opusie** dla najtrudniejszych sytuacji. Diagnoza *„dlaczego utknąłem"* to najdroższy cognitive load — wart $15/MTok.
-- Haiku jako executor **15× tańszy niż Opus**. Skoro skill name to oczywisty wybór w Battle, nie ma sensu palić Opusem.
+### 6.5 Sandboxing (1 min)
+- Anthropic Claude Code: OS-level isolation (bubblewrap / seatbelt). **84% prompt-reduction internally.**
+- Docker Sandboxes (Nov 2025): microVMs (Firecracker/Kata) per agent session. Containers ≠ sandboxes (shared kernel).
+- **Lesson:** Sandbox is defense in depth. SecurityManager zostaje deprecated, agentowy świat reodkrywa capability-based security.
 
-### 3.6 Zmiana #5 + V2 wynik (1.5 min)
-- Tool surface 13 → 7 dla Koog (raw `step/tap/sequence` ukryte za skillami).
-- **Cost: $20–50 → ~$3 / run** (target z V2 spec, nie measured).
-- **Iteration cap exceptions: zero.**
-- Advisor produkuje sensowne plany. Executor je wykonuje. Pipeline architektonicznie poprawny.
-- **Ale: Garland nadal nieosiągnięty.** Agent kręci się po Coneria peninsuli, tracąc budget na rediscovery.
+### 6.6 Observability + evals (1 min)
+- Anthropic „Demystifying evals": 20 hand-graded examples before any framework.
+- Track step count, tokens, wall-clock, $ cost as **first-class quality metrics**.
+- *„An 8-step $0.12 solve is strictly better than 40-step $1.80."*
+- LangChain State of Agent Engineering 2025: **57.3% orgs run agents in prod (67% of 10k+ orgs)**. Top pain: quality, cost, observability.
 
 ---
 
-## Akt IV — V3: Persistent Advisor + Cross-Run Explorer (28:00 – 39:00) | 11 min ⭐ *klimaks*
+## Akt VII — 10 lessons learned (42:00 – 44:00) | 2 min
 
-### 4.1 Druga ściana — discovery cost (1.5 min)
-- Patrzę na traces V2. Każda iteracja Opusa kosztuje **$1–2 na odkrywanie 1–2 warp tiles** w południowej Coneria peninsuli.
-- Niektóre warpy → mapId=0 trap (uszkodzony stan emulatora).
-- Każdy run zaczyna od zera. Zero cross-session memory.
-- **Advisor traci pieniądze na to, co już raz wiedział.**
-- **Lesson #2:** Advisor pattern bez persistent memory = goldfish-orchestrator. Każde nowe uruchomienie = pełny re-discovery cost.
+Slajd-zdjęcie z mapowaniem na JVM patterns:
 
-### 4.2 Insight — rozdzielić Discover od Execute (2 min)
-- Dwa procesy, dwa gradle taski:
-  ```bash
-  ./gradlew :knes-agent:runExplorer   # Phase 1: TANI Haiku, mapuje świat
-  ./gradlew :knes-agent:run           # Phase 2: Advisor + Executor, używa wiedzy
-  ```
-- **Phase 1 (Explorer) NIE używa Advisor pattern.** Zamiast tego: deterministic salience strategy + Haiku triggers tylko na wyjątkowe momenty (nowe wnętrze, dialog).
-- **Phase 2 (AgentSession) NADAL używa Advisor pattern.** Ale teraz advisor **dostaje cross-session memory w prompcie** przez `LandmarkContext.render(landmarkMemory)`.
-- Interfejs: **JSON files na dysku.** Nic więcej. Phase 1 pisze, Phase 2 czyta.
-
-### 4.3 Persistent memory — 5 plików (2 min)
-```
-~/.knes/
-├── ff1-overworld-terrain.json   — mapa terenu (PLAINS, FOREST, TOWN, CASTLE)
-├── ff1-landmarks.json           — NPC król, sklepikarz, schody, z mapId
-├── ff1-blockages.json           — append-only LOG PORAŻEK
-├── ff1-overworld-warps.json     — znane przejścia overworld → interior
-└── ff1-interior-memory.json     — mapId → set odwiedzonych kafli
-```
-- **Atomic writes** (`AtomicJsonWriter`, PR #114): `write *.tmp + fsync + rename`. Bez tego JVM crash mid-write zostawiał `{}` i traciłem całą kampanię.
-- Memory **rośnie monotonicznie** między runs. **Advisor nigdy nie zapomina.**
-
-### 4.4 Phase 1 inner loop — LLM jako trigger, nie sterowanie (2 min)
-Slajd z prawdziwego `SingleRun.kt`:
-```kotlin
-while (stepsTaken < 200) {
-    val phase = observer.observeWithVision()
-    checkRestart(ram, phase)?.let { return RunResult(it) }   // hard rule
-
-    when (val trigger = detectTrigger(phase, ram)) {
-        is NewInteriorEntered -> handleNewInterior(trigger)   // Haiku call
-        is DialogBoxVisible   -> handleDialog(trigger)        // Haiku call
-        is BattleEntered      -> battleFightAll()             // skript, no LLM
-        null                  -> deterministicStep(phase)     // skript, no LLM
-    }
-}
-```
-- **90%+ kroków: zero LLM calls.**
-- Cała kampania (10–20 runs): **<$1**. Realnie zmierzone.
-- Salience strategy (5 priorytetów) decyduje co eksplorować — nie LLM:
-  ```
-  P0: closest known warp not yet entered this run
-  P1: unvisited known landmarks
-  P2: salient viewport tiles (TOWN/CASTLE not recorded)
-  P3: nearest unmapped frontier
-  P4: cross-run diversification
-  P5: wander
-  ```
-- **Blockage feedback loop**: failed `walkOverworldTo` → blockage entry → następny target ten tile filtruje.
-
-### 4.5 Phase 2 — Advisor czyta cross-session memory (2.5 min) ⭐
-- W `AgentSession.kt:96`:
-  ```kotlin
-  val landmarkContext: String? = LandmarkContext.render(landmarkMemory)
-  ```
-- Advisor dostaje w obserwacji:
-  ```
-  KNOWN LANDMARKS (from explorer):
-    - NPC_KING at mapId=24 (Coneria Castle throne, near worldX=146, worldY=152)
-    - TOWN_ENTRY at worldX=147, worldY=154 (Coneria Town, mapId=8)
-    - NPC_SHOPKEEPER at mapId=8 localX=14 localY=15
-  KNOWN WARPS (auto-blocked in pathfinder):
-    - (145, 152), (147, 153), (147, 154), (144, 153)
-  ```
-- Live evidence z HANDOFF.md:
-  > *„`runAgent` trace w `~/.knes/runs/.../trace.jsonl`: rendered landmark block w advisor input, advisor output references (146,152) + 'castle with King/throne room' verbatim."*
-- **To jest evolution Advisor patternu**: Advisor już nie planuje od zera. Planuje *„jak najszybciej dotrzeć do znanych celów"*. Persistent memory w prompt → advisor decisions w 1–2 turach zamiast 10–20.
-
-### 4.6 Goal redefined: Garland w Chaos Shrine (1 min)
-- Z system prompt advisora (slajd-screenshot z `AdvisorAgent.kt:188-192`):
-  ```
-  Goal: AtGarlandBattle = Battle.enemyId == 0x7C.
-  Garland is the BOSS of the Chaos Shrine (Temple of Fiends),
-  an interior dungeon. He is NOT a scripted bridge encounter.
-  To reach him you must (a) walk north on the overworld
-  from spawn to the Chaos Shrine entrance, (b) enter the shrine,
-  (c) navigate its dungeon, (d) defeat the shrine miniboss room.
-  ```
-- **Honest cliffhanger:** mam advisor + persistent landmarks + Coneria zmapowana. Garland to dungeon położony na NORTH od spawn. Architektura jest gotowa, ale eksploracja Chaos Shrine to praca, której jeszcze nie zrobiłem.
+| # | Lesson | JVM equivalent |
+|---|--------|----------------|
+| 1 | Determinism is your moat | Resilience4j, Bean Validation |
+| 2 | Decisions > messages (Cognition) | Event sourcing, propagate state not events |
+| 3 | Cost is correctness | SLO/SLA budgets per request |
+| 4 | Tools matter more than prompts | API design, OpenAPI specs |
+| 5 | Context is finite — engineer it | JVM heap mgmt; just-in-time loading |
+| 6 | Multi-agent only when parallelizable | Don't build microservices for everything |
+| 7 | Read-only contracts (Advisor pattern) | Spring `@PreAuthorize`, immutability |
+| 8 | Persistent memory > re-discovery | DB > computed cache |
+| 9 | Sandbox + budget enforcement | bulkhead, circuit breaker |
+| 10 | Eval first, ship second | TDD; you can't optimize what you don't measure |
 
 ---
 
-## Akt V — War stories: gdzie architektura spotkała rzeczywistość (39:00 – 43:00) | 4 min
+## Closing (44:00 – 45:00) | 1 min
 
-### 5.1 Advisor halucynuje koordynaty (1 min)
-- Pierwsza wersja advisor system prompt nie miała "GROUND TRUTH ONLY" guardrail.
-- Advisor confidently produkował plany typu *„go WEST to x=140"* — z training data memory of FF1.
-- Iter 1 + iter 2 evidence: planowana grass corridor at x=140 prowadziła party prosto w ukryty interior entry (145, 152), dwa razy z rzędu.
-- Fix: `GROUND TRUTH ONLY` paragraph w system prompt (`AdvisorAgent.kt:103-114`):
-  > *„FF1 coordinates from your training data are UNRELIABLE. NEVER cite a specific entry-tile coordinate unless you can SEE the C/T glyph at that exact tile in the ASCII map."*
-- **Lesson:** Advisor jest tak dobry, jak jego ground-truth contract.
-
-### 5.2 Haiku halucynuje schody (1 min)
-A/B Haiku 4.5 vs Gemini 2.5 Pro na klasyfikacji wnętrz:
-| Ekran | Haiku 4.5 | Gemini 2.5 Pro |
-|-------|-----------|-----------------|
-| mapId=0 void | 4 false positives | `[]` (poprawnie) |
-| Castle throne | NPC_KING ✓ + STAIRS_DOWN ✗ | NPC_KING ✓ |
-
-- 6× cost ratio. Absolute differential trywialny ($0.05 vs $0.30 / 50-run kampanii).
-- Switch via env var: `KNES_VISION=gemini-pro`.
-
-### 5.3 mapId=0 trap + atomic saves (1 min)
-- mapflags=1 + mapId=0 = uszkodzony interior stan, agent w pustym voidzie.
-- PR #113: bail immediately on detection (oszczędność ~80 frames per trap).
-- PR #114: atomic JSON saves. 3× w jeden dzień JVM padło mid-write i `landmarks.json` zostawał `{}`. Cała kampania utracona.
-- **Lesson:** persistent state w long-running agentach to ta sama kategoria ryzyka co baza danych.
-
-### 5.4 V5.2 input-frame drop (1 min)
-- Po `loadState`: agent próbuje `step(["RIGHT"], 16)` → postać stoi.
-- Diagnoza: emulator gubi pierwsze ~30 frames inputu po loadState.
-- Fix (PR #109): post-loadState 30-frame NOOP warm-up.
-- **Lesson:** Twój agent jest tak deterministic, jak deterministic jest twoja substruktura. Quirki emulatora propagują się w decyzje LLM.
-
----
-
-## Akt VI — 10 lessons learned + Advisor pattern takeaways (43:00 – 44:30) | 1.5 min
-
-Slajd-zdjęcie:
-
-**O architekturze:**
-1. **Advisor pattern (Orchestrator-Workers) działa** — ale orchestrator i worker muszą mieć **różne uprawnienia**. Read-only contract dla advisora to inwariant, nie sugestia.
-2. **Granularity narzędzi decyduje o sukcesie patternu.** Advisor planuje na poziomie skill names, nie button presses.
-3. **Persistent memory to evolution, nie dodatek.** Advisor bez cross-session memory płaci za rediscovery każdego runa.
-4. **Discovery jako oddzielna faza.** Tani model + heurystyki + cumulative memory. Drogi advisor dopiero gdy cel = wykonać znany plan.
-
-**O implementacji:**
-5. **Nie pozwól LLM wybierać iteration count.** `singleRunStrategy` zamiast `reActStrategy`.
-6. **Macro/micro split.** LLM = co. Scripted code = jak.
-7. **Triggers zamiast steady-state inference.** 90% kroków bez LLM.
-
-**O produkcji:**
-8. **Vision backend hallucinations są realne.** A/B test.
-9. **Atomic disk writes from day one.** Long-running agents PADAJĄ.
-10. **Caching multiplikuje wszystko.** System prompt advisora = ~2.5k tokenów × N turn = leży w prefiksach.
-
----
-
-## Zamknięcie (44:30 – 45:00) | 30 sek
-
-> Garland nadal stoi w Chaos Shrine. Mój agent doszedł do throne roomu Króla Coneria, zmapował peninsulę, zna swoje warpy i swoje porażki. Architektura — Advisor + Executor + persistent memory + skill library — jest gotowa.
+> Garland nadal stoi w Chaos Shrine. Mój agent doszedł do throne roomu Króla Coneria, zna swoje warpy, zna swoje porażki.
 >
-> *„Agentowe programowanie w 2026 nie polega na zwiększaniu mocy LLM-a. Polega na wybudowaniu architektury, w której orchestrator wie tyle, ile naprawdę musi wiedzieć, worker robi tylko to, co naprawdę musi robić, i cała wiedza odkryta drogą żyje dłużej niż jedna sesja."*
+> Każdy decision w tym kodzie ma swój odpowiednik w jednym z papierów / postów, które dziś pokazałem. Anthropic upraszcza, Cognition ostrzega przed multi-agent, Voyager pokazuje skill libraries, Mem0 mierzy memory tradeoffs.
 >
-> Repo: github.com/ArturSkowronski/kNES. Garland leci w kolejnej sesji. **Pytania.**
+> **Architektura > model.** Repo: github.com/ArturSkowronski/kNES. Spec docs udokumentowane razem z porażkami. Pytania.
 
 ---
 
-## Q&A pre-prep (10 min, najczęstsze pytania)
+## Q&A pre-prep
 
-- *„Czemu advisor wraca tekst, nie strukturę?"* — Plain text + ASCII map = LLM-friendly. Strukturalny output (JSON skill calls) testowałem, model gorzej rozumuje. Tekst → executor parsuje pierwszą `walkOverworldTo(x,y)` linię.
-- *„Czy nie da się tego rozwiązać jednym Opusem z dużym prompt?"* — Można. Ale (a) drogo per turn, (b) read-only contract advisora to safety boundary. Opus z `step([RIGHT], 16)` raz na milion turn wybierze przypadkowy `reset()`. Separacja eliminuje tę kategorię ryzyka.
-- *„Czy to bije RL?"* — Nie. PokeRL (10M params, czyste RL) bije każdy LLM-bot na speed i cost. LLM agenty mają inny use case: zero-shot, zero training data, dialog-friendly.
-- *„Czemu Koog a nie LangChain?"* — JVM-native, typed `@Tool` przez reflection, `createAgentTool` natywnie, kompiluje się z całym monorepo.
-- *„Co dalej?"* — (1) Phase 2 z prawdziwą walką z Garlandem. (2) Voyager-style automatic skill authoring. (3) Reflexion-style self-criticism w advisorze (when stuck, write a paragraph about why, inject into next turn).
+- **„Multi-agent czy nie?"** — Anthropic: tak dla research (+90.2%, 15× cost). Cognition: nie dla coding (decisions conflict). Resolution: parallelism dictates.
+- **„Czy long context zabija RAG?"** — Chroma context-rot: nie. NIAH passing ≠ working. Hybrid wins.
+- **„Najlepszy stack agentowy 2026?"** — There isn't one. Anthropic upraszcza (3 patterns), Cursor RL-ed Composer, Devin used playbooks. Match to task.
+- **„Czemu Koog?"** — JVM-native, typed `@Tool`, `createAgentTool` natywnie. JetBrains dogfoodes go w IDEA.
+- **„LLM vs RL?"** — PokeRL beats every LLM bot on speed. Different use case: zero-shot, dialog, no training data.
 
 ---
 
-## Slajdy / asset checklist
+## Slide assets checklist
 
-- [ ] Hook: Garland w Chaos Shrine + cytat „I, Garland..."
-- [ ] Anthropic Building Effective Agents diagram (Orchestrator-Workers)
-- [ ] kNES architecture diagram
-- [ ] Advisor + Executor architecture diagram (z naszego kodu)
-- [ ] V1 trace.jsonl fragment (analiza RAM zamiast button presses)
-- [ ] Tabela 5 zmian V2
-- [ ] Skill interface code (`Skill.kt`)
-- [ ] Advisor system prompt fragment (`AdvisorAgent.kt`, "GROUND TRUTH ONLY")
-- [ ] Pseudokod outer loop V2
-- [ ] V2 cost target ($20-50 → $3)
-- [ ] Persistent memory diagram (5 JSON files)
-- [ ] Salience strategy 5-priority pseudokod
-- [ ] LandmarkContext.render output (advisor input fragment)
-- [ ] Goal paragraph z `AdvisorAgent.kt:92-96` (Garland w Chaos Shrine)
-- [ ] A/B Haiku vs Gemini tabela
-- [ ] Atomic save bug screenshot
-- [ ] 10 lessons learned (slajd-zdjęcie)
+- [ ] Hook: $47k Slack alert screenshot, Replit deletion timeline, terraform destroy aftermath
+- [ ] Anthropic Building Effective Agents — 5 patterns diagram
+- [ ] Karpathy quote (LLM=CPU, context=RAM)
+- [ ] Voyager skill library architecture (Wang 2023 Fig 1)
+- [ ] Hershey "stripped out complexity" quote
+- [ ] FF1 V1 trace.jsonl (zapętlony executor)
+- [ ] Tool design tier-list
+- [ ] Orchestrator-Workers diagram (Anthropic vs FF mapping)
+- [ ] Cognition's Flappy Bird parable
+- [ ] Chroma Context Rot graph
+- [ ] Anthropic 3 context primitives table
+- [ ] MemGPT diagram (core / archival / recall)
+- [ ] Mem0 / Zep benchmark numbers
+- [ ] Sleep-time compute architecture
+- [ ] FF1 LandmarkContext.render output
+- [ ] Reflexion AlfWorld 97% vs ReAct
+- [ ] ToT Game of 24 (74% vs 4%)
+- [ ] $47k post-mortem timeline
+- [ ] Replit timeline, terraform destroy
+- [ ] Air Canada legal precedent
+- [ ] ProjectDiscovery 70% cache savings chart
+- [ ] Anthropic 3-agent harness (Mar 2026)
+- [ ] 10 lessons + JVM mapping (final slide)
 
 ## Demo skrypt
 
 ```bash
-# Przed talkiem
-cp -r ~/.knes ~/.knes.backup-pre-talk
-ANTHROPIC_API_KEY=$KEY ./gradlew :knes-agent:runExplorer &  # explorer w tle
+# W tle przez cały talk
+ANTHROPIC_API_KEY=$KEY ./gradlew :knes-agent:runExplorer &
 
-# W trakcie Aktu IV
+# Pod koniec Aktu IV (memory)
 jq '.landmarks | length' ~/.knes/ff1-landmarks.json
 jq -r '.landmarks[] | "\(.kind) @ mapId=\(.mapId)"' ~/.knes/ff1-landmarks.json
 
-# Pod koniec talku — pokaż advisor input z ostatniego runa
+# Pod koniec Aktu V (planning)
 jq -r 'select(.role == "advisor") | .input' \
    ~/.knes/runs/$(ls -t ~/.knes/runs | head -1)/trace.jsonl | head -50
 ```
 
-## Backup slajdy (jeśli zostanie czas)
+## Bibliography (top 25)
 
-- Koog `createAgentTool` API — jak technicznie advisor jest zarejestrowany w executor toolregistry
-- Anthropic prompt caching breakpointy — gdzie postawić w naszym layout
-- FF1 RAM map fragment (TASvideos) — `bootFlag`, `worldX/Y`, `screenState`
-- Porównanie z Claude Plays Pokémon (knowledge base = nasze persistent JSON)
-- ASCII map renderer output — co advisor naprawdę widzi (`AsciiMapRenderer.render`)
+**Anthropic core:**
+- [Building Effective Agents](https://www.anthropic.com/research/building-effective-agents) — Dec 2024
+- [Effective context engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents) — Sept 2025
+- [Multi-agent research system](https://www.anthropic.com/engineering/multi-agent-research-system) — Jun 2025
+- [Writing effective tools](https://www.anthropic.com/engineering/writing-tools-for-agents) — Sept 2025
+- [Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents) — Nov 2025
+- [Three-agent harness](https://www.anthropic.com/engineering/harness-design-long-running-apps) — Mar 2026
+- [Code execution with MCP](https://www.anthropic.com/engineering/code-execution-with-mcp) — Nov 2025
+- [Agent Skills](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills) — Oct 2025
+- [Managed Agents + Dreaming](https://www.anthropic.com/engineering/managed-agents) — Apr 2026
+- [Demystifying evals](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)
+
+**Critique / counter-points:**
+- [Cognition: Don't Build Multi-Agents](https://cognition.ai/blog/dont-build-multi-agents) — Jun 2025
+- [Cognition: Multi-Agents What's Working](https://cognition.ai/blog/multi-agents-working) — Apr 2026
+- [Chroma: Context Rot](https://research.trychroma.com/context-rot)
+
+**Memory / planning papers:**
+- [MemGPT](https://arxiv.org/abs/2310.08560) · [A-MEM](https://arxiv.org/abs/2502.12110) · [Mem0](https://arxiv.org/html/2504.19413v1) · [Zep](https://arxiv.org/pdf/2501.13956)
+- [Sleep-time compute](https://arxiv.org/abs/2504.13171)
+- [ReAct](https://arxiv.org/abs/2210.03629) · [Reflexion](https://arxiv.org/abs/2303.11366) · [ToT](https://arxiv.org/abs/2305.10601) · [LATS](https://arxiv.org/abs/2310.04406) · [Plan-and-Solve](https://arxiv.org/abs/2305.04091)
+- [Voyager](https://arxiv.org/abs/2305.16291) · [JARVIS-1](https://arxiv.org/abs/2311.05997) · [CodeAct](https://arxiv.org/abs/2402.01030)
+- [Why Multi-Agent LLM Systems Fail (MAST)](https://arxiv.org/abs/2503.13657)
+- [Reasoning Trap (tool hallucination)](https://arxiv.org/abs/2510.22977)
+
+**Production reports:**
+- [$47k agent loop post-mortem](https://dev.to/waxell/the-47000-agent-loop-why-token-budget-alerts-aren-t-budget-enforcement-389i)
+- [Replit deleted prod DB](https://www.theregister.com/2025/07/21/replit_saastr_vibe_coding_incident/)
+- [Claude Code terraform destroy](https://www.tomshardware.com/tech-industry/artificial-intelligence/claude-code-deletes-developers-production-setup-including-its-database-and-snapshots-2-5-years-of-records-were-nuked-in-an-instant)
+- [Air Canada chatbot tribunal](https://www.americanbar.org/groups/business_law/resources/business-law-today/2024-february/bc-tribunal-confirms-companies-remain-liable-information-provided-ai-chatbot/)
+- [LangChain State of Agent Engineering 2025](https://www.langchain.com/state-of-agent-engineering)
+- [ProjectDiscovery: 59-70% prompt cache savings](https://projectdiscovery.io/blog/how-we-cut-llm-cost-with-prompt-caching)
+- [Cursor Composer architecture](https://cursor.com/blog/composer)
