@@ -63,6 +63,13 @@ class AnthropicHaikuConsult(
     override suspend fun classifyShopMenu(screenshotBase64: String?): HaikuConsult.ShopClassification =
         HaikuConsult.ShopClassification("unknown", emptyList(), 0.0)
 
+    /** Stub: overworld landmark classification is delegated to Gemini in this codebase. */
+    override suspend fun classifyOverworldLandmark(
+        screenshotBase64: String?,
+        kind: String,
+    ): HaikuConsult.OverworldClassification =
+        HaikuConsult.OverworldClassification.NotFound(0.0)
+
     override fun close() { client.close() }
 
     private suspend fun postOrNull(body: String): String? {

@@ -63,6 +63,13 @@ class GeminiVisionConsult(
         return parseShopResponse(raw)
     }
 
+    /** Stub: real Gemini implementation will be added in Task 4. */
+    override suspend fun classifyOverworldLandmark(
+        screenshotBase64: String?,
+        kind: String,
+    ): HaikuConsult.OverworldClassification =
+        HaikuConsult.OverworldClassification.NotFound(0.0)
+
     override fun close() { client.close() }
 
     private suspend fun postOrNull(body: String): String? {

@@ -29,6 +29,14 @@ interface HaikuConsult {
         val costUsd: Double,
     )
 
+    sealed interface OverworldClassification {
+        /** screenX/Y are tile coordinates within the visible 16x16 viewport, where
+         *  (0,0) is the top-left tile and (15,15) is the bottom-right. The caller
+         *  converts to world coords via [knes.agent.perception.ViewportMap.localToWorld]. */
+        data class Found(val screenX: Int, val screenY: Int, val costUsd: Double) : OverworldClassification
+        data class NotFound(val costUsd: Double) : OverworldClassification
+    }
+
     /** Called after [knes.agent.skills.ExploreInteriorFrontier] finishes a fresh interior.
      *  Implementation should look at screenshot + visited tile count and return any
      *  Landmark records to add (NPC_KING / NPC_SHOPKEEPER / NPC_GENERIC / etc.). */
@@ -50,6 +58,16 @@ interface HaikuConsult {
     suspend fun classifyShopMenu(
         screenshotBase64: String?,
     ): ShopClassification
+
+    /** Called when the agent needs to locate a known FF1 overworld landmark
+     *  (e.g. the Chaos Shrine / Temple of Fiends) in the current viewport.
+     *  `kind` is a free-form descriptor like "chaos_shrine" that the prompt
+     *  template translates into pixel-art guidance. Returns `NotFound` on any
+     *  failure (no exception leaks). */
+    suspend fun classifyOverworldLandmark(
+        screenshotBase64: String?,
+        kind: String,
+    ): OverworldClassification
 }
 
 /** Test fake. Pass canned results in constructor; assert calls via `interiorCalls`/`dialogCalls`/`shopCalls`. */
@@ -57,10 +75,12 @@ class FakeHaikuConsult(
     private val interiorClassifications: List<HaikuConsult.InteriorClassification> = emptyList(),
     private val dialogReadings: List<HaikuConsult.DialogReading> = emptyList(),
     private val shopClassifications: List<HaikuConsult.ShopClassification> = emptyList(),
+    private val overworldClassifications: List<HaikuConsult.OverworldClassification> = emptyList(),
 ) : HaikuConsult {
     var interiorCalls: Int = 0; private set
     var dialogCalls: Int = 0; private set
     var shopCalls: Int = 0; private set
+    var overworldCalls: Int = 0; private set
 
     override suspend fun classifyInterior(
         mapId: Int, visitedTileCount: Int, screenshotBase64: String?, runId: String,
@@ -82,6 +102,16 @@ class FakeHaikuConsult(
         val res = shopClassifications.getOrNull(shopCalls)
             ?: HaikuConsult.ShopClassification("unknown", emptyList(), 0.0)
         shopCalls++
+        return res
+    }
+
+    override suspend fun classifyOverworldLandmark(
+        screenshotBase64: String?,
+        kind: String,
+    ): HaikuConsult.OverworldClassification {
+        val res = overworldClassifications.getOrNull(overworldCalls)
+            ?: HaikuConsult.OverworldClassification.NotFound(0.0)
+        overworldCalls++
         return res
     }
 }
