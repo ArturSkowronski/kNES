@@ -245,18 +245,19 @@ class GeminiVisionConsult(
         }
 
         private const val SYSTEM_OVERWORLD_LANDMARK = """
-You are a vision tool for the FF1 NES overworld. The user provides a screenshot
-showing a 16x16 tile viewport centered on the party (party at tile (8,8) marked
-by 4 sprite avatars). Your job is to locate a specific landmark sprite.
+You are a vision tool for the FF1 NES overworld. The user provides a 256x240
+pixel screenshot which is a 16-tile-wide x 15-tile-tall viewport (each tile is
+16x16 pixels). The party (4 sprite avatars overlapping into one figure) is
+rendered approximately at the screen center, tile (8, 7). Your job is to locate
+a specific landmark sprite.
 
 Respond with strict JSON ONLY (no commentary, no markdown fences). Schema:
-  {"found": true, "screenX": <int 0..15>, "screenY": <int 0..15>}
+  {"found": true, "screenX": <int 0..15>, "screenY": <int 0..14>}
 or
   {"found": false}
 
-Use tile coordinates (each visible tile is 16 NES pixels = one grid cell).
-Top-left tile is (0,0); bottom-right tile is (15,15). If the landmark is
-not visible in the viewport, return {"found": false}.
+Use tile coordinates. Top-left tile is (0,0); bottom-right is (15,14). If the
+landmark is not visible in the viewport, return {"found": false}.
 """
 
         private fun overworldUserText(kind: String): String = when (kind) {
@@ -285,7 +286,7 @@ shrine sprite — the tile the party will step onto to enter).
                 if (!found) return HaikuConsult.OverworldClassification.NotFound(costUsd)
                 val sx = obj["screenX"]?.jsonPrimitive?.content?.toIntOrNull()
                 val sy = obj["screenY"]?.jsonPrimitive?.content?.toIntOrNull()
-                if (sx == null || sy == null || sx !in 0..15 || sy !in 0..15) {
+                if (sx == null || sy == null || sx !in 0..15 || sy !in 0..14) {
                     HaikuConsult.OverworldClassification.NotFound(costUsd)
                 } else {
                     HaikuConsult.OverworldClassification.Found(sx, sy, costUsd)
