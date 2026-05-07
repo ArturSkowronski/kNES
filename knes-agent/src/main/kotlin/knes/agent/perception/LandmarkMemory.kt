@@ -130,6 +130,8 @@ class LandmarkMemory(
 
     fun findInnkeeper(): Landmark? = byId.values.firstOrNull { it.kind == LandmarkKind.NPC_INNKEEPER }
 
+    fun findTempleEntry(): Landmark? = byId.values.firstOrNull { it.kind == LandmarkKind.TEMPLE_ENTRY }
+
     companion object {
         fun defaultFile(): File =
             File(System.getProperty("user.home"), ".knes/ff1-landmarks.json")
