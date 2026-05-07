@@ -1,105 +1,99 @@
-# FF1 Koog Agent — Handoff (Spec 1 grind & heal cycle session, 2026-05-06 evening)
+# FF1 Koog Agent — Handoff (Spec 2 buy & equip session, 2026-05-07)
 
-**Branch HEAD:** `a5c76d0` on `ff1-grind-strategy`. **PR #116 open** against `master`.
+**Branch HEAD:** `3d07e69` on `ff1-buy-at-shop` (pushed to origin, **no PR open yet**).
 
-Cut from `ff1-phase2-garland-attempt-hardening` (PR #115 still open separately for prior session work).
+Cut from `ff1-grind-strategy` (PR #116, Spec 1 still open). Spec 2 PR is user-driven — not opened by agent.
 
-**Required env:** `ANTHROPIC_API_KEY` (Phase 2 vision hardcoded to Anthropic in `Main.kt`).
+**Required env:** `ANTHROPIC_API_KEY` for Phase 2 advisor; `GEMINI_API_KEY` for shop-menu vision (`HaikuConsult.classifyShopMenu` uses Gemini).
 
 ## TL;DR
 
-PR #116 ships full **strategy decision infrastructure** for Phase 2 agent: GRIND/REST/BRIDGE decision gate, GrindLoop / RestAtInn / DiscoverInn skills, advisor consult with sanity guards, plan-injection for REST cycle, autonomous inn discovery with landmark persistence. **35 new tests, all green, 0 regressions.**
+Branch ships full **Spec 2 buy-and-equip boot phase**: agent walks to Coneria on session start, vision-classifies the weapon shop, buys one weapon per char, equips them, persists savestate-keyed flag so subsequent sessions skip. **24 new tests green, 0 regressions.**
 
-Validation runs (4 attempts) revealed that **Spec 2 (`buyAtShop`) is a hard prerequisite** before grind strategy is viable end-to-end. Party L0 with starting weapons dies in 3-4 round IMP battles → death-restart loop → progress lost. Net consensus is "buy weapons FIRST, then grind" — Spec 2 was deferred speculatively in original planning, must ship before next validation.
+Implementation is complete on the local branch. **Validation runs against real ROM are pending — user-driven** per the autonomy principle (agent plays the game, dev does not).
 
-## What's in PR #116 (chronological)
+## What's in this branch (15 commits)
 
-| Commit | Subject |
-|---|---|
-| 12c544d | docs(spec): FF1 grind & heal cycle design (Spec 1 of 2) |
-| 53ee356 | docs(plan): FF1 grind & heal cycle implementation plan |
-| 0b74fee | feat(strategy): StrategicDecision enum + token parser |
-| d40487b | feat(strategy): RecentDecisionsBuffer with anti-thrash predicate |
-| da31cb5 | feat(strategy): StrategyContext RAM helpers + summarize() |
-| 1367579 | feat(skill): GrindLoop — N-S corridor walk near spawn |
-| 8e93126 | fix(grindloop): correct framesElapsed delta + add 0x63 test |
-| 61023c2 | feat(skill): RestAtInn — deterministic Coneria inn heal |
-| 2e9083b | fix(restatinn): document taps>=4 heuristic + test already-full branch |
-| e37e81d | feat(advisor): StrategyAdvice — prompt builder + sanity guards |
-| 72b8773 | fix(strategy-advice): document L0/L1 BRIDGE override threshold |
-| 7e6a269 | docs(spec+plan): autonomous inn discovery (replaces manual probe) |
-| 5f6aa81 | feat(skill): DiscoverInn — autonomous inn discovery + persist landmark |
-| 142637f | fix(discoverinn): correct interior RAM keys (smPlayerX/Y) + round-trip |
-| aa733c8 | feat(session): strategic decision point + grindMode (V5.35) — MVP |
-| 2a606fd | fix(session): pass grind anchor + correct trace phase |
-| 664d6c7 | test(e2e): GrindAndHealCycleE2ETest with stub advisor |
-| ed307f1 | fix(e2e-test): override plan() in stub + assert tickCount |
-| 5109f40 | feat(session): REST heal cycle via executor plan-injection (V5.36) |
-| 6b66ad9 | fix(session): capture grind anchor from party position dynamically |
-| 09ba8ab | fix(grindloop-args): widen corridor 3->6, max steps 6->12 |
-| a5c76d0 | feat(strategy): adaptive grind anchor — shift on consecutive non-progress |
+```
+3d07e69 refactor(session): inject OutfitState — eliminate e2e test pollution risk
+4f48898 test(e2e): OutfitBootPhaseE2ETest — env-gated real-ROM verification of boot phase
+1984947 fix(bootphase): pass coneriaEntry through Result; document discover retry semantics
+ca6d248 feat(session): outfit boot phase — discover shop, buy + equip weapons before grind
+daf4338 fix(equipWeapon): unify recovery B-tap count + add cursor-loop coverage test
+615df52 feat(skill): EquipWeapon — field-menu nav, equip-flag validation, idempotent
+4909744 fix(buyAtShop): weapon-only guard + document magic numbers and B-tap counts
+3f2cdf1 feat(skill): BuyAtShop — one purchase per invocation, gold + inventory validation
+b9033b1 fix(discoverShop): surface vision exceptions in ClassifyFailed; align KDoc with B-mash cleanup
+e3a5bce feat(skill): DiscoverShop — vision-classify shop BUY menu, persist landmark
+d1b981f feat(vision): classifyShopMenu — Gemini reads FF1 shop BUY screen
+f87352e feat(runtime): OutfitState persistence — savestate-hash-keyed boot skip flag
+5a76882 feat(strategy): add weapon-slot helpers to StrategyContext
+344f4dc feat(profile): add char weapon-slot RAM addresses to FF1 profile
+4745d75 docs(notes): document FF1 weapon RAM addresses from Disch disasm
+```
 
-## Validation iteration table
+Plus 2 doc commits on `ff1-grind-strategy` (parent branch):
 
-| Iter | Outcome | Strategy ticks | Battles | Death restarts | Diagnosis → Fix |
-|------|---------|----------------|---------|------------------|-----------------|
-| v1 | BuildFail | 0 | 0 | 0 | Relative ROM path → use absolute via `$PWD` |
-| v2 | OutOfBudget | 50+ | 0 | 0 | Hardcoded anchor (157,158); spawn (146,158) → WanderedOff each step → drift into town. **Fixed:** dynamic anchor capture (`6b66ad9`) |
-| v3 | OutOfBudget | 6 | 0 | 0 | Spawn area (146, 157-159) is no-encounter zone. Wider corridor reaches town entry but still no encounters. **Fixed:** adaptive anchor shift after 3 non-progress (`a5c76d0`) |
-| v4 | OutOfBudget | 2/life | many | **32** | Adaptive shift → encounter at (152,151), party briefly L1, then dies in IMP encounter → restart cycle. Death loop dominates wallclock. **Spec 2 blocking.** |
+```
+05e84e9 docs(plan): FF1 buy & equip implementation plan (Spec 2)
+72866b0 docs(spec): FF1 buy & equip design (Spec 2 of 2)
+```
 
-## Critical insight from validation
+## Components
 
-**Death loop is the dominant blocker, not strategic infrastructure.**
+- **`OutfitState`** — savestate-hash-keyed JSON at `~/.knes/ff1-outfit-state.json`. AtomicJsonWriter, lenient load. Injectable via `AgentSession` ctor for test isolation.
+- **`StrategyContext` weapon helpers** — `weaponSlot`, `weaponId`, `isEquipped`, `anyWeaponEquipped`. Reads new RAM keys.
+- **16 weapon RAM addresses** in `ff1.json` — `char{1..4}_weapon{0..3}` at `0x6118 + 0x40*c` per Disch disasm. High bit = equipped flag, low 7 = weapon ID.
+- **`HaikuConsult.classifyShopMenu`** — `ShopClassification(kind, items, costUsd)`. Gemini implementation reads BUY-menu screen. Anthropic stub returns "unknown".
+- **`DiscoverShop` skill** — opens BUY menu, screenshot → Gemini classify → persist `NPC_SHOPKEEPER` landmark with `note="kind=...; items=name:price,..."`. Self-closes via B-mash. Returns Classified / ClassifyFailed / NotInBuilding.
+- **`BuyAtShop` skill** — one purchase per invocation. Args: itemSlot, forCharSlot, expectedKeeperKind. Sync InsufficientGold pre-check. Watch loop: gold-drop AND inventory-delta = Bought; 5 unchanged frames = WrongClass; 30-frame cap = DismissCapExhausted. Weapon-only guard.
+- **`EquipWeapon` skill** — opens FF1 field menu (B), navigates EQUIP → char → weapon slot, watches RAM for high-bit transition. Idempotent (AlreadyEquipped sync). 60-tap cap, 5-tap recovery B-mash on both success and timeout.
+- **`OutfitBootPhase`** — orchestrator with entry guards (already-bought flag, RAM-all-equipped, no town entry). Returns coneriaEntry through Result for composer reuse.
+- **`AgentSession.runOutfitBootPhase()`** — invoked at top of `run()` before strategic loop. Walks to Coneria → discoverWeaponShop probe (vision-only N-retry; coord targeting deferred) → per-char buy loop with WrongClass mini-retry (3 attempts, slot rotation) → exit interior → per-char equip loop on overworld → persist OutfitState → log `boot_outfit_summary`. Best-effort: never bails session.
+- **5 new optional ctor params** on `AgentSession`: `outfitVision`, `outfitNavigator`, `outfitViewportSource`, `outfitMapSession`, `outfitSavestatePath`, `outfitState`. All nullable; missing → fallthrough with `dependencies_unavailable` log.
+- **E2E test `OutfitBootPhaseE2ETest`** — env-gated on `FF1_ROM_PATH` + `FF1_SAVESTATE`. Stubs Gemini; pre-seeds Coneria TOWN_ENTRY. Soft assertions only when shop discovery succeeds. CI without env vars: SKIPPED cleanly.
 
-Without weapon upgrades:
-- Party L0 IMP encounter takes 3-4 rounds
-- Multiple IMPs hit per round → 30 HP party can die in 2 rounds
-- 32 deaths in 7-min run = ~13s per death cycle, dominates wallclock
+## Tests
+- 23 new unit + 1 env-gated e2e — all green.
+- 35 Spec 1 tests still green; 0 new regressions.
+- 3 baseline failures unchanged (Coneria8VisualDiffTest, ConeriaTownEmpiricalDiscoveryTest, ExploreOverworldFrontierTest — pre-existing).
 
-With Coneria weapons (400 GP starting gold = enough for 4× starter weapons):
-- Each class one-shots IMP/Goblin per net consensus
-- 1-round battles → minimal HP loss → grind viable
+## Validation status
 
-User feedback (verbatim): *"oddal się od conerii, ale nie jakoś daleko - dodatkowo miałeś kupić broń"* — IMPs are close to town (not at bridge), and weapons MUST be bought.
+**Pending — user-driven.** Implementation has not been run against real ROM yet. Per `autonomy_principle` memory, agent plays the game, dev does not — but real-ROM execution requires interactive ANTHROPIC_API_KEY + GEMINI_API_KEY which the dev triggers manually.
 
-## Known existing bugs (NOT in scope of this PR)
-
-1. **Town overlay exit failures** — `exitInterior` 13% step success on towns (V5.29 docs); `exploreInteriorFrontier` often fails. Once warped into Coneria town at (146,152), high probability of getting stuck.
-2. **Death-restart not detected as PartyDefeated** — `pressStartUntilOverworld` called from existing flow without `Outcome.PartyDefeated` returning. Agent silently restarts and continues.
-3. **`PressStartUntilOverworld.totalFrames` accumulation** — same bug as fixed in `GrindLoop` (`8e93126`). Not fixed here.
-
-## Next session entry point
-
-**Highest-leverage next step: implement Spec 2 (`buyAtShop` skill).**
-
-Sub-tasks:
-- Walk to Coneria entry (TOWN_ENTRY landmark from Phase 1 explorer if available; else fallback)
-- Enter town, navigate to weapon shop (vision-driven via `WalkInteriorVision`)
-- Shop dialog: deterministic menu interaction (BUY → WEAPON → select per class → confirm)
-- Validate: gold drops, item RAM slot populated
-- Persist `NPC_SHOPKEEPER` landmark (already in `LandmarkKind` enum) on first discovery for cross-run reuse
-
-Secondary:
-- Reduce adaptive anchor shift offset from `(+2 E, -4 N)` to `(+3 E, -1 N)` — lateral move per user feedback ("oddal się od conerii, ale nie jakoś daleko").
-- Validate cross-run landmark persistence after Spec 2 ships.
-
-After Spec 2 works:
-- Wire REST cycle to actually walk-to-inn (currently plan-injection logs cache hit/miss only)
-- Validate full grind→heal→bridge flow
-
-## Run command
-
+**Run command:**
 ```bash
+rm -f ~/.knes/ff1-outfit-state.json ~/.knes/ff1-landmarks.json
 ./gradlew :knes-agent:run --args="--rom=$PWD/roms/ff.nes --wall-clock-cap-seconds=420 --cost-cap-usd=2.0 --max-skill-invocations=80"
 ```
 
-## Files of note
+3× sessions; capture from each trace:
+- `boot_outfit_summary` line (weaponsBought, weaponsEquipped, totalGoldSpent)
+- per-char `boot_purchase` / `boot_equip` outcomes
+- death-restart count (target ≤5; PR #116 baseline was 32)
+- whether `min_level` reaches 3 within budget
 
-- Spec: `docs/superpowers/specs/2026-05-06-ff1-grind-and-heal-cycle-design.md`
-- Plan: `docs/superpowers/plans/2026-05-06-ff1-grind-and-heal-cycle.md`
-- Strategy types: `knes-agent/src/main/kotlin/knes/agent/runtime/{StrategicDecision,RecentDecisionsBuffer,StrategyContext}.kt`
-- Skills: `knes-agent/src/main/kotlin/knes/agent/skills/{GrindLoop,RestAtInn,DiscoverInn}.kt`
-- Advisor: `knes-agent/src/main/kotlin/knes/agent/advisor/StrategyAdvice.kt` + `AdvisorAgent.consultStrategy`
-- Session integration: `knes-agent/src/main/kotlin/knes/agent/runtime/AgentSession.kt` (V5.35 / V5.36 / V5.36.x sections)
-- E2E test: `knes-agent/src/test/kotlin/knes/agent/runtime/GrindAndHealCycleE2ETest.kt`
+## Known risks to flag in eventual Spec 2 PR
+
+1. **`WalkInteriorVision` lacks coord targeting** — `discoverWeaponShop` falls back to N-retry vision-only nav. If validation shows poor probe success, follow-up spec adds coord-targeted interior nav.
+2. **Default `weaponSlotByChar = {1→0, 2→1, 3→2, 4→3}`** is placeholder. WrongClass mini-retry (3 attempts/char with slot rotation) handles miscalibration; if all 4 chars hit WrongClass consistently, mapping needs adjustment based on real Coneria shop ordering.
+3. **`AgentSession` outfit-deps signature growth** (6 nullable params) — collapse into `OutfitDeps` data class as future cleanup if a 7th dep lands.
+4. **Tap counts in BuyAtShop / EquipWeapon are unverified vs real ROM.** Spec assumed standard FF1 NES menu nav; first real-ROM run may surface adjustments needed.
+
+## Next session entry point
+
+User runs validation + opens PR. After Spec 2 lands:
+- If validation shows `weaponsEquipped ≥ 1` AND death count drops to ≤5 → Spec 2 viable. Merge order: PR #116 → Spec 2 PR.
+- If validation shows poor shop-discovery success → follow-up spec adds coord-targeted `WalkInteriorTo` interior skill.
+- Then re-run Spec 1 validation with weapons-equipped party to confirm grind→heal→bridge full flow.
+
+## Repo paths
+
+- Main: `/Users/askowronski/Priv/kNES`
+- Branch: `ff1-buy-at-shop` HEAD `3d07e69` (pushed to origin)
+- Parent (PR #116): `ff1-grind-strategy`
+- Spec 2 design: `docs/superpowers/specs/2026-05-06-ff1-buy-at-shop-design.md`
+- Spec 2 plan: `docs/superpowers/plans/2026-05-06-ff1-buy-at-shop.md`
+- RAM notes: `docs/superpowers/notes/2026-05-06-ff1-weapon-ram.md`
+- E2E test: `knes-agent/src/test/kotlin/knes/agent/runtime/OutfitBootPhaseE2ETest.kt`
