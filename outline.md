@@ -105,6 +105,8 @@
 
 **Anti-patterns:** >100 tools w kontekście; tool descriptions <40 słów; jeden mega-tool z 20 optional kwargs; tool name overlap bez namespacing.
 
+**JVM mapping:** `@Tool` w Spring AI = `@RestController` dla LLM. Schema-validated args = Bean Validation. Description = OpenAPI spec. *„Wszystko, co robicie z REST API, robi się tak samo z agent tools."*
+
 ---
 
 ## Akt III — Architectures (16:00 – 23:00) | 7 min
@@ -134,6 +136,7 @@
 - **Coding / tightly coupled:** single-threaded harness.
 - **Conversational / cheap tasks:** single LLM augmented.
 - *„Start with simple prompts, optimize with eval, add multi-step only when simpler solutions fall short."* (Anthropic)
+- **JVM mapping:** Orchestrator-Workers = `Fork/Join` z 2011, tylko worker to LLM. *Pytanie „is your task parallelizable without shared state" odpowiadamy w distributed systems od dwudziestu lat.*
 
 ### 3.5 Mała disclosure: to nie pierwszy mój agent (1 min) ⭐
 - Historycznie pracowałem z **biznesowymi agentami** — workflow automation, customer support, RPA, operations.
@@ -166,6 +169,8 @@ Tabela porównawcza Business agent vs FF1 agent:
 
 ## Akt IV — Memory: short term vs long term (23:00 – 30:00) | 7 min
 
+> **Bridge z Akt III:** *„Mamy advisor, mamy executor, mamy tools. Pytanie: co agent **pamięta**? System bez pamięci to goldfish."*
+
 ### 4.1 Context rot — long context to nie magic bullet (1.5 min)
 - Chroma Research 2024-2025: tested 18 SOTA models (GPT-4.1, Claude 4, Gemini 2.5, Qwen3).
 - **NIAH-passing ≠ long context working.** Distractors, semantic similarity to needle, haystack structure all matter.
@@ -177,25 +182,19 @@ Tabela porównawcza Business agent vs FF1 agent:
 - **Memory tool** (`memory_20250818`) — filesystem-based persistent notes across sessions.
 - Cookbook: peak context 335K → 169K (compaction) → 173K (clearing).
 
-### 4.3 MemGPT, Mem0, Letta — memory frameworks (1.5 min)
-- **MemGPT** (Packer 2023): OS-inspired hierarchical memory. Core (RAM) / archival (disk). 93.4% DMR vs 35.3% summarization baseline.
-- **Mem0** (2025): vector + graph + KV hybrid. **91% latency cut, 14× token cut** at near-parity accuracy (LOCOMO).
-- **Zep** (2025): temporal knowledge graph. 63.8% LongMemEval vs Mem0's 49.0%.
-- **Letta** = commercial MemGPT, full stateful platform.
-- **Mental model dla JVM:** virtual memory dla LLMs. Same paging, same tradeoffs.
+### 4.3 Memory ecosystem 2023-2026 — virtual memory dla LLM (2 min) — JEDEN slajd
+Tabela headline numbers:
+| System | Headline number | Year |
+|--------|-----------------|------|
+| MemGPT (OS-inspired) | 93.4% DMR vs 35.3% baseline | 2023 |
+| Mem0 (vector + graph + KV) | 91% latency cut, 14× tokens | 2025 |
+| Zep (temporal KG) | 63.8% vs Mem0's 49.0% LongMemEval | 2025 |
+| Sleep-time compute | 5× less test-time, 2.5× amortized | 2025 |
+| Anthropic Memory + Dreaming | Wisedocs: 97% fewer first-pass errors | 2025-26 |
 
-### 4.4 Sleep-time compute (Letta + UC Berkeley, 2025) (1 min)
-- Pre-compute on context BEFORE queries arrive. Cache deductions.
-- **5× less test-time compute** for same accuracy on Stateful GSM-Symbolic / AIME.
-- **2.5× cheaper amortized** across queries on same context.
-- *„By doing the thinking offline, before user arrives, we cut test-time compute by 5×."*
+**JVM mental model:** to jest **virtual memory dla LLM**. Pagefile, LRU eviction, write-back cache. Te same tradeoffy. Tylko zamiast process pages — chunks of context.
 
-### 4.5 Anthropic Memory Tool + Dreaming (1 min)
-- Sept 2025: filesystem-based persistent memory. Per-user, exportable.
-- **Dreaming** (Apr 2026): scheduled background process consolidates past sessions, surfaces recurring mistakes, team preferences.
-- Wisedocs case: **97% reduction in first-pass errors, 30% speed-up.**
-
-### 4.6 Case study: 5 JSON files w FF (0.5 min)
+### 4.4 Case study: 5 JSON files w FF (1.5 min)
 ```
 ~/.knes/ff1-{terrain,landmarks,blockages,warps,interior-memory}.json
 ```
@@ -218,6 +217,7 @@ Tabela porównawcza Business agent vs FF1 agent:
 - Agent reflects on failures, stores reflection in episodic memory buffer.
 - AlfWorld: **130/134 tasks (97%)**, +22% over baseline.
 - HumanEval pass@1: **91% vs GPT-4 baseline 80%.**
+- **JVM mapping:** Reflexion = `@Retry` z **notatką do siebie**. Każdy retry pisze *„dlaczego nie zadziałało"* do episodic memory. Następna próba dostaje to w prompcie.
 
 ### 5.3 Tree of Thoughts, LATS, Plan-and-Solve (1 min)
 - ToT (Yao 2023): Game of 24 — **GPT-4 + CoT solves 4%; ToT solves 74%.** 18× improvement on combinatorial reasoning.
@@ -237,6 +237,11 @@ Tabela porównawcza Business agent vs FF1 agent:
 ---
 
 ## Akt VI — Production: war stories i lessons (35:00 – 42:00) | 7 min
+
+> **Bridge z Akt V:** *„Plan bez safety to katastrofa. Wracamy do trzech katastrof z hooka — teraz mamy wszystko, czego potrzeba żeby zrozumieć **dlaczego** się stały i **jak** by tego uniknąć."*
+
+### 6.0 Wracamy do hooka (0.5 min) — divider slide ⭐
+$47k loop · Replit · terraform destroy. **Co się stało? Jak by tego uniknąć?**
 
 ### 6.1 The $47k agent loop (1 min)
 - 4 LangChain A2A agents, ping-pong, no termination.
@@ -303,17 +308,16 @@ Slajd-zdjęcie z mapowaniem na JVM patterns:
 
 ---
 
-## Closing (44:00 – 45:00) | 1 min
+## Closing (44:00 – 45:00) | 1 min — JEDEN slajd
 
-> Garland nadal stoi w Chaos Shrine. Mój agent doszedł do throne roomu Króla Coneria, zna swoje warpy, zna swoje porażki.
+> *„Software 1.0 was code. Software 2.0 was weights. Software 3.0 is English.*
+> *Your job didn't disappear — it moved up the stack. Again."* — **Karpathy**
 >
-> Każdy decision w tym kodzie ma swój odpowiednik w jednym z papierów / postów, które dziś pokazałem.
+> Garland nadal stoi w Chaos Shrine. **Każdy z Was powinien mieć swojego Garlanda.**
 >
-> **Ale dlaczego mogłem to zrobić?** Bo miałem **swój własny sandbox.** Własny emulator z portem heksagonalnym, na który mogłem powiesić Claude Code, potem MCP, potem agenta w Koog. **Mogłem upadać tanio.**
+> Nie żeby go pokonać. Żeby mieć gdzie tanio upadać — i nauczyć się tych wzorców z literatury **naprawdę**.
 >
-> ⭐ **Każdy z Was powinien mieć taki projekt do eksperymentów.** Nie żeby pokonać Garlanda. Żeby mieć miejsce, w którym wolno Wam stracić $30 na divergujący ReAct loop, $1 na Opusa rediscovującego peninsulę, godzinę na halucynowane koordynaty z training data. **Bo dopiero gdy upadasz tanio, uczysz się tych wzorców z literatury, które dziś pokazałem — naprawdę.**
->
-> **Architektura > model.** Repo: github.com/ArturSkowronski/kNES. Spec docs udokumentowane razem z porażkami. Pytania.
+> `github.com/ArturSkowronski/kNES`
 
 ---
 

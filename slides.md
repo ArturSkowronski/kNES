@@ -93,10 +93,14 @@ DataTalks.Club. Alexey Grigorev. Forgot Terraform state file. Claude Code zrobi�
 - Brak human-in-the-loop na destructive verbs
 - Brak observability na decisions, nie tylko tool calls
 
-> Dziś o tym, jak nie zbudować takiego harness.
+> Te firmy myślały, że budują **agenta**.
+> Naprawdę budowali **harness**.
+
+**Ja też zacząłem od myślenia: napiszę agenta.**
+Skończyłem na 6 miesiącach budowania harness — i pokażę dlaczego.
 
 <!--
-Wszystkie trzy historie mają coś wspólnego: model nie był winny. Każdy z tych modeli sam w sobie mógł zachować się dobrze w izolacji. Pomijano harness — czyli wszystko, co dookoła. Budget enforcement, read-only contracts, human approval gates, observability na decisions a nie tylko na tool calls. Dziś talk o tym jak budować właśnie ten harness.
+Wszystkie trzy historie mają coś wspólnego: model nie był winny. Każdy z tych modeli sam w sobie mógł zachować się dobrze w izolacji. Pomijano harness — czyli wszystko, co dookoła. Budget enforcement, read-only contracts, human approval gates, observability na decisions a nie tylko na tool calls. Te firmy myślały że budują agenta. Naprawdę budowali harness — i pomijały go. Ja też zacząłem od myślenia, że napiszę agenta. Skończyłem na sześciu miesiącach budowania harness. Pokażę Wam dlaczego — i zacznę od tego, że pierwszego agenta wcale nie napisałem.
 -->
 
 ---
@@ -362,8 +366,10 @@ V1 mojego agenta. 13 raw tools — step, tap, sequence, press, release, getState
 - ⚠️ Mega-tool z 20+ optional kwargs
 - ⚠️ Tool name overlap bez namespacing
 
+**JVM mapping:** `@Tool` w Spring AI = `@RestController` dla LLM. Schema-validated args = Bean Validation. Description = OpenAPI spec — *„wszystko, co robicie z REST API, robi się tak samo z agent tools."*
+
 <!--
-Tier list praktyk. S: właściwa abstrakcja, descriptions jako prompts. A: code-as-action gdy akcje się komponują, progressive disclosure. B: deterministyczny backbone z LLM w decyzjach. Cztery klasyczne anti-patterns: ponad 100 tools w kontekście, descriptions krótsze niż 40 słów, mega-tool z 20 optional kwargs, name overlap bez namespacing.
+Tier list praktyk. S: właściwa abstrakcja, descriptions jako prompts. A: code-as-action gdy akcje się komponują, progressive disclosure. B: deterministyczny backbone z LLM w decyzjach. Cztery klasyczne anti-patterns: ponad 100 tools w kontekście, descriptions krótsze niż 40 słów, mega-tool z 20 optional kwargs, name overlap bez namespacing. JVM zakotwiczenie: tool w Spring AI to dla LLM jest tym, czym RestController dla HTTP. Walidacja argumentów to Bean Validation. Description to OpenAPI spec. Cała ta dyscyplina, którą znacie z REST API — applied jeden do jednego do agent tools.
 -->
 
 ---
@@ -470,8 +476,10 @@ Tydzień po Anthropicu Cognition publikuje przeciwny post. Walden Yan. Dwie zasa
 
 **Cognition Apr 2026 follow-up:** narrower class works — agents *contribute intelligence*, writes stay single-threaded.
 
+**JVM mapping:** Orchestrator-Workers = `Fork/Join` z 2011, tylko worker to LLM. *Pytanie „is your task parallelizable without shared state" — odpowiadamy je od dwudziestu lat.*
+
 <!--
-Resolution: zależy od taska. Research, parallel-friendly — multi-agent. Coding, tightly-coupled — single-threaded. Conversational, low-value — single LLM. Predictable flow — workflow, nie agent. Cognition w kwietniu 2026 wraca z follow-upem: węższa klasa multi-agent działa, gdzie sub-agenci dostarczają intelligence, a writes pozostają single-threaded.
+Resolution: zależy od taska. Research parallel-friendly — multi-agent. Coding tightly-coupled — single-threaded. Conversational low-value — single LLM. Predictable flow — workflow, nie agent. Cognition w kwietniu 2026 wraca z follow-upem: węższa klasa multi-agent działa, gdzie sub-agenci dostarczają intelligence, a writes pozostają single-threaded. JVM zakotwiczenie: Orchestrator-Workers to dosłownie Fork/Join Pool z 2011, tylko worker to LLM zamiast wątku. Pytanie „czy ten task jest parallelizable bez shared state" — to odpowiadamy je w distributed systems od dwudziestu lat. Agentowy świat odkrywa to teraz.
 -->
 
 ---
@@ -609,64 +617,22 @@ Wrzesień 2025. Anthropic publikuje effective context engineering. Trzy primitiv
 
 ---
 
-# Memory architectures: MemGPT → Mem0 → Zep
+# Memory ecosystem 2023-2026 — virtual memory dla LLM
 
-**MemGPT** (Packer 2023, OS-inspired)
-- Core (RAM) / archival (disk) / recall (history)
-- DMR: **93.4% vs 35.3%** summarization baseline
+| System | Headline number | Year |
+|--------|-----------------|------|
+| **MemGPT** (OS-inspired hierarchy) | 93.4% DMR vs **35.3% baseline** | 2023 |
+| **Mem0** (vector + graph + KV) | **91% latency cut, 14× tokens** at near-parity | 2025 |
+| **Zep** (temporal knowledge graph) | **63.8% vs Mem0's 49.0%** LongMemEval | 2025 |
+| **Sleep-time compute** (pre-compute offline) | **5× less test-time** compute, 2.5× cheaper | 2025 |
+| **Anthropic Memory + Dreaming** | Wisedocs: **97% fewer first-pass errors** | 2025-26 |
 
-**Mem0** (2025, hybrid vector+graph+KV)
-- LOCOMO: **91% latency cut, 14× token cut** at near-parity accuracy
-
-**Zep** (2025, temporal knowledge graph)
-- LongMemEval: **63.8% vs Mem0's 49.0%**
-
-> Mental model dla JVM: virtual memory dla LLMs. Same paging, same tradeoffs.
-
-<small>[arXiv 2310.08560, 2504.19413, 2501.13956]</small>
+**JVM mental model:** to jest **virtual memory dla LLM**.
+Pamiętacie pagefile, LRU eviction, write-back cache?
+**Te same tradeoffy. Tylko zamiast process pages — chunks of context.**
 
 <!--
-Trzy memory frameworki, które warto znać. MemGPT z 2023, OS-inspired hierarchy. 93% vs 35% baseline na DMR benchmarku. Mem0 z 2025: hybrid vector plus graf plus KV. 91% latency cut przy 14-krotnie mniej tokenach. Zep — temporal knowledge graph. 64% vs 49% Mem0 na LongMemEval. Mental model dla JVM ludzi: to jest virtual memory dla LLM. Te same paging tradeoffs co znamy z systemów operacyjnych.
--->
-
----
-
-# Sleep-time compute (Letta + UC Berkeley, 2025)
-
-**Idea:** pre-compute context BEFORE queries arrive.
-
-- **5× less test-time compute** for same accuracy (Stateful GSM-Symbolic, AIME)
-- **2.5× cheaper amortized** across queries on same context
-
-> *„By doing the thinking offline, before user arrives, we cut test-time compute by 5×."*
-
-> Idle compute is free — use it.
-
-<small>[arXiv 2504.13171]</small>
-
-<!--
-Sleep-time compute z Letty i Berkeley. Genialny insight. Pre-compute na kontekście, ZANIM przyjdzie zapytanie. Pięciokrotnie mniej test-time compute przy tej samej accuracy. Dwukrotnie pół taniej amortized w wielu queries na tym samym kontekście. Cytat: thinking offline daje 5x redukcję test-time. To jest argument ekonomiczny: idle compute jest free, użyj go.
--->
-
----
-
-# Anthropic Memory Tool + Dreaming (2025-2026)
-
-**Memory tool** (Sept 2025): filesystem-based persistent. Per-user, exportable.
-
-**Dreaming** (Apr 2026): scheduled background process consolidates past sessions:
-- Surfaces recurring mistakes
-- Captures team preferences
-- Identifies shared workflows
-
-**Wisedocs case study:**
-- 97% reduction in first-pass errors
-- 30% speed-up
-
-<small>[anthropic.com/engineering/managed-agents]</small>
-
-<!--
-Anthropic ma to teraz jako API. Memory tool — filesystem persistent, per-user. Dreaming — to jest sleep-time compute dorobione produktowo. Background process konsoliduje past sessions, surface'uje recurring mistakes, ustawienia teamu, shared workflows. Real case: Wisedocs dostał 97% redukcji first-pass errors i 30% speed-up.
+Ekosystem memory framework w jednej tabelce z headline numbers. MemGPT 2023 OS-inspired, 93 vs 35 procent. Mem0 hybrid 2025, 91 procent mniej latency przy 14 razy mniej tokenów. Zep temporal knowledge graph, 64 vs 49 procent na LongMemEval. Sleep-time compute z Letty i Berkeley, pre-compute zanim przyjdzie query, pięciokrotnie mniej test-time compute. Anthropic Memory plus Dreaming, real case Wisedocs to 97 procent redukcji first-pass errors. Najważniejsze dla JVM crowd: to wszystko jest virtual memory dla LLM. Pagefile, LRU eviction, write-back cache. Te same tradeoffy które znacie z systemów operacyjnych. Jeśli zrozumiecie że to jest pagefile — zrozumiecie wszystkie te frameworki w jeden wieczór.
 -->
 
 ---
@@ -732,10 +698,12 @@ ReAct z 2022. Działa świetnie na krótkich taskach. AlfWorld +34% nad baseline
 
 > Self-criticism + episodic memory = compounding learning.
 
+**JVM mapping:** Reflexion = `@Retry` z **notatką do siebie**. Każdy retry pisze *„dlaczego to nie zadziałało"* do episodic memory bufora. Następna próba dostaje to w prompcie.
+
 <small>[arXiv 2303.11366]</small>
 
 <!--
-Reflexion. Verbal reinforcement learning. Agent reflektuje nad porażkami, zapisuje do episodic memory bufora. AlfWorld 130 z 134 tasków. HumanEval 91% pass@1, podczas gdy goły GPT-4 daje 80%. Self-criticism plus memory daje compounding learning. To jest podstawowy prymityw, którego brakuje w naive ReAct.
+Reflexion. Verbal reinforcement learning. Agent reflektuje nad porażkami, zapisuje do episodic memory bufora. AlfWorld 130 z 134 tasków. HumanEval 91% pass@1, podczas gdy goły GPT-4 daje 80%. Self-criticism plus memory daje compounding learning. JVM zakotwiczenie: to jest dosłownie Retry adnotacja z notatką do siebie. Każdy retry pisze dlaczego to nie zadziałało, następna próba dostaje to w prompcie. Naive ReAct retry'uje bez notatki — Reflexion retry'uje z notatką.
 -->
 
 ---
@@ -789,6 +757,20 @@ Mój case na planning. Advisor wykonuje plan na poziomie skill names — wysokop
 # Akt VI
 
 ## Production: war stories i lessons
+
+---
+
+<!-- _class: title -->
+
+# Wracamy do trzech katastrof z hooka
+
+## $47k loop · Replit · terraform destroy
+
+**Co się stało? Jak by tego uniknąć?**
+
+<!--
+Wracamy do tych trzech katastrof, którymi otworzyłem talk. Pamiętacie? $47k loop. Replit kasujący prod DB. Claude Code odpalający terraform destroy. Teraz, po tym co już dziś przeszliśmy — tools, architecture, memory, planning — możemy rozłożyć każdą z nich na czynniki pierwsze i pokazać konkretny harness, który by to zatrzymał. Każda katastrofa ma swój fix. Każdy fix ma swój JVM odpowiednik.
+-->
 
 ---
 
@@ -977,54 +959,18 @@ Dziesięć lessonów. Każdy ma JVM equivalent. Bo agentowe programowanie nie je
 
 # Garland nadal stoi w Chaos Shrine
 
-## Ale architektura jest gotowa
+> *„Software 1.0 was code. Software 2.0 was weights. Software 3.0 is English. Your job didn't disappear — it moved up the stack. Again."*
+> — Karpathy
 
-**Advisor + Executor + Skills + Persistent Memory + 5 JSON files**
+**Każdy z Was powinien mieć swojego Garlanda.**
 
-> Każda decyzja w tym kodzie ma swój odpowiednik w jednym z papierów / postów dziś pokazanych.
-
-<!--
-Garland nadal stoi w Chaos Shrine. Mój agent doszedł do throne roomu Króla, zna swoje warpy, zna swoje porażki. Ale architektura jest gotowa. Każda decyzja w tym kodzie ma swój odpowiednik w jednym z papierów albo postów, które dziś pokazałem. Anthropic upraszcza, Cognition ostrzega, Voyager pokazuje skill libraries, Mem0 mierzy. Architektura ponad model.
--->
-
----
-
-# Ale dlaczego mogłem to wszystko zrobić?
-
-## Bo miałem **swój własny sandbox**.
-
-- Własny emulator z portem heksagonalnym
-- Mogłem powiesić Claude Code, MCP, Koog, własnego agenta — jeden wieczór każde
-- **Mogłem upadać tanio**
-
-> $30 na divergujący ReAct. $1 na Opusa rediscovującego peninsulę.
-> Godziny na halucynowane koordynaty.
->
-> **W swoim własnym piaskownicy, gdzie wolno.**
-
-<!--
-Ale tu jest druga rzecz, którą warto zostawić. Dlaczego w ogóle mogłem przejść przez te wszystkie wzorce literatury i sprawdzić ich na własnej skórze? Bo miałem swój własny sandbox. Własny emulator z portem heksagonalnym, na który mogłem powiesić Claude Code, potem MCP, potem agenta w Koog. Mogłem upadać tanio. $30 na divergujący ReAct loop. Dolar na Opusa rediscovującego peninsulę. Godziny na halucynowane koordynaty z training data. Ale wszystko w mojej własnej piaskownicy, gdzie wolno mi było.
--->
-
----
-
-<!-- _class: title -->
-
-# Każdy z Was powinien mieć taki projekt
-
-## Nie żeby pokonać Garlanda
-
-## **Żeby mieć miejsce, w którym wolno Wam upadać**
-
-Bo dopiero gdy upadasz tanio,
-uczysz się tych wzorców z literatury **naprawdę**.
+Nie żeby go pokonać. Żeby mieć gdzie tanio upadać —
+i nauczyć się tych wzorców z literatury **naprawdę**.
 
 `github.com/ArturSkowronski/kNES`
 
-**Pytania.**
-
 <!--
-I to jest może najważniejsza rzecz, którą zostawiam Wam dziś. Każdy z Was powinien mieć taki projekt. Nie żeby pokonać Garlanda. Nie żeby zbudować production agent. Żeby mieć miejsce, w którym wolno Wam stracić $30 na divergujący ReAct, $1 na Opusa, godzinę na halucynowane koordynaty. Bo dopiero gdy upadasz tanio, uczysz się tych wzorców, które dziś pokazałem, naprawdę. Wszystko inne to teoria. Repo open-source. Pytania.
+Garland nadal stoi w Chaos Shrine. Mój agent doszedł do throne roomu Króla, zna swoje warpy, zna swoje porażki. Ale architektura jest gotowa — każda decyzja w tym kodzie ma swój odpowiednik w jednym z papierów albo postów dziś pokazanych. Karpathy mówi: Software 1.0 to był code, 2.0 to weights, 3.0 to English. Twoja robota nie zniknęła — przeniosła się o piętro wyżej w stack. Znowu. I dlatego — to jest ostatnia rzecz, którą Wam zostawiam — każdy z Was powinien mieć swojego Garlanda. Własny sandbox, własny port heksagonalny, miejsce w którym wolno upadać tanio. Bo dopiero gdy upadasz tanio, uczysz się tych wzorców naprawdę. Repo open-source. Pytania.
 -->
 
 ---
