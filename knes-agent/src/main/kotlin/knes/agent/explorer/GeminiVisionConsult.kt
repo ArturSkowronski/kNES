@@ -67,8 +67,11 @@ class GeminiVisionConsult(
         screenshotBase64: String?,
         kind: String,
     ): HaikuConsult.OverworldClassification {
+        // gemini-2.5-pro requires thinking mode (cannot set thinkingBudget=0).
+        // Empirically, thinking consumes 400-600 tokens before producing the JSON
+        // response (~10 tokens). Budget = 2000 leaves comfortable headroom.
         val body = buildBody(SYSTEM_OVERWORLD_LANDMARK, overworldUserText(kind), screenshotBase64,
-            maxOutputTokens = 400)
+            maxOutputTokens = 2000)
         val raw = postOrNull(body) ?: return HaikuConsult.OverworldClassification.NotFound(0.0)
         return parseOverworldResponse(raw)
     }
