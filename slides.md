@@ -186,23 +186,26 @@ Cały talk będę ilustrował case study'em z mojego repo. kNES to emulator NES 
 
 # Pierwszy prototyp: Claude Code
 
-- Najpierw chciałem grać JoyConami zamiast klawiaturą.
-- Potem REST API. Potem MCP. Potem **Claude Code wziął pada**.
-- **Każda warstwa = jeden wieczór pracy.**
+**Najpierw nie pisałem agenta. Wziąłem gotowego.**
 
-> *„Mając własny emulator, masz pełny kontrakt — input, output, RAM, czas. Możesz wywiesić go na czymkolwiek."*
+- JoyConami zamiast klawiatury → REST API (Ktor, port 6502) → MCP server → **Claude Code wziął pada.**
+- Każda warstwa: jeden wieczór pracy.
+- Claude Code: load ROM, party Fighter/Thief/Black Belt/Red Mage, walka z 5 IMPami na overworldzie.
 
-**Game changer:** posiadanie własnego emulatora pozwoliło mi traktować input jako abstrakcję, nie keyboard event.
+> Claude Code to **bardzo kompetentny prototyp agenta**:
+> harness, summarization, tool routing, sandboxing, MCP, hooks, sub-agenty, evals.
+
+**Mój pierwszy „agent grający w FF1" to dosłownie Anthropic's harness wpięty w mój emulator.**
 
 <small>[JVM Weekly vol. 172](https://www.jvm-weekly.com/p/claude-plays-final-fantasy-just-before)</small>
 
 <!--
-Zanim w ogóle pomyślałem o własnym agencie w Kotlinie — pierwszy prototyp był na Claude Code przez MCP. Jeszcze wcześniej — chciałem grać JoyConami przez Bluetooth. Potem REST API na porcie 6502 przez Ktor. Potem MCP server jako thin proxy nad tym REST. Potem Claude Code wziął pada i zaczął grać Final Fantasy 1. Stworzył party Fighter/Thief/Black Belt/Red Mage, walczył z pięcioma IMPami na overworldzie. Każda z tych warstw zajęła mi jeden wieczór. Bo mając własny emulator, masz pełny kontrakt: input, output, RAM, czas — możesz wywiesić to na czymkolwiek.
+Zanim zacznę opowiadać o własnym agencie — pierwszy prototyp grający w Final Fantasy nie był mój. Był to Claude Code przez MCP. I to jest ważne, żebym to powiedział głośno: Claude Code to nie jest „LLM z chatem". To jest pełnoprawny, bardzo kompetentny prototyp agenta. Ma harness, ma compaction, ma tool routing, ma sandboxing, ma MCP, ma hooks, ma sub-agenty, ma evals — wszystko, o czym dziś będę mówił przez 45 minut. Anthropic używa go do pracy. Ja użyłem go żeby zagrać w FF. Każda nowa warstwa — JoyCon, REST API, MCP — to był jeden wieczór pracy. Stworzył party Fighter/Thief/Black Belt/Red Mage, walczył z pięcioma IMPami na overworldzie. To dosłownie był moment „mam działającego agenta grającego w grę". I właśnie ten moment był startem do pytania: a co teraz? I to jest cały dalszy talk.
 -->
 
 ---
 
-# `ControllerProvider` — abstrakcja, która wszystko otworzyła
+# `ControllerProvider` — port w architekturze heksagonalnej
 
 ```kotlin
 interface ControllerProvider {
@@ -210,17 +213,23 @@ interface ControllerProvider {
 }
 ```
 
-Implementacje:
-- `KeyboardControllerProvider` — Z, X, Enter, Space, arrows
-- `JoyConControllerProvider` — Switch JoyCon over Bluetooth
-- `RestApiControllerProvider` — `POST /step` z curl
-- `McpControllerProvider` — Claude Code wpisuje przyciski przez stdio
-- `AgentControllerProvider` — mój własny agent w Koog
+```
+       Adapters (driving side)              Domain
+  ┌────────────────────────────┐    ┌──────────────────┐
+  │ Keyboard (Z, X, arrows)    │───▶│                  │
+  │ JoyCon (Bluetooth)         │───▶│   CPU 6502       │
+  │ REST API (POST /step)      │───▶│   PPU / RAM      │
+  │ MCP (stdio, Claude Code)   │───▶│   Frame timing   │
+  │ Koog Agent (mój własny)    │───▶│                  │
+  └────────────────────────────┘    └──────────────────┘
+              5 adapterów                  1 port
+```
 
-**Jeden interface. Pięć źródeł inputu. Każde dodane w jeden wieczór.**
+**Klasyczne Ports & Adapters.** CPU nie wie, czy input idzie z klawiatury czy z LLM-a.
+Każdy adapter — **jeden wieczór pracy**.
 
 <!--
-To jest najważniejszy slajd o tym, dlaczego mając własny emulator wygrywasz. ControllerProvider to interface z jedną metodą. CPU 6502 nie wie skąd przychodzi input. Może być z klawiatury, JoyCona, REST API, MCP, mojego własnego agenta. Każda implementacja to wieczór pracy. To dosłownie hexagonal architecture applied do emulatora. Bez własnego emulatora bym nie mógł tego zrobić — Mesen, FCEUX, jakikolwiek inny mainstream emulator NES nie ma takiego API.
+Tu jest bardzo prosta lekcja, którą warto powiedzieć JVM crowd głośno: to jest hexagonal architecture. Klasyczne Ports & Adapters. Alistair Cockburn, 2005. CPU 6502 to jest core domain. ControllerProvider to port. Pięć implementacji to pięć adapterów. CPU nie ma pojęcia kto naciska przyciski. Może być człowiek z klawiaturą, może być JoyCon przez Bluetooth, może być curl-em człowiek z terminala, może być Claude Code przez MCP, albo mój własny agent w Koog. I właśnie to jest powód, że nie da się tego zrobić z mainstreamowymi emulatorami jak Mesen czy FCEUX — one nie mają takiej abstrakcji. Mając własny emulator, dostałem to za darmo. Hexagon zapłacił mi natychmiast.
 -->
 
 ---
@@ -485,6 +494,43 @@ Resolution: zależy od taska. Research, parallel-friendly — multi-agent. Codin
 
 <!--
 Marzec 2026. Anthropic publikuje three-agent harness dla long-running coding. Planner / Generator / Evaluator. Kluczowa zasada: agent który robi pracę nie powinien sam siebie oceniać. To redukuje self-evaluation bias. Identyfikują też klasyczny failure mode: agents próbują one-shot the app, wypalają context na half-implementacji.
+-->
+
+---
+
+# Mała disclosure: to nie mój pierwszy agent
+
+- Historycznie pracowałem z **biznesowymi agentami** — workflow automation, customer support, RPA, operations.
+- 5–20 kroków, jasny success criterion, recoverable, RAG na deterministycznej DB.
+- **Komfort.** Tani Sonnet, krótki context, jasne tooling.
+
+> Ale ten agent — grający w Final Fantasy — **był inny**.
+>
+> I to było właśnie to, co mnie nauczyło wzorców z literatury.
+
+<!--
+Powiem coś osobistego, bo warto. To nie jest mój pierwszy agent. Historycznie pracowałem z biznesowymi agentami — workflow automation, customer support, RPA, operations. Komfortowy świat: 5-20 kroków, jasny success criterion, recoverable, RAG na deterministycznej bazie danych. Tani Sonnet, krótki kontekst, jasne tooling. Ten agent — grający w Final Fantasy — był inny. I to dopiero on nauczył mnie tych wzorców z literatury, które dziś pokazałem.
+-->
+
+---
+
+# FF1 to bardzo trudny przeciwnik
+
+| Wymiar | Business agent | FF1 agent |
+|--------|----------------|-----------|
+| Horyzont | 5-20 kroków | **godziny gameplay** |
+| Observability | DB queries, deterministic | **partial: RAM + ekran** |
+| Reward signal | Task completion explicit | **sparse, distant** (Garland) |
+| Visual noise | Text/JSON | **NPC, schody, drzwi — wszystko podobne** |
+| Adversary | Spokojnie | **random encounters, party wipes, traps** |
+| Training prior | Strong (LLM widział tysiące) | **mylne** (FF1 wiki ≠ rzeczywistość) |
+| Cost tolerance | Centy per task | **$30 / divergujący run** |
+| Recovery | Rollback, retry | **niektóre decyzje nieodwracalne** |
+
+> **FF1 to mikroskop dla agent failure modes. Wszystko wystawia się tu szybciej.**
+
+<!--
+Tabela porównawcza. Business agent ma typowo 5-20 kroków, FF agent ma godziny gameplay. Business agent dostaje deterministyczne DB queries, FF agent ma partial observability — RAM plus ekran, dużo stanu ukryte. Business reward signal jest explicit, w FF jest sparse i distant — Garland to single objective po wielu warstwach. W business agent JSON, w FF wszystko na ekranie wygląda podobnie — NPC, schody, drzwi. Business environment cię nie atakuje, w FF random encounters, party wipes, traps. Najgorsze: training prior jest mylny — FF1 wiki różni się od rzeczywistości ROMu. Cost tolerance: business agent kosztuje centy, FF agent może kosztować dolary za jedną divergującą iterację. I niektóre decyzje są nieodwracalne — party wipe to restart. Lesson: FF1 to mikroskop dla agent failure modes. Wszystko wystawia się tu szybciej niż w typowym biznesowym kontekście.
 -->
 
 ---
@@ -817,6 +863,28 @@ Air Canada. Luty 2024. Chatbot wymyślił bereavement-fare policy. Tribunal w Br
 
 ---
 
+# FF war story: Vision — Haiku → Gemini Pro
+
+**Problem:** Haiku 4.5 confidently halucynuje wnętrza interior maps.
+
+| Ekran | Haiku 4.5 | Gemini 2.5 Pro |
+|-------|-----------|-----------------|
+| mapId=0 void (uszkodzony stan) | **4 false positives**: NPC_KING + GENERIC + 2× STAIRS | `[]` ✓ |
+| Castle throne | NPC_KING ✓ + STAIRS_DOWN ✗ | NPC_KING ✓ z accurate detail |
+
+**Switch via env var:** `KNES_VISION=gemini-pro`
+
+> **To był kosmos.** Gemini 2.5 Pro na vision robi rzeczy, których Haiku nie robi.
+> Cost ratio 6×, ale absolute differential trywialny: $0.05 vs $0.30 / 50-run kampanii.
+
+**Lesson:** vision backendy nie są commodity. **A/B test w produkcji.**
+
+<!--
+Mała wojenna historia z mojego repo, ale generalizuje się świetnie. Haiku 4.5 confidently halucynował schody, których nie było. W mapId=0 void — 4 false positives. W throne roomie poprawny NPC_KING ale dorzuca nieistniejące schody. Przełączyłem vision backend na Gemini 2.5 Pro przez env var i to był kosmos. Empty void? Pusto. Throne room? NPC_KING z dodatkowo dokładnym opisem „flanked by two golden dragon emblems". Gemini 2.5 Pro na vision robi rzeczy, których Haiku po prostu nie robi. Cost ratio 6x, ale absolute differential trywialny — pięć centów versus trzydzieści centów na 50-run kampanii. Lesson generic: vision backendy to NIE commodity. Każdy ma swoje failure modes. A/B test w produkcji — nie zakładaj że Twój domyślny vision model jest najlepszy do Twojego problemu.
+-->
+
+---
+
 # Cost optimization — 2025-2026
 
 **Prompt caching** ([ProjectDiscovery prod](https://projectdiscovery.io/blog/how-we-cut-llm-cost-with-prompt-caching)):
@@ -913,14 +981,50 @@ Dziesięć lessonów. Każdy ma JVM equivalent. Bo agentowe programowanie nie je
 
 **Advisor + Executor + Skills + Persistent Memory + 5 JSON files**
 
-`github.com/ArturSkowronski/kNES`
-
 > Każda decyzja w tym kodzie ma swój odpowiednik w jednym z papierów / postów dziś pokazanych.
+
+<!--
+Garland nadal stoi w Chaos Shrine. Mój agent doszedł do throne roomu Króla, zna swoje warpy, zna swoje porażki. Ale architektura jest gotowa. Każda decyzja w tym kodzie ma swój odpowiednik w jednym z papierów albo postów, które dziś pokazałem. Anthropic upraszcza, Cognition ostrzega, Voyager pokazuje skill libraries, Mem0 mierzy. Architektura ponad model.
+-->
+
+---
+
+# Ale dlaczego mogłem to wszystko zrobić?
+
+## Bo miałem **swój własny sandbox**.
+
+- Własny emulator z portem heksagonalnym
+- Mogłem powiesić Claude Code, MCP, Koog, własnego agenta — jeden wieczór każde
+- **Mogłem upadać tanio**
+
+> $30 na divergujący ReAct. $1 na Opusa rediscovującego peninsulę.
+> Godziny na halucynowane koordynaty.
+>
+> **W swoim własnym piaskownicy, gdzie wolno.**
+
+<!--
+Ale tu jest druga rzecz, którą warto zostawić. Dlaczego w ogóle mogłem przejść przez te wszystkie wzorce literatury i sprawdzić ich na własnej skórze? Bo miałem swój własny sandbox. Własny emulator z portem heksagonalnym, na który mogłem powiesić Claude Code, potem MCP, potem agenta w Koog. Mogłem upadać tanio. $30 na divergujący ReAct loop. Dolar na Opusa rediscovującego peninsulę. Godziny na halucynowane koordynaty z training data. Ale wszystko w mojej własnej piaskownicy, gdzie wolno mi było.
+-->
+
+---
+
+<!-- _class: title -->
+
+# Każdy z Was powinien mieć taki projekt
+
+## Nie żeby pokonać Garlanda
+
+## **Żeby mieć miejsce, w którym wolno Wam upadać**
+
+Bo dopiero gdy upadasz tanio,
+uczysz się tych wzorców z literatury **naprawdę**.
+
+`github.com/ArturSkowronski/kNES`
 
 **Pytania.**
 
 <!--
-Garland nadal stoi w Chaos Shrine. Mój agent doszedł do throne roomu Króla, zna swoje warpy, zna swoje porażki. Ale architektura jest gotowa. Każda decyzja w tym kodzie — czy to Advisor pattern, czy persistent memory, czy single-threaded write contract — ma swój odpowiednik w jednym z papierów albo postów, które dziś pokazałem. Anthropic upraszcza, Cognition ostrzega, Voyager pokazuje skill libraries, Mem0 mierzy. Architektura ponad model. Repo open-source. Pytania.
+I to jest może najważniejsza rzecz, którą zostawiam Wam dziś. Każdy z Was powinien mieć taki projekt. Nie żeby pokonać Garlanda. Nie żeby zbudować production agent. Żeby mieć miejsce, w którym wolno Wam stracić $30 na divergujący ReAct, $1 na Opusa, godzinę na halucynowane koordynaty. Bo dopiero gdy upadasz tanio, uczysz się tych wzorców, które dziś pokazałem, naprawdę. Wszystko inne to teoria. Repo open-source. Pytania.
 -->
 
 ---

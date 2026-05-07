@@ -50,14 +50,14 @@
 - Stack: Kotlin + Koog (JetBrains) + Anthropic Claude.
 
 ### 1.5 Pierwszy prototyp: Claude Code + REST API (1.5 min) ⭐
-- **Zanim** zbudowałem własnego agenta w Koog — pierwszy prototyp był na **Claude Code przez MCP**.
-- Backstory: chciałem grać **JoyConami zamiast klawiatury**. Potem REST API. Potem MCP. Potem Claude Code wziął pada.
-- **Każda nowa warstwa = jeden wieczór pracy.** Claude Code load'ował ROM, tworzył party (Fighter/Thief/Black Belt/Red Mage), walczył z 5 IMPami na overworldzie.
-- Game changer: **mając własny emulator, masz pełny kontrakt** — input, output, RAM, czas.
-- Architektura: `ControllerProvider` jako abstrakcja z jedną metodą `pollInput()`. Implementacje: keyboard, JoyCon over Bluetooth, REST API (POST z curl), MCP (stdio), **mój własny agent w Koog**.
-- Bez własnego emulatora — Mesen, FCEUX nie mają takiego API. **To dlaczego cały ten talk jest możliwy.**
+- **Najpierw nie pisałem agenta. Wziąłem gotowego.** Pierwszy prototyp grający w FF1 to Claude Code przez MCP.
+- **Claude Code jako bardzo kompetentny prototyp agenta**: ma harness, compaction, tool routing, sandboxing, MCP, hooks, sub-agenty, evals — wszystko o czym dziś będę mówił przez 45 minut. Anthropic używa go do pracy; ja użyłem go żeby zagrać w grę.
+- Backstory: chciałem grać **JoyConami zamiast klawiatury**. Potem REST API. Potem MCP. Potem Claude Code wziął pada. Stworzył party Fighter/Thief/Black Belt/Red Mage, walczył z 5 IMPami na overworldzie.
+- **Każda nowa warstwa = jeden wieczór pracy.**
+- **Architektura:** `ControllerProvider` jako **port w architekturze heksagonalnej** (Ports & Adapters, Cockburn 2005). 1 interface, 5 adapterów: keyboard / JoyCon Bluetooth / REST API curl / MCP stdio / Koog agent. CPU 6502 nie wie kto naciska.
+- Bez własnego emulatora — Mesen, FCEUX nie mają takiego API. **Hexagon zapłacił natychmiast.**
 - Source: [JVM Weekly vol. 172 — *Claude Plays Final Fantasy just before KotlinConf 2026*](https://www.jvm-weekly.com/p/claude-plays-final-fantasy-just-before)
-- Punchline: *„Każda warstwa zajęła mi jeden wieczór dzięki małemu interface'owi."*
+- Punchline: *„Mój pierwszy agent grający w FF1 to dosłownie Anthropic's harness wpięty w mój emulator."*
 
 > Insight przed Aktem II: ten talk **nie jest o Final Fantasy.** Jest o tym, co się stało, jak naturalnie chciałem zrobić **swojego agenta** zamiast korzystać z czyjegoś.
 
@@ -135,7 +135,28 @@
 - **Conversational / cheap tasks:** single LLM augmented.
 - *„Start with simple prompts, optimize with eval, add multi-step only when simpler solutions fall short."* (Anthropic)
 
-### 3.5 Case study: Advisor + Executor w FF (1 min)
+### 3.5 Mała disclosure: to nie pierwszy mój agent (1 min) ⭐
+- Historycznie pracowałem z **biznesowymi agentami** — workflow automation, customer support, RPA, operations.
+- Komfortowy świat: 5–20 kroków, jasny success criterion, recoverable, RAG na deterministycznej DB.
+- Tani Sonnet, krótki context, jasne tooling.
+- **Ten agent był inny.** I dlatego dopiero on nauczył mnie wzorców z literatury.
+
+### 3.6 FF1 to bardzo trudny przeciwnik (1.5 min) ⭐
+Tabela porównawcza Business agent vs FF1 agent:
+| Wymiar | Business | FF1 |
+|--------|----------|-----|
+| Horyzont | 5-20 kroków | godziny gameplay |
+| Observability | DB queries deterministic | partial: RAM + ekran |
+| Reward | Task completion explicit | sparse, distant (Garland) |
+| Visual noise | Text/JSON | NPC/schody/drzwi — wszystko podobne |
+| Adversary | Spokojnie | random encounters, party wipes, traps |
+| Training prior | Strong | mylne (FF1 wiki ≠ rzeczywistość) |
+| Cost tolerance | Centy | $30 / divergujący run |
+| Recovery | Rollback | niektóre decyzje nieodwracalne |
+
+> **FF1 to mikroskop dla agent failure modes. Wszystko wystawia się tu szybciej.**
+
+### 3.7 Case study: Advisor + Executor w FF (1 min)
 - Advisor (Opus, read-only, single-shot) — produces numbered plan.
 - Executor (Sonnet/Haiku, full tools, `singleRunStrategy`) — picks 1 skill.
 - Trigger advisora: phase boundary, `idleTurns >= 20`, `askAdvisor` z executora.
@@ -234,6 +255,16 @@
 - Klarna: zastąpili 700 agentów AI → repeat-contacts wzrosły → CEO admitted „cut too aggressively" → rehiring.
 - **Lesson:** Agents as filter + escalation > agents as replacement.
 
+### 6.X FF war story: Vision — Haiku → Gemini Pro był kosmos (1 min) ⭐
+- **Problem:** Haiku 4.5 confidently halucynuje wnętrza interior maps.
+  - mapId=0 void → **4 false positives** (NPC_KING + GENERIC + 2× STAIRS)
+  - Castle throne → NPC_KING ✓ + STAIRS_DOWN ✗ (nieistniejące schody)
+- **Switch:** `KNES_VISION=gemini-pro`. **Game changer.**
+  - Empty void → `[]` poprawnie
+  - Castle throne → NPC_KING ✓ z accurate detail (*„flanked by two golden dragon emblems"*)
+- Cost ratio 6× ($0.001 vs $0.005-7), ale absolute trywialny: $0.05 vs $0.30 / 50-run kampanii.
+- **Lesson generic:** vision backendy nie są commodity. Każdy ma swoje failure modes. **A/B test w produkcji** — nie zakładaj że domyślny vision model jest najlepszy do Twojego problemu.
+
 ### 6.4 Cost optimization (1.5 min)
 - **Prompt caching:** ProjectDiscovery 59→70% input cost reduction. 74% cache hit rate. Multiple breakpoints (every 18 blocks).
 - Anthropic limits: **4 cache breakpoints**, **20-block lookback window**, 5-min default TTL (1.25× write), 1-h TTL (2× write), cache hits = 0.1× input price.
@@ -276,7 +307,11 @@ Slajd-zdjęcie z mapowaniem na JVM patterns:
 
 > Garland nadal stoi w Chaos Shrine. Mój agent doszedł do throne roomu Króla Coneria, zna swoje warpy, zna swoje porażki.
 >
-> Każdy decision w tym kodzie ma swój odpowiednik w jednym z papierów / postów, które dziś pokazałem. Anthropic upraszcza, Cognition ostrzega przed multi-agent, Voyager pokazuje skill libraries, Mem0 mierzy memory tradeoffs.
+> Każdy decision w tym kodzie ma swój odpowiednik w jednym z papierów / postów, które dziś pokazałem.
+>
+> **Ale dlaczego mogłem to zrobić?** Bo miałem **swój własny sandbox.** Własny emulator z portem heksagonalnym, na który mogłem powiesić Claude Code, potem MCP, potem agenta w Koog. **Mogłem upadać tanio.**
+>
+> ⭐ **Każdy z Was powinien mieć taki projekt do eksperymentów.** Nie żeby pokonać Garlanda. Żeby mieć miejsce, w którym wolno Wam stracić $30 na divergujący ReAct loop, $1 na Opusa rediscovującego peninsulę, godzinę na halucynowane koordynaty z training data. **Bo dopiero gdy upadasz tanio, uczysz się tych wzorców z literatury, które dziś pokazałem — naprawdę.**
 >
 > **Architektura > model.** Repo: github.com/ArturSkowronski/kNES. Spec docs udokumentowane razem z porażkami. Pytania.
 
