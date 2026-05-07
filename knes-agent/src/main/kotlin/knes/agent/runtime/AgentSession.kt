@@ -68,18 +68,6 @@ class AgentSession(
     private val outfitNavigator: VisionInteriorNavigator? = null,
     private val outfitViewportSource: ViewportSource? = null,
     private val outfitMapSession: MapSession? = null,
-    /** Path to the savestate file used for this session, if any. Used to derive
-     *  a stable hash that the OutfitState compares against. Null = sentinel hash
-     *  ("no-savestate"); the boot phase will still run but the cache won't be
-     *  reused across sessions. */
-    private val outfitSavestatePath: String? = null,
-    /**
-     * Optional injected OutfitState. Tests pass a temp-file-backed instance so
-     * e2e runs against a real ROM/savestate don't pollute the developer's real
-     * `~/.knes/ff1-outfit-state.json`. Defaulted to null = production behavior
-     * (default home-dir-backed file).
-     */
-    private val outfitState: OutfitState? = null,
     runDir: Path = Trace.newRunDir(),
     /**
      * Optional per-turn hook fired after each executor turn. Receives current
@@ -542,26 +530,26 @@ class AgentSession(
     /**
      * Spec 2 / Task 9: outfit boot phase orchestrator. Runs once at session
      * start before the strategic loop. Steps:
-     *   1. Entry guards via OutfitBootPhase: skip if savestate hash matches
-     *      OutfitState flag, or if RAM already shows all 4 chars equipped.
+     *   1. Entry guards via OutfitBootPhase: skip if RAM already shows all 4
+     *      chars equipped.
      *   2. Walk to Coneria town entry.
      *   3. Use cached weapon shop landmark, or probe candidates with DiscoverShop.
      *   4. Per-character buy loop (BuyAtShop), retrying on WrongClass.
      *   5. Exit shop interior, then per-character equip loop (EquipWeapon)
      *      on the overworld.
-     *   6. Persist OutfitState + log boot_outfit_summary.
+     *   6. Log boot_outfit_summary.
+     *
+     * Skip semantics are gameplay-derived (RAM weapon-equipped flags). No
+     * savestate-hash-keyed flag file: on resume, the RAM check itself short-
+     * circuits the phase if the work is already done.
      *
      * Best-effort: any failure logs and falls through to the strategic loop
      * without bailing. Silently no-ops when optional vision deps are absent.
      */
     private suspend fun runOutfitBootPhase() {
-        val state = outfitState ?: OutfitState()
-        val savestateHash = computeSavestateHash()
         val phase = OutfitBootPhase(
             toolset = toolset,
             landmarks = landmarkMemory,
-            outfitState = state,
-            savestateHash = savestateHash,
             trace = { kind, msg ->
                 println("[boot_outfit] $kind: $msg")
                 trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
@@ -661,15 +649,9 @@ class AgentSession(
             if (r.ok) charsEquipped += charSlot
         }
 
-        // 6. Persist + summary.
+        // 6. Summary.
         val finalGold = StrategyContext.totalGold(toolset.getState().ram)
         val goldSpent = (initialGold - finalGold).coerceAtLeast(0)
-        val shopsClassified = listOf(
-            "weapon@map${activeShop.mapId}-(${activeShop.localX},${activeShop.localY})"
-        )
-        if (charsEquipped.isNotEmpty()) {
-            state.markBought(savestateHash, charsEquipped, goldSpent, shopsClassified)
-        }
         val summary = "candidatesProbed=${if (cachedShop == null) 1 else 0} " +
             "weaponShopFound=true weaponsBought=${charsBought.size} " +
             "weaponsEquipped=${charsEquipped.size} totalGoldSpent=$goldSpent"
@@ -710,17 +692,6 @@ class AgentSession(
             ExitInterior(toolset, mapSession, fog).invoke(emptyMap())
         }
         return null
-    }
-
-    private fun computeSavestateHash(): String {
-        val path = outfitSavestatePath ?: return "no-savestate"
-        return try {
-            val bytes = java.io.File(path).readBytes()
-            java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
-                .joinToString("") { "%02x".format(it) }
-        } catch (e: Exception) {
-            "savestate-error:${e.message}"
-        }
     }
 
     companion object {
