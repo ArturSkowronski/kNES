@@ -112,7 +112,7 @@ open class EmulatorToolset(
 
     @Tool
     @LLMDescription("Capture a screenshot of the current NES frame as a base64-encoded PNG image")
-    fun getScreen(): ScreenPng = ScreenPng(base64 = session.screenshotBase64Png())
+    open fun getScreen(): ScreenPng = ScreenPng(base64 = session.screenshotBase64Png())
 
     @Tool
     @LLMDescription("Apply a game profile (e.g. 'smb' for Super Mario Bros, 'ff1' for Final Fantasy) to enable RAM watching for game-specific variables like HP, gold, position")
