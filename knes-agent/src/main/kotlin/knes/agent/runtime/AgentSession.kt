@@ -174,19 +174,12 @@ class AgentSession(
         }
     }
 
+    /** One-shot guard for outfit boot phase — fires on first Overworld observation,
+     *  not at session start (party RAM coords are still 0,0 at title screen). */
+    private var outfitBootPhaseDone: Boolean = false
+
     suspend fun run(): Outcome {
         println("[knes-agent] run dir: $resolvedRunDir")
-        // Spec 2 / Task 9: one-shot outfit boot phase — buy + equip starter
-        // weapons before the strategic loop begins. Best-effort: any failure
-        // logs and falls through. Only fires when optional vision deps are
-        // wired in by the caller; otherwise silently skipped.
-        try {
-            runOutfitBootPhase()
-        } catch (e: Exception) {
-            println("[boot_outfit] uncaught: ${e.message}")
-            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                note = "boot_outfit_summary failed: ${e.message}"))
-        }
         var previousPhase: FfPhase? = null
         var currentPlan = "Start the game from the title screen and begin a new game."
         var idleTurns = 0
@@ -263,6 +256,21 @@ class AgentSession(
                 if (outcome != Outcome.InProgress) {
                     trace.record(TraceEvent(0, "outcome", phase.toString(), note = outcome.name))
                     return outcome
+                }
+
+                // Spec 2: outfit boot phase — fires on FIRST Overworld observation
+                // (party RAM coords are 0,0 at title screen, so running this at
+                // session start would always fail walk-to-coneria). Best-effort:
+                // any failure logs and falls through to strategic loop.
+                if (!outfitBootPhaseDone && phase is FfPhase.Overworld) {
+                    outfitBootPhaseDone = true
+                    try {
+                        runOutfitBootPhase()
+                    } catch (e: Exception) {
+                        println("[boot_outfit] uncaught: ${e.message}")
+                        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                            note = "boot_outfit_summary failed: ${e.message}"))
+                    }
                 }
 
                 // V2.5.6: deterministic PostBattle dismissal. The modal blocks input;
