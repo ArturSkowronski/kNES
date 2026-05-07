@@ -2,6 +2,9 @@ package knes.agent
 
 import knes.agent.advisor.AdvisorAgent
 import knes.agent.executor.ExecutorAgent
+import knes.agent.explorer.AnthropicHaikuConsult
+import knes.agent.explorer.GeminiVisionConsult
+import knes.agent.explorer.HaikuConsult
 import knes.agent.llm.AnthropicSession
 import knes.agent.llm.ModelRouter
 import knes.agent.perception.FogOfWar
@@ -55,6 +58,28 @@ fun main(args: Array<String>) {
                 landmarks = landmarkMemory,
             )
 
+            // Vision backend for shop classification (Spec 2) and overworld
+            // landmark discovery (Spec 3a). Selected via KNES_VISION env var,
+            // mirroring ExplorerMain. gemini-pro requires GEMINI_API_KEY; absent
+            // falls back to Anthropic Haiku stub which returns NotFound — Spec 2
+            // outfit boot phase + Spec 3a bridge phase silently no-op in that case.
+            val visionBackend: HaikuConsult = when (System.getenv("KNES_VISION")?.lowercase()) {
+                "gemini-pro", "gemini" -> {
+                    val gKey = System.getenv("GEMINI_API_KEY")?.takeIf { it.isNotBlank() }
+                    if (gKey == null) {
+                        System.err.println("[main] KNES_VISION=gemini but GEMINI_API_KEY unset — using Anthropic Haiku stub")
+                        AnthropicHaikuConsult(apiKey = key)
+                    } else {
+                        System.err.println("[main] vision backend: Gemini 2.5 Pro")
+                        GeminiVisionConsult(apiKey = gKey)
+                    }
+                }
+                else -> {
+                    System.err.println("[main] vision backend: Anthropic Haiku (set KNES_VISION=gemini-pro for Gemini)")
+                    AnthropicHaikuConsult(apiKey = key)
+                }
+            }
+
             AgentSession(
                 toolset = toolset,
                 observer = observer,
@@ -64,6 +89,12 @@ fun main(args: Array<String>) {
                 budget = Budget(maxSkillInvocations = maxSkills, costCapUsd = costCap, wallClockCapSeconds = wallCap),
                 fog = fog,
                 landmarkMemory = landmarkMemory,
+                outfitVision = visionBackend,
+                outfitNavigator = visionInteriorNavigator,
+                outfitViewportSource = overworldMap,
+                outfitMapSession = mapSession,
+                bridgeVision = visionBackend,
+                bridgeViewportSource = overworldMap,
             ).run()
         }
     }
