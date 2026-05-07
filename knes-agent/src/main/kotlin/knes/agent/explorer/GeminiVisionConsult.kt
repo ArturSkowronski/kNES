@@ -63,12 +63,15 @@ class GeminiVisionConsult(
         return parseShopResponse(raw)
     }
 
-    /** Stub: real Gemini implementation will be added in Task 4. */
     override suspend fun classifyOverworldLandmark(
         screenshotBase64: String?,
         kind: String,
-    ): HaikuConsult.OverworldClassification =
-        HaikuConsult.OverworldClassification.NotFound(0.0)
+    ): HaikuConsult.OverworldClassification {
+        val body = buildBody(SYSTEM_OVERWORLD_LANDMARK, overworldUserText(kind), screenshotBase64,
+            maxOutputTokens = 400)
+        val raw = postOrNull(body) ?: return HaikuConsult.OverworldClassification.NotFound(0.0)
+        return parseOverworldResponse(raw)
+    }
 
     override fun close() { client.close() }
 
@@ -235,6 +238,58 @@ class GeminiVisionConsult(
             } catch (e: Exception) {
                 System.err.println("[gemini-vision] parseShop failed: ${e.message}")
                 HaikuConsult.ShopClassification("unknown", emptyList(), costUsd)
+            }
+        }
+
+        private const val SYSTEM_OVERWORLD_LANDMARK = """
+You are a vision tool for the FF1 NES overworld. The user provides a screenshot
+showing a 16x16 tile viewport centered on the party (party at tile (8,8) marked
+by 4 sprite avatars). Your job is to locate a specific landmark sprite.
+
+Respond with strict JSON ONLY (no commentary, no markdown fences). Schema:
+  {"found": true, "screenX": <int 0..15>, "screenY": <int 0..15>}
+or
+  {"found": false}
+
+Use tile coordinates (each visible tile is 16 NES pixels = one grid cell).
+Top-left tile is (0,0); bottom-right tile is (15,15). If the landmark is
+not visible in the viewport, return {"found": false}.
+"""
+
+        private fun overworldUserText(kind: String): String = when (kind) {
+            "chaos_shrine" -> """
+Locate the Chaos Shrine (Temple of Fiends) in the viewport.
+
+Visual cues: a small dark/grey stone temple structure, distinct from town walls.
+It has a single visible front entrance. It is NOT a castle (no flag/towers),
+NOT a town (no surrounding wall ring), NOT a forest tile. The shrine sits on
+grass terrain in the early-game continent north of Coneria.
+
+Return the tile coordinates of the entrance (the bottom-center tile of the
+shrine sprite — the tile the party will step onto to enter).
+""".trimIndent()
+            else -> "Locate the landmark of kind '$kind' in the viewport."
+        }
+
+        fun parseOverworldResponse(rawJson: String): HaikuConsult.OverworldClassification {
+            val (innerText, costUsd) = parseEnvelope(rawJson)
+            if (innerText == null) return HaikuConsult.OverworldClassification.NotFound(costUsd)
+            return try {
+                val match = JSON_OBJECT.find(innerText)
+                    ?: return HaikuConsult.OverworldClassification.NotFound(costUsd)
+                val obj = json.parseToJsonElement(match.value).jsonObject
+                val found = obj["found"]?.jsonPrimitive?.content?.equals("true", ignoreCase = true) ?: false
+                if (!found) return HaikuConsult.OverworldClassification.NotFound(costUsd)
+                val sx = obj["screenX"]?.jsonPrimitive?.content?.toIntOrNull()
+                val sy = obj["screenY"]?.jsonPrimitive?.content?.toIntOrNull()
+                if (sx == null || sy == null || sx !in 0..15 || sy !in 0..15) {
+                    HaikuConsult.OverworldClassification.NotFound(costUsd)
+                } else {
+                    HaikuConsult.OverworldClassification.Found(sx, sy, costUsd)
+                }
+            } catch (e: Exception) {
+                System.err.println("[gemini-vision] parseOverworld failed: ${e.message}")
+                HaikuConsult.OverworldClassification.NotFound(costUsd)
             }
         }
 
