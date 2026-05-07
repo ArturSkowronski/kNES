@@ -653,6 +653,27 @@ class AgentSession(
             return
         }
 
+        // 2b. Settle warp transition. WalkOverworldTo terminates the moment
+        //     party RAM coords match the destination, but the FF1 engine's
+        //     warp tile triggers a screen-fade + map-load that takes ~30
+        //     frames to update currentMapId. Without this, step 3's
+        //     WalkInteriorVision sees mapId=0 and returns NotInBuilding,
+        //     killing the boot phase before it can find the shop.
+        //     If after settling we're still on overworld (mapId=0), nudge
+        //     into the entry tile by stepping toward it from each cardinal.
+        toolset.step(buttons = emptyList(), frames = 30)
+        var postWalkMapId = toolset.getState().ram["currentMapId"] ?: 0
+        if (postWalkMapId == 0) {
+            for (dir in listOf("UP", "DOWN", "LEFT", "RIGHT")) {
+                toolset.tap(dir, count = 1, pressFrames = 24, gapFrames = 12)
+                toolset.step(buttons = emptyList(), frames = 30)
+                postWalkMapId = toolset.getState().ram["currentMapId"] ?: 0
+                if (postWalkMapId != 0) break
+            }
+        }
+        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+            note = "boot_walk_settle: postWalkMapId=$postWalkMapId"))
+
         // 3. Cached weapon shop or probe via DiscoverShop on candidate NPC_SHOPKEEPERs.
         val cachedShop = landmarkMemory.findByKind(LandmarkKind.NPC_SHOPKEEPER)
             .firstOrNull { it.note.contains("kind=weapon") }
