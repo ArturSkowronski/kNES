@@ -34,6 +34,24 @@ Cześć. Mam 45 minut. Dziś o budowaniu agentów — nie o LLM-ach, o tym co do
 
 ---
 
+<!-- _class: title -->
+
+# Jak ten talk powstał
+
+## Mam emulator NES.
+
+## Mam **$50/miesiąc** budżetu na Anthropic API.
+
+## Mam dziecko, więc mam **mało czasu**.
+
+> Z **kolizji tych trzech rzeczy** ma wyjść talk.
+
+<!--
+Małe wprowadzenie, kim jestem i czemu w ogóle stoję tutaj. Mam emulator NES w Kotlinie, kNES, pokazywałem na KotlinConf 2025. Mam $50 miesięcznie budżetu na Anthropic API — bo to jest mój hobby projekt, nie production budget. I mam dziecko. Mam więc mało czasu. To są moje constraints. I właśnie z kolizji tych trzech ograniczeń — własny emulator, ograniczony budżet, ograniczony czas — wyszedł ten cały talk. Wszystko, co Wam dziś pokażę, urodziło się z pytania „czemu właśnie wydałem $30 i Garland nadal stoi?". Znajdziecie się w którymś z tych trzech constraintów. To jest dla Was.
+-->
+
+---
+
 # Listopad 2025: $47 000
 
 - 4 agenty LangChain A2A. Analyzer ↔ Verifier.
@@ -244,6 +262,8 @@ Tu jest bardzo prosta lekcja, którą warto powiedzieć JVM crowd głośno: to j
 
 ## Tools matter more than prompts
 
+### *(Reminder: to nie LLM. To harness.)*
+
 ---
 
 <!-- _class: quote -->
@@ -350,6 +370,42 @@ V1 mojego agenta. 13 raw tools — step, tap, sequence, press, release, getState
 
 ---
 
+# Fix: real `Skill.kt` z mojego repo
+
+```kotlin
+interface Skill {
+    val id: String                  // stable, snake_case
+    val description: String         // surfaced as @LLMDescription
+    suspend fun invoke(args: Map<String, String>): SkillResult
+}
+```
+
+```kotlin
+class PressStartUntilOverworld(private val toolset: EmulatorToolset) : Skill {
+    override val id = "press_start_until_overworld"
+    override val description = "Advance from FF1 title through NEW GAME..."
+
+    override suspend fun invoke(args: Map<String, String>): SkillResult {
+        repeat(2) { toolset.tap("START", pressFrames = 5, gapFrames = 30) }
+        while (attempts < maxAttempts) {
+            val ram = toolset.getState().ram
+            if ((ram["char1_hpLow"] ?: 0) != 0 || (ram["worldX"] ?: 0) != 0) {
+                return SkillResult(ok = true, ...)   // ← termination via RAM
+            }
+            toolset.tap("A", pressFrames = 5, gapFrames = 30)
+        }
+    }
+}
+```
+
+**40 linii Kotlina = jedna decyzja LLM-a.**
+
+<!--
+To nie pseudokod. To realny fragment z mojego repo, knes-agent skills Skill.kt i PressStartUntilOverworld.kt. Interface ma trzy rzeczy: stabilny ID, opis który surface'uje się jako LLMDescription, suspend invoke. Implementacja PressStart — klasyczny scripted code. Tap START dwa razy, potem mashuj A aż char1 hpLow albo worldX skoczy z zera. Termination przez RAM, nie przez timeout. Czterdzieści linii Kotlina, które wcześniej kosztowały mnie 200 tokenów input plus output, plus iter cap ryzyko, plus cały mental load LLMa. Teraz to jest jedna decyzja: agent wybiera skill, reszta dzieje się deterministycznie.
+-->
+
+---
+
 # Tool design heuristics — tier list
 
 | Tier | Practice |
@@ -435,10 +491,12 @@ Pięć wzorców. Każdy ma swój use case. Chaining dla predictable sequential. 
 
 > *„Coding is harder to parallelise than research — subtasks are tightly coupled."*
 
+**To nie jest model contest. To harness contest.** 90.2% wzrost przyszedł z **architektury**, nie z lepszego modelu — Opus + Sonnet, ten sam stack.
+
 <small>[anthropic.com/engineering/multi-agent-research-system]</small>
 
 <!--
-Czerwiec 2025. Anthropic ujawnia architekturę swojego research systemu. Lead Opus, subagenci Sonnet. Ninedziesiąt procent lepiej niż single Opus. Ale piętnastokrotnie więcej tokenów niż chat. Token usage tłumaczy 80% wariancji performance. Drugi cytat ważny: coding jest trudniejszy do parallelizacji niż research. To bezpośrednio prowadzi do następnego slajdu.
+Czerwiec 2025. Anthropic ujawnia architekturę swojego research systemu. Lead Opus, subagenci Sonnet. Ninedziesiąt procent lepiej niż single Opus. Ale piętnastokrotnie więcej tokenów niż chat. Token usage tłumaczy 80% wariancji performance. Drugi cytat ważny: coding jest trudniejszy do parallelizacji niż research. I tu wraca refren: 90 procent wzrostu nie przyszło z lepszego modelu — Opus i Sonnet, ten sam stack co wszyscy mają. Przyszedł z architektury. To jest harness contest, nie model contest. To bezpośrednio prowadzi do następnego slajdu.
 -->
 
 ---
@@ -465,21 +523,32 @@ Tydzień po Anthropicu Cognition publikuje przeciwny post. Walden Yan. Dwie zasa
 
 ---
 
-# Resolution: it depends
+# Resolution: zadaj dwa pytania
 
-| Task | Recommendation |
-|------|----------------|
-| Research, parallel-friendly, read-heavy | **Multi-agent** (Anthropic +90.2%) |
-| Coding, tightly-coupled writes | **Single-threaded harness** (Cognition) |
-| Conversational, low-value | **Single LLM augmented** |
-| Predictable flow | **Workflow, not agent** |
+```
+                    Czy flow jest predictable?
+                    │
+              ┌─────┴─────┐
+              │ TAK       │ NIE
+              ▼           ▼
+       ┌──────────┐    Czy sub-tasks są parallelizable
+       │ WORKFLOW │    bez shared state?
+       │ (no LLM  │       │
+       │  loop)   │  ┌────┴────┐
+       └──────────┘  │ TAK     │ NIE
+                     ▼         ▼
+              ┌────────────┐  ┌──────────────────┐
+              │MULTI-AGENT │  │ SINGLE-THREADED  │
+              │+90.2%      │  │ + reviewer       │
+              │15× tokens  │  │ (Cognition)      │
+              │(Anthropic) │  │                  │
+              └────────────┘  └──────────────────┘
+```
 
-**Cognition Apr 2026 follow-up:** narrower class works — agents *contribute intelligence*, writes stay single-threaded.
-
-**JVM mapping:** Orchestrator-Workers = `Fork/Join` z 2011, tylko worker to LLM. *Pytanie „is your task parallelizable without shared state" — odpowiadamy je od dwudziestu lat.*
+**JVM mapping:** to jest `Fork/Join` decision z 2011. *Odpowiadamy je od 20 lat.*
 
 <!--
-Resolution: zależy od taska. Research parallel-friendly — multi-agent. Coding tightly-coupled — single-threaded. Conversational low-value — single LLM. Predictable flow — workflow, nie agent. Cognition w kwietniu 2026 wraca z follow-upem: węższa klasa multi-agent działa, gdzie sub-agenci dostarczają intelligence, a writes pozostają single-threaded. JVM zakotwiczenie: Orchestrator-Workers to dosłownie Fork/Join Pool z 2011, tylko worker to LLM zamiast wątku. Pytanie „czy ten task jest parallelizable bez shared state" — to odpowiadamy je w distributed systems od dwudziestu lat. Agentowy świat odkrywa to teraz.
+Zamiast tabeli pokażę Wam decyzję jako drzewo. Dwa pytania, w tej kolejności. Pierwsze: czy flow jest predictable, czy znacie kroki z góry? Jeśli tak — workflow, nie agent. Nie pchajcie LLM tam, gdzie wystarczy if-else. Jeśli nie — drugie pytanie: czy sub-tasks są parallelizable bez shared state? Jeśli tak — multi-agent się zwróci. Anthropic plus 90 procent na research, ale 15 razy tokens. Jeśli nie — single-threaded plus reviewer, jak Cognition mówi. Writes są niebezpieczne. JVM zakotwiczenie: to dosłownie Fork/Join decision z 2011 roku. „Is your task parallelizable without shared state?" — to odpowiadamy w distributed systems od dwudziestu lat. Agentowy świat odkrywa to teraz.
 -->
 
 ---
@@ -578,6 +647,21 @@ Mój case study. Advisor — Opus, read-only, single-shot. Executor — Sonnet l
 # Akt IV
 
 ## Memory: short term vs long term
+
+---
+
+<!-- _class: title -->
+
+# Agent bez pamięci to
+
+# **goldfish.**
+
+> Każdy run zaczyna od zera.
+> $1-2 z Opusa na rediscovery tego, co wiedział wczoraj.
+
+<!--
+Pauza. Jedno słowo. Goldfish. Agent bez pamięci to złota rybka. Każdy run zaczyna od zera. Mądry w sesji, zapomina na następną. W moim przypadku — dolar dwa z Opusa na rediscovery tych samych warpów peninsuli, które już wczoraj odkrywał. Discovery cost compound. To jest moment do oddechu, niech audiencja to przetrawi przed tabelami i frameworkami.
+-->
 
 ---
 
@@ -766,10 +850,14 @@ Mój case na planning. Advisor wykonuje plan na poziomie skill names — wysokop
 
 ## $47k loop · Replit · terraform destroy
 
-**Co się stało? Jak by tego uniknąć?**
+**Każda katastrofa = ten sam refren.**
+
+> *„To nie był LLM. To był harness."*
+
+Teraz mamy słownik, żeby pokazać dokładnie **który harness** zawiódł i **jak** by tego uniknąć.
 
 <!--
-Wracamy do tych trzech katastrof, którymi otworzyłem talk. Pamiętacie? $47k loop. Replit kasujący prod DB. Claude Code odpalający terraform destroy. Teraz, po tym co już dziś przeszliśmy — tools, architecture, memory, planning — możemy rozłożyć każdą z nich na czynniki pierwsze i pokazać konkretny harness, który by to zatrzymał. Każda katastrofa ma swój fix. Każdy fix ma swój JVM odpowiednik.
+Wracamy do tych trzech katastrof, którymi otworzyłem talk. Pamiętacie? $47k loop. Replit kasujący prod DB. Claude Code odpalający terraform destroy. Refren ten sam co przez cały talk: to nie był LLM, to był harness. Teraz, po tym co już dziś przeszliśmy — tools, architecture, memory, planning — mamy słownik, żeby pokazać dokładnie który harness zawiódł i jak by tego uniknąć. Każda katastrofa ma swój fix. Każdy fix ma swój JVM odpowiednik.
 -->
 
 ---

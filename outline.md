@@ -8,7 +8,16 @@
 
 ---
 
-## Hook — „Twój agent kosztował Cię $47 000 zanim wstałeś" (0:00 – 2:30) | 2.5 min
+## Pre-hook — Personal stake (0:00 – 0:30) | 30 sek ⭐
+Tytułowy slajd + 1 slajd „Jak ten talk powstał":
+- *„Mam emulator NES."*
+- *„Mam $50/miesiąc budżetu na Anthropic API."*
+- *„Mam dziecko, więc mam mało czasu."*
+- **„Z kolizji tych trzech rzeczy ma wyjść talk."**
+
+Polish dry humor + relatable + personal stake. Audiencja widzi human, nie speakera-encyclopedię.
+
+## Hook — „Twój agent kosztował Cię $47 000 zanim wstałeś" (0:30 – 3:00) | 2.5 min
 
 - **Listopad 2025:** market-research pipeline z 4 LangChain A2A agentami. Analyzer ↔ Verifier ping-pong bez terminacji. **11 dni. $47 000.** Mieli alerty — leciały na Slacka, którego nikt nie czytał. ([dev.to/$47k loop](https://dev.to/waxell/the-47000-agent-loop-why-token-budget-alerts-aren-t-budget-enforcement-389i))
 - **Lipiec 2025:** Replit's agent kasuje produkcyjną bazę 1190 firm podczas explicit code freeze. ([The Register](https://www.theregister.com/2025/07/21/replit_saastr_vibe_coding_incident/))
@@ -65,6 +74,8 @@
 
 ## Akt II — Tools matter more than prompts (8:00 – 16:00) | 8 min
 
+**Refren motif:** *„(Reminder: to nie LLM. To harness.)"* — divider slide
+
 ### 2.1 Agent-Computer Interface (1.5 min)
 - Anthropic SWE-bench SoTA przyszło z **przepisania tool descriptions, nie modelu**.
 - *„We spent more time optimizing tools than the prompt."* — Anthropic
@@ -93,6 +104,11 @@
 - Executor zapętlał się analizując RAM, nigdy nie naciskał przycisku.
 - $20–50 / attempted run.
 - Fix: 7 high-level skills, raw narzędzia ukryte. Cost spadł rzędem wielkości.
+
+### 2.5b Real Kotlin: `Skill.kt` z mojego repo (1 min) ⭐
+- Show real `interface Skill` — 3 fields (id, description, invoke)
+- Show real `PressStartUntilOverworld.kt` — termination via RAM (`char1_hpLow != 0 || worldX != 0`)
+- **„40 linii Kotlina = jedna decyzja LLM-a."**
 
 ### 2.6 Tool design heuristics (1 min)
 | Tier | Practice | Source |
@@ -131,12 +147,16 @@
 - Separating agent doing work from agent judging it = mitigates self-evaluation bias.
 - Failure mode: agents try to *„one-shot the app"* — burning whole context on half-implementation.
 
-### 3.4 Resolution: it depends (1 min)
-- **Research / parallel-friendly:** multi-agent worth it.
-- **Coding / tightly coupled:** single-threaded harness.
-- **Conversational / cheap tasks:** single LLM augmented.
-- *„Start with simple prompts, optimize with eval, add multi-step only when simpler solutions fall short."* (Anthropic)
-- **JVM mapping:** Orchestrator-Workers = `Fork/Join` z 2011, tylko worker to LLM. *Pytanie „is your task parallelizable without shared state" odpowiadamy w distributed systems od dwudziestu lat.*
+### 3.4 Resolution: zadaj dwa pytania (1 min) ⭐ — decision tree, NIE tabela
+ASCII flowchart:
+```
+Czy flow jest predictable?
+   TAK → workflow (no LLM loop)
+   NIE → Czy sub-tasks są parallelizable bez shared state?
+            TAK → multi-agent (+90.2%, 15× tokens)
+            NIE → single-threaded + reviewer (Cognition)
+```
+- **JVM mapping:** to jest `Fork/Join` decision z 2011. *„Is your task parallelizable without shared state" — odpowiadamy je od 20 lat.*
 
 ### 3.5 Mała disclosure: to nie pierwszy mój agent (1 min) ⭐
 - Historycznie pracowałem z **biznesowymi agentami** — workflow automation, customer support, RPA, operations.
@@ -169,7 +189,11 @@ Tabela porównawcza Business agent vs FF1 agent:
 
 ## Akt IV — Memory: short term vs long term (23:00 – 30:00) | 7 min
 
-> **Bridge z Akt III:** *„Mamy advisor, mamy executor, mamy tools. Pytanie: co agent **pamięta**? System bez pamięci to goldfish."*
+> **Bridge z Akt III:** *„Mamy advisor, mamy executor, mamy tools. Pytanie: co agent **pamięta**?"*
+
+### 4.0 Pause slide: „Agent bez pamięci to **goldfish**." (15 sek) ⭐
+- Single-line slajd, oddech dla audiencji.
+- *„Każdy run zaczyna od zera. $1-2 z Opusa na rediscovery tego, co wiedział wczoraj."*
 
 ### 4.1 Context rot — long context to nie magic bullet (1.5 min)
 - Chroma Research 2024-2025: tested 18 SOTA models (GPT-4.1, Claude 4, Gemini 2.5, Qwen3).
