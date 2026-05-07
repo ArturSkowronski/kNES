@@ -68,6 +68,14 @@ class AgentSession(
     private val outfitNavigator: VisionInteriorNavigator? = null,
     private val outfitViewportSource: ViewportSource? = null,
     private val outfitMapSession: MapSession? = null,
+    /**
+     * Spec 3a: optional dependencies for the post-BRIDGE phase that walks to
+     * the Temple of Fiends entrance. When both are non-null, BridgeTick is
+     * constructed and BRIDGE decisions flip `bridgePhaseActive=true`.
+     * When either is null, BRIDGE behaves as before (LLM executor takes over).
+     */
+    private val bridgeVision: HaikuConsult? = null,
+    private val bridgeViewportSource: ViewportSource? = null,
     runDir: Path = Trace.newRunDir(),
     /**
      * Optional per-turn hook fired after each executor turn. Receives current
@@ -84,6 +92,8 @@ class AgentSession(
 
     /** Strategy mode state — see spec §2 (one-way switch). */
     private var grindModeActive: Boolean = true
+    /** Spec 3a: post-BRIDGE phase active flag. Mutually exclusive with grindModeActive. */
+    private var bridgePhaseActive: Boolean = false
     private val recentDecisions: RecentDecisionsBuffer = RecentDecisionsBuffer()
 
     /** Set when REST is chosen; cleared when heal completes or fallback timer expires. */
@@ -110,6 +120,27 @@ class AgentSession(
     private val BRIDGE_TILE: Pair<Int, Int> = 157 to 141
     private val TARGET_MIN_LEVEL: Int = 3
 
+    /** Spec 3a: BridgeTick — null if vision deps absent. */
+    private val bridgeTick: BridgeTick? =
+        if (bridgeVision != null && bridgeViewportSource != null && fog != null) {
+            BridgeTick(
+                discover = {
+                    knes.agent.skills.DiscoverChaosShrine(
+                        toolset, bridgeViewportSource, landmarkMemory, bridgeVision,
+                    ).invoke(emptyMap())
+                },
+                walk = { tx, ty ->
+                    knes.agent.skills.WalkOverworldTo(
+                        toolset, bridgeViewportSource, fog,
+                    ).invoke(mapOf("targetX" to tx.toString(), "targetY" to ty.toString()))
+                },
+                landmarks = landmarkMemory,
+            )
+        } else null
+
+    /** Test accessor — reflects whether the BridgeTick was wired at session ctor. */
+    internal val bridgeTickIsConstructed: Boolean get() = bridgeTick != null
+
     private sealed interface SkillInvocation {
         data object Grind : SkillInvocation
         data object Rest : SkillInvocation
@@ -135,7 +166,11 @@ class AgentSession(
         return when (guarded) {
             StrategicDecision.GRIND -> SkillInvocation.Grind
             StrategicDecision.REST -> SkillInvocation.Rest
-            StrategicDecision.BRIDGE -> { grindModeActive = false; null }
+            StrategicDecision.BRIDGE -> {
+                grindModeActive = false
+                if (bridgeTick != null) bridgePhaseActive = true
+                null
+            }
         }
     }
 
@@ -381,6 +416,29 @@ class AgentSession(
                             // Fall through to existing advisor/executor flow — no `continue`.
                         }
                         null -> { /* BRIDGE: grindModeActive flipped, fall through */ }
+                    }
+                }
+
+                if (bridgePhaseActive && phase is FfPhase.Overworld && strategicPlan == null) {
+                    val r = bridgeTick!!.run(ram)
+                    when (r) {
+                        is BridgeTick.TickOutcome.Reached -> {
+                            bridgePhaseActive = false
+                            val wxNow = ram["worldX"] ?: -1
+                            val wyNow = ram["worldY"] ?: -1
+                            println("[bridge_phase] reached at ($wxNow,$wyNow)")
+                            trace.record(TraceEvent(turn = 0, role = "system", phase = phase.toString(),
+                                note = "bridge_phase_summary: reached at ($wxNow,$wyNow)"))
+                            continue
+                        }
+                        is BridgeTick.TickOutcome.BailToLlm -> {
+                            bridgePhaseActive = false
+                            println("[bridge_phase] bailed_to_llm")
+                            trace.record(TraceEvent(turn = 0, role = "system", phase = phase.toString(),
+                                note = "bridge_phase_summary: bailed_to_llm"))
+                            // fall through to LLM executor
+                        }
+                        is BridgeTick.TickOutcome.Continue -> continue
                     }
                 }
 
