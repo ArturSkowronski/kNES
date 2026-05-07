@@ -49,6 +49,18 @@
 - Cel: dotrzeć do Garlanda (boss Chaos Shrine).
 - Stack: Kotlin + Koog (JetBrains) + Anthropic Claude.
 
+### 1.5 Pierwszy prototyp: Claude Code + REST API (1.5 min) ⭐
+- **Zanim** zbudowałem własnego agenta w Koog — pierwszy prototyp był na **Claude Code przez MCP**.
+- Backstory: chciałem grać **JoyConami zamiast klawiatury**. Potem REST API. Potem MCP. Potem Claude Code wziął pada.
+- **Każda nowa warstwa = jeden wieczór pracy.** Claude Code load'ował ROM, tworzył party (Fighter/Thief/Black Belt/Red Mage), walczył z 5 IMPami na overworldzie.
+- Game changer: **mając własny emulator, masz pełny kontrakt** — input, output, RAM, czas.
+- Architektura: `ControllerProvider` jako abstrakcja z jedną metodą `pollInput()`. Implementacje: keyboard, JoyCon over Bluetooth, REST API (POST z curl), MCP (stdio), **mój własny agent w Koog**.
+- Bez własnego emulatora — Mesen, FCEUX nie mają takiego API. **To dlaczego cały ten talk jest możliwy.**
+- Source: [JVM Weekly vol. 172 — *Claude Plays Final Fantasy just before KotlinConf 2026*](https://www.jvm-weekly.com/p/claude-plays-final-fantasy-just-before)
+- Punchline: *„Każda warstwa zajęła mi jeden wieczór dzięki małemu interface'owi."*
+
+> Insight przed Aktem II: ten talk **nie jest o Final Fantasy.** Jest o tym, co się stało, jak naturalnie chciałem zrobić **swojego agenta** zamiast korzystać z czyjegoś.
+
 ---
 
 ## Akt II — Tools matter more than prompts (8:00 – 16:00) | 8 min

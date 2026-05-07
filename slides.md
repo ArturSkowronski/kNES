@@ -184,6 +184,47 @@ Cały talk będę ilustrował case study'em z mojego repo. kNES to emulator NES 
 
 ---
 
+# Pierwszy prototyp: Claude Code
+
+- Najpierw chciałem grać JoyConami zamiast klawiaturą.
+- Potem REST API. Potem MCP. Potem **Claude Code wziął pada**.
+- **Każda warstwa = jeden wieczór pracy.**
+
+> *„Mając własny emulator, masz pełny kontrakt — input, output, RAM, czas. Możesz wywiesić go na czymkolwiek."*
+
+**Game changer:** posiadanie własnego emulatora pozwoliło mi traktować input jako abstrakcję, nie keyboard event.
+
+<small>[JVM Weekly vol. 172](https://www.jvm-weekly.com/p/claude-plays-final-fantasy-just-before)</small>
+
+<!--
+Zanim w ogóle pomyślałem o własnym agencie w Kotlinie — pierwszy prototyp był na Claude Code przez MCP. Jeszcze wcześniej — chciałem grać JoyConami przez Bluetooth. Potem REST API na porcie 6502 przez Ktor. Potem MCP server jako thin proxy nad tym REST. Potem Claude Code wziął pada i zaczął grać Final Fantasy 1. Stworzył party Fighter/Thief/Black Belt/Red Mage, walczył z pięcioma IMPami na overworldzie. Każda z tych warstw zajęła mi jeden wieczór. Bo mając własny emulator, masz pełny kontrakt: input, output, RAM, czas — możesz wywiesić to na czymkolwiek.
+-->
+
+---
+
+# `ControllerProvider` — abstrakcja, która wszystko otworzyła
+
+```kotlin
+interface ControllerProvider {
+    fun pollInput(): InputState
+}
+```
+
+Implementacje:
+- `KeyboardControllerProvider` — Z, X, Enter, Space, arrows
+- `JoyConControllerProvider` — Switch JoyCon over Bluetooth
+- `RestApiControllerProvider` — `POST /step` z curl
+- `McpControllerProvider` — Claude Code wpisuje przyciski przez stdio
+- `AgentControllerProvider` — mój własny agent w Koog
+
+**Jeden interface. Pięć źródeł inputu. Każde dodane w jeden wieczór.**
+
+<!--
+To jest najważniejszy slajd o tym, dlaczego mając własny emulator wygrywasz. ControllerProvider to interface z jedną metodą. CPU 6502 nie wie skąd przychodzi input. Może być z klawiatury, JoyCona, REST API, MCP, mojego własnego agenta. Każda implementacja to wieczór pracy. To dosłownie hexagonal architecture applied do emulatora. Bez własnego emulatora bym nie mógł tego zrobić — Mesen, FCEUX, jakikolwiek inny mainstream emulator NES nie ma takiego API.
+-->
+
+---
+
 <!-- _class: divider -->
 
 # Akt II
