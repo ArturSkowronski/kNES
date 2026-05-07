@@ -5,7 +5,7 @@ import kotlinx.serialization.json.Json
 import java.io.File
 
 enum class LandmarkKind {
-    TOWN_ENTRY, CASTLE_ENTRY, DUNGEON_ENTRY,
+    TOWN_ENTRY, CASTLE_ENTRY, DUNGEON_ENTRY, TEMPLE_ENTRY,
     NPC_KING, NPC_SHOPKEEPER, NPC_INNKEEPER, NPC_GENERIC,
     STAIRS_UP, STAIRS_DOWN, EXIT_TILE,
     UNKNOWN,
