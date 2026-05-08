@@ -154,25 +154,25 @@ class InteriorExplorerTest : FunSpec({
         outcome.stats.walkSteps shouldBe 5
     }
 
-    test("StuckBailout after 8 consecutive walk STUCK") {
+    test("StuckBailout after 30 consecutive walk STUCK") {
         val haiku = FakeHaikuConsult()
         val mem = newMemory()
         val scanner = InteriorScanner(haiku, mem, "r1")
         val frame = FrameChangeDetector()
         val emu = StubEmulatorState()
-        val walk = StubWalkInteriorVision(sequence = List(8) { WalkOutcome.Stuck })
+        val walk = StubWalkInteriorVision(sequence = List(30) { WalkOutcome.Stuck })
         val explorer = InteriorExplorer(walk, scanner, frame, emu, mem)
 
         val outcome = runBlocking {
-            explorer.exploreUntilFound(LandmarkKind.NPC_SHOPKEEPER, { true }, capSteps = 50)
+            explorer.exploreUntilFound(LandmarkKind.NPC_SHOPKEEPER, { true }, capSteps = 100)
         }
         outcome.shouldBeInstanceOf<InteriorExplorer.ExploreOutcome.StuckBailout>()
         outcome.reason.contains("walk-stuck") shouldBe true
     }
 
-    test("10 consecutive empty Pass 1 returns StuckBailout pass1-degraded") {
+    test("30 consecutive empty Pass 1 returns StuckBailout pass1-degraded") {
         val haiku = FakeHaikuConsult(
-            candidatesScans = List(10) { HaikuConsult.CandidatesScan(emptyList(), 0.001) },
+            candidatesScans = List(30) { HaikuConsult.CandidatesScan(emptyList(), 0.001) },
         )
         val mem = newMemory()
         val scanner = InteriorScanner(haiku, mem, "r1")

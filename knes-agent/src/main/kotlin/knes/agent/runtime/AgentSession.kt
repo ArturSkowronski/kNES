@@ -779,7 +779,7 @@ class AgentSession(
         val outcome = explorer.exploreUntilFound(
             goal = LandmarkKind.NPC_SHOPKEEPER,
             predicate = { it.note.contains("kind=weapon") },
-            capSteps = 100,
+            capSteps = 200,
         )
 
         return when (outcome) {
