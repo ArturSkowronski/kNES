@@ -697,18 +697,47 @@ class AgentSession(
             // Spec 5 v2: Opus advisor-driven walk. Hardcoded sweep landed in
             // castle (run 16 confirmed mapId=24 = castle entrance hall). Use
             // Opus 4.5 with map context to find weapon shop door step-by-step.
-            val maxAdvisorIters = 25
+            val maxAdvisorIters = 30
             var entered = false
             var advisorTotalCost = 0.0
             var prevSx = -1
             var prevSy = -1
             var stuckCount = 0
+            var enteredWrongBuildingCount = 0
             for (iter in 0 until maxAdvisorIters) {
                 val ram = toolset.getState().ram
                 val curMapId = ram["currentMapId"] ?: 0
                 if (curMapId != 8 && curMapId != 0) {
-                    entered = true
-                    break
+                    // Verify it's a shop with shopkeeper visible (not castle).
+                    val verifyShot = toolset.getScreen().base64
+                    val verifyScan = outfitVision!!.scanInteriorCandidates(verifyShot)
+                    val keeperPresent = verifyScan.candidates.any { it.kind == "shopkeeper" }
+                    trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                        note = "boot_advisor_verify[$iter]: mapId=$curMapId " +
+                               "candidates=${verifyScan.candidates.size} " +
+                               "kinds=[${verifyScan.candidates.joinToString(",") { it.kind }}] " +
+                               "keeperPresent=$keeperPresent"))
+                    if (keeperPresent) {
+                        entered = true
+                        break
+                    }
+                    // Wrong building — exit and continue.
+                    enteredWrongBuildingCount++
+                    trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                        note = "boot_advisor_wrong_building[$iter]: mapId=$curMapId, " +
+                               "exiting via Down spam (count=$enteredWrongBuildingCount)"))
+                    if (enteredWrongBuildingCount > 3) {
+                        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                            note = "boot_advisor_give_up: 3+ wrong buildings entered"))
+                        break
+                    }
+                    // Tap S many times to exit.
+                    repeat(15) {
+                        toolset.tap("Down", count = 1, pressFrames = 12, gapFrames = 8)
+                        toolset.step(buttons = emptyList(), frames = 6)
+                        if ((toolset.getState().ram["currentMapId"] ?: 0) == 8) return@repeat
+                    }
+                    continue  // back to advisor loop in town overlay
                 }
                 val sx = ram["smPlayerX"] ?: 0
                 val sy = ram["smPlayerY"] ?: 0

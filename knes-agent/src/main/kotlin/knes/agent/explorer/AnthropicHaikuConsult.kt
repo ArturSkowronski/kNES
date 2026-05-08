@@ -240,28 +240,38 @@ class AnthropicHaikuConsult(
 
 The screenshot shows the FF1 NES viewport (256x240 px, 16x15 tiles). The party renders at viewport tile (8, 7).
 
-Coneria town map (per Mike's RPG Center reference):
-- Spawn: south of plaza, near building 1 (INN). Walking N enters the central plaza.
-- Building 1 (INN): south part of plaza, central
-- Building 2 (Armor shop): middle-row, west of plaza
-- Building 3 (Weapon shop): middle-row, east of armor (immediately right of building 2)
-- Building 4 (Black Magic): top-left, north of plaza
-- Building 5 (White Magic): top, immediately right of building 4
-- Building 6 (Clinic): top-right, far east
-- Building 7 (Item shop): middle-right, east side
-- Castle: north exit of plaza (gate at top-center, large pillared corridor leads to throne room)
+CONERIA TOWN MAP (mapId=8) — empirically observed coordinate layout:
+- Party SPAWN: smPlayer(12, 35) — south plaza, just north of town entry
+- Plaza area: smPlayerY 18-30, smPlayerX 4-22 (open floor)
+- CASTLE GATE: smPlayer(~10-12, ~16-18) — TOP CENTER of plaza, leads to mapId=24 (NOT a shop! It's a long pillared corridor — AVOID).
+- Building doors are on south walls. To enter, step N onto door tile.
 
-Doors are on the SOUTH wall of each building. To enter a building, walk to the door tile and step N — mapId will change.
+CRITICAL — buildings to AVOID:
+- CASTLE GATE at smPlayer(10-12, ~17): if party blocked moving Up at Y=18 with X near 11-12, the wall in front IS the castle entrance. DO NOT enter.
 
-Your task: recommend ONE single-step action to move party closer to the WEAPON SHOP (building 3). Look at the screenshot carefully — identify the party (4-character sprite at viewport center), then identify the surrounding buildings.
+Building positions (approximate smPlayer X — verify with screenshot landmarks):
+- Building 1 INN: south plaza X=10-13, Y~30
+- Building 2 ARMOR shop: middle-west, X~5-7, Y~18-20
+- Building 3 WEAPON shop: middle-west, X~8-9 (just east of armor), Y~18-20
+- Building 4 BLACK MAGIC: top-west, X~3-5, Y~10
+- Building 5 WHITE MAGIC: top, X~7-9, Y~10
+- Building 7 ITEM shop: middle-east, X~22-24, Y~18-20
+
+Strategy from spawn (12, 35):
+1. Walk N until Y~21 (mid-plaza)
+2. Walk W (Left) until X~8-9 (toward weapon shop)
+3. Walk N — should now hit weapon shop south wall
+4. Try Tap_A or step onto specific door tile (door is one-tile gap in wall)
+
+If blocked moving Up between Y=17 and Y=18, you are at CASTLE GATE — back off (Down) and re-route West/East.
 
 Output JSON only, no prose. Schema:
 {"action":"Up|Down|Left|Right|Tap_A|Done|Fail","reason":"<short>"}
 
 Rules:
 - Up/Down/Left/Right: move party one tile in that direction
-- Tap_A: try to interact with what's directly in front of party (e.g., open door, talk to NPC)
-- Done: party is already inside the weapon shop interior
+- Tap_A: try to interact with what's directly in front of party
+- Done: party is already inside the weapon shop interior (mapId changed AND keeper visible)
 - Fail: cannot determine path — abort
 """
 
