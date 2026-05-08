@@ -154,15 +154,13 @@ class InteriorExplorerTest : FunSpec({
         outcome.stats.walkSteps shouldBe 5
     }
 
-    test("StuckBailout after 3 consecutive walk STUCK") {
+    test("StuckBailout after 8 consecutive walk STUCK") {
         val haiku = FakeHaikuConsult()
         val mem = newMemory()
         val scanner = InteriorScanner(haiku, mem, "r1")
         val frame = FrameChangeDetector()
         val emu = StubEmulatorState()
-        val walk = StubWalkInteriorVision(sequence = listOf(
-            WalkOutcome.Stuck, WalkOutcome.Stuck, WalkOutcome.Stuck,
-        ))
+        val walk = StubWalkInteriorVision(sequence = List(8) { WalkOutcome.Stuck })
         val explorer = InteriorExplorer(walk, scanner, frame, emu, mem)
 
         val outcome = runBlocking {

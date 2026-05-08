@@ -155,7 +155,7 @@ class InteriorExplorer(
                 is WalkOutcome.Stepped -> consecutiveStuck = 0
                 is WalkOutcome.Stuck -> {
                     consecutiveStuck++
-                    if (consecutiveStuck >= 3) {
+                    if (consecutiveStuck >= 8) {
                         return ExploreOutcome.StuckBailout(
                             "walk-stuck-after-${walkSteps}-steps", stats(),
                         )
