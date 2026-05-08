@@ -133,6 +133,13 @@ class GeminiVisionConsult(
         }
     }
 
+    /** Spec 5: advisor stubbed in Gemini — Anthropic Opus is used for nav advice. */
+    override suspend fun adviseShopApproach(
+        screenshotBase64: String?,
+        contextText: String,
+    ): HaikuConsult.AdviceResponse =
+        HaikuConsult.AdviceResponse("Fail", "gemini-stub-not-implemented", 0.0)
+
     override fun close() { client.close() }
 
     private suspend fun postOrNull(body: String): String? {

@@ -103,6 +103,30 @@ class AnthropicHaikuConsult(
         return HaikuConsult.VerifyResult.Errored("stub-not-implemented", 0.0)
     }
 
+    /** Spec 5: Opus 4.5 advisor for one-step interior navigation. */
+    override suspend fun adviseShopApproach(
+        screenshotBase64: String?,
+        contextText: String,
+    ): HaikuConsult.AdviceResponse {
+        if (screenshotBase64.isNullOrEmpty()) {
+            return HaikuConsult.AdviceResponse("Fail", "no-screenshot", 0.0)
+        }
+        return try {
+            // Build body with Opus model override (bypassing default Haiku model).
+            val body = buildBodyWithModel(
+                modelOverride = ADVISOR_MODEL,
+                systemPrompt = SYSTEM_ADVISOR,
+                userText = contextText,
+                b64 = screenshotBase64,
+                maxTokens = 800,
+            )
+            val raw = postOrNull(body) ?: return HaikuConsult.AdviceResponse("Fail", "api-error", 0.0)
+            parseAdvice(raw)
+        } catch (e: Throwable) {
+            HaikuConsult.AdviceResponse("Fail", "exception: ${e.message}", 0.0)
+        }
+    }
+
     override fun close() { client.close() }
 
     private suspend fun postOrNull(body: String): String? {
@@ -138,9 +162,18 @@ class AnthropicHaikuConsult(
         return buildBody(systemPrompt = SYSTEM_DIALOG, userText = userText, b64 = b64, maxTokens = 200)
     }
 
-    private fun buildBody(systemPrompt: String, userText: String, b64: String?, maxTokens: Int): String {
+    private fun buildBody(systemPrompt: String, userText: String, b64: String?, maxTokens: Int): String =
+        buildBodyWithModel(model, systemPrompt, userText, b64, maxTokens)
+
+    private fun buildBodyWithModel(
+        modelOverride: String,
+        systemPrompt: String,
+        userText: String,
+        b64: String?,
+        maxTokens: Int,
+    ): String {
         val obj = buildJsonObject {
-            put("model", model)
+            put("model", modelOverride)
             put("max_tokens", maxTokens)
             put("system", systemPrompt)
             put("messages", buildJsonArray {
@@ -168,8 +201,79 @@ class AnthropicHaikuConsult(
         return obj.toString()
     }
 
+    private fun parseAdvice(raw: String): HaikuConsult.AdviceResponse {
+        return try {
+            val match = JSON_OBJECT.find(raw)?.value
+                ?: return HaikuConsult.AdviceResponse("Fail", "envelope-malformed", 0.0)
+            val envelope = json.parseToJsonElement(match).jsonObject
+            // Extract usage cost (Opus 4.5 pricing: $15/MTok in, $75/MTok out)
+            val usage = envelope["usage"]?.jsonObject
+            val inTok = usage?.get("input_tokens")?.jsonPrimitive?.intOrNull ?: 0
+            val outTok = usage?.get("output_tokens")?.jsonPrimitive?.intOrNull ?: 0
+            val cost = inTok * 15.0e-6 + outTok * 75.0e-6
+            // Extract content[0].text
+            val content = envelope["content"]?.jsonArray?.firstOrNull()?.jsonObject
+            val text = content?.get("text")?.jsonPrimitive?.contentOrNull
+                ?: return HaikuConsult.AdviceResponse("Fail", "no-content", cost)
+            // Find inner JSON in advice response
+            val innerMatch = JSON_OBJECT.find(text)?.value
+                ?: return HaikuConsult.AdviceResponse("Fail", "advice-not-json: ${text.take(80)}", cost)
+            val advice = json.parseToJsonElement(innerMatch).jsonObject
+            val action = advice["action"]?.jsonPrimitive?.contentOrNull ?: "Fail"
+            val reason = advice["reason"]?.jsonPrimitive?.contentOrNull ?: "no-reason"
+            HaikuConsult.AdviceResponse(action, reason, cost)
+        } catch (e: Throwable) {
+            HaikuConsult.AdviceResponse("Fail", "parse-exception: ${e.message}", 0.0)
+        }
+    }
+
     companion object {
         private const val API_URL = "https://api.anthropic.com/v1/messages"
+
+        // Spec 5: Opus 4.5 used for interior nav advice (richer spatial reasoning).
+        // The koog AnthropicModels enum tops out at Opus_4_5 in version 0.6.1; we
+        // hardcode the dated id directly to bypass the framework's model dispatch.
+        private const val ADVISOR_MODEL = "claude-opus-4-5-20251101"
+
+        private const val SYSTEM_ADVISOR =
+            """You are a navigation advisor for an autonomous Final Fantasy 1 (NES) agent inside Coneria town.
+
+The screenshot shows the FF1 NES viewport (256x240 px, 16x15 tiles). The party renders at viewport tile (8, 7).
+
+CONERIA TOWN MAP (mapId=8) — empirically observed coordinate layout:
+- Party SPAWN: smPlayer(12, 35) — south plaza, just north of town entry
+- Plaza area: smPlayerY 18-30, smPlayerX 4-22 (open floor)
+- CASTLE GATE: smPlayer(~10-12, ~16-18) — TOP CENTER of plaza, leads to mapId=24 (NOT a shop! It's a long pillared corridor — AVOID).
+- Building doors are on south walls. To enter, step N onto door tile.
+
+CRITICAL — buildings to AVOID:
+- CASTLE GATE at smPlayer(10-12, ~17): if party blocked moving Up at Y=18 with X near 11-12, the wall in front IS the castle entrance. DO NOT enter.
+
+Building positions (approximate smPlayer X — verify with screenshot landmarks):
+- Building 1 INN: south plaza X=10-13, Y~30
+- Building 2 ARMOR shop: middle-west, X~5-7, Y~18-20
+- Building 3 WEAPON shop: middle-west, X~8-9 (just east of armor), Y~18-20
+- Building 4 BLACK MAGIC: top-west, X~3-5, Y~10
+- Building 5 WHITE MAGIC: top, X~7-9, Y~10
+- Building 7 ITEM shop: middle-east, X~22-24, Y~18-20
+
+Strategy from spawn (12, 35):
+1. Walk N until Y~21 (mid-plaza)
+2. Walk W (Left) until X~8-9 (toward weapon shop)
+3. Walk N — should now hit weapon shop south wall
+4. Try Tap_A or step onto specific door tile (door is one-tile gap in wall)
+
+If blocked moving Up between Y=17 and Y=18, you are at CASTLE GATE — back off (Down) and re-route West/East.
+
+Output JSON only, no prose. Schema:
+{"action":"Up|Down|Left|Right|Tap_A|Done|Fail","reason":"<short>"}
+
+Rules:
+- Up/Down/Left/Right: move party one tile in that direction
+- Tap_A: try to interact with what's directly in front of party
+- Done: party is already inside the weapon shop interior (mapId changed AND keeper visible)
+- Fail: cannot determine path — abort
+"""
 
         // Haiku 4.5 pricing (Anthropic, late 2025): $1 / MTok input, $5 / MTok output.
         // If pricing changes the absolute cost number drifts but the budget cap still triggers.

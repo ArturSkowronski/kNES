@@ -109,6 +109,19 @@ interface HaikuConsult {
         candidateScreenX: Int,
         candidateScreenY: Int,
     ): VerifyResult
+
+    /** Spec 5: Opus advisor for one-step navigation toward a goal. */
+    data class AdviceResponse(
+        /** "Up" | "Down" | "Left" | "Right" | "Tap_A" | "Done" | "Fail" */
+        val action: String,
+        val reason: String,
+        val costUsd: Double,
+    )
+
+    suspend fun adviseShopApproach(
+        screenshotBase64: String?,
+        contextText: String,
+    ): AdviceResponse
 }
 
 /** Test fake. Pass canned results in constructor; assert calls via `interiorCalls`/`dialogCalls`/`shopCalls`. */
@@ -181,5 +194,12 @@ class FakeHaikuConsult(
             ?: HaikuConsult.VerifyResult.Errored("fake-not-scripted", 0.0)
         verifyCalls++
         return res
+    }
+
+    override suspend fun adviseShopApproach(
+        screenshotBase64: String?,
+        contextText: String,
+    ): HaikuConsult.AdviceResponse {
+        return HaikuConsult.AdviceResponse("Fail", "fake-not-scripted", 0.0)
     }
 }

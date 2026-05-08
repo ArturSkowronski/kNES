@@ -5,6 +5,7 @@ import knes.agent.advisor.StrategyAdvice
 import knes.agent.executor.ExecutorAgent
 import knes.agent.explorer.HaikuConsult
 import knes.agent.skills.BuyAtShop
+import knes.agent.skills.EnterConeriaWeaponShop
 import knes.agent.skills.EquipWeapon
 import knes.agent.skills.ExitInterior
 import knes.agent.skills.GrindLoop
@@ -66,6 +67,7 @@ class AgentSession(
      * tests + e2e callers that don't yet wire vision/MapSession keep working.
      */
     private val outfitVision: HaikuConsult? = null,
+    private val outfitAdvisor: HaikuConsult? = null,
     private val outfitNavigator: VisionInteriorNavigator? = null,
     private val outfitViewportSource: ViewportSource? = null,
     private val outfitMapSession: MapSession? = null,
@@ -684,6 +686,182 @@ class AgentSession(
             trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                 note = "boot_outfit_summary: boot_shop_not_found"))
             return
+        }
+
+        // 3b. Spec 5: navigate from town overlay (mapId=8) into the weapon shop
+        //     sub-interior so BuyAtShop's `landmark.mapId == currentMapId` precondition
+        //     holds. Skipped if party already inside a sub-shop (mapId != 8) — e.g.
+        //     warm-start where an earlier run left the party in the shop.
+        val initialMapId = toolset.getState().ram["currentMapId"] ?: 0
+        if (initialMapId == 8) {
+            // Spec 5 v2: Opus advisor-driven walk. Hardcoded sweep landed in
+            // castle (run 16 confirmed mapId=24 = castle entrance hall). Use
+            // Opus 4.5 with map context to find weapon shop door step-by-step.
+            val maxAdvisorIters = 30
+            var entered = false
+            var advisorTotalCost = 0.0
+            var prevSx = -1
+            var prevSy = -1
+            var stuckCount = 0
+            var enteredWrongBuildingCount = 0
+            for (iter in 0 until maxAdvisorIters) {
+                val ram = toolset.getState().ram
+                val curMapId = ram["currentMapId"] ?: 0
+                if (curMapId != 8 && curMapId != 0) {
+                    // Verify it's a shop with shopkeeper visible (not castle).
+                    val verifyShot = toolset.getScreen().base64
+                    val verifyScan = outfitVision!!.scanInteriorCandidates(verifyShot)
+                    val keeperPresent = verifyScan.candidates.any { it.kind == "shopkeeper" }
+                    trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                        note = "boot_advisor_verify[$iter]: mapId=$curMapId " +
+                               "candidates=${verifyScan.candidates.size} " +
+                               "kinds=[${verifyScan.candidates.joinToString(",") { it.kind }}] " +
+                               "keeperPresent=$keeperPresent"))
+                    if (keeperPresent) {
+                        entered = true
+                        break
+                    }
+                    // Wrong building — exit and continue.
+                    enteredWrongBuildingCount++
+                    trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                        note = "boot_advisor_wrong_building[$iter]: mapId=$curMapId, " +
+                               "exiting via Down spam (count=$enteredWrongBuildingCount)"))
+                    if (enteredWrongBuildingCount > 3) {
+                        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                            note = "boot_advisor_give_up: 3+ wrong buildings entered"))
+                        break
+                    }
+                    // Tap S many times to exit.
+                    repeat(15) {
+                        toolset.tap("Down", count = 1, pressFrames = 12, gapFrames = 8)
+                        toolset.step(buttons = emptyList(), frames = 6)
+                        if ((toolset.getState().ram["currentMapId"] ?: 0) == 8) return@repeat
+                    }
+                    continue  // back to advisor loop in town overlay
+                }
+                val sx = ram["smPlayerX"] ?: 0
+                val sy = ram["smPlayerY"] ?: 0
+                if (iter > 0 && sx == prevSx && sy == prevSy) {
+                    stuckCount++
+                } else {
+                    stuckCount = 0
+                }
+                prevSx = sx
+                prevSy = sy
+                val screenshot = toolset.getScreen().base64
+                val stuckHint = if (stuckCount > 0) {
+                    " IMPORTANT: party position has not changed for $stuckCount iteration(s) — " +
+                        "you are BLOCKED by a wall. Try a different direction (Left/Right) to find a door."
+                } else ""
+                val context = "Iteration $iter of $maxAdvisorIters. " +
+                    "Party is at smPlayer($sx, $sy) in Coneria town overlay (mapId=8). " +
+                    "Goal: enter the WEAPON SHOP (building 3 — middle row, just east of armor shop). " +
+                    "Avoid the CASTLE GATE at top-center of the plaza." +
+                    stuckHint +
+                    " Recommend ONE step toward the weapon shop."
+                val advisor = outfitAdvisor ?: outfitVision!!
+                val advice = advisor.adviseShopApproach(screenshot, context)
+                advisorTotalCost += advice.costUsd
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_advisor[$iter]: action=${advice.action} reason=${advice.reason} costUsd=${advice.costUsd}"))
+                when (advice.action) {
+                    "Up", "Down", "Left", "Right" ->
+                        toolset.tap(advice.action, count = 1, pressFrames = 12, gapFrames = 8)
+                    "Tap_A" -> toolset.tap("A", count = 1, pressFrames = 5, gapFrames = 12)
+                    "Done", "Fail" -> {
+                        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                            note = "boot_advisor_terminate: ${advice.action} after $iter iters"))
+                        break
+                    }
+                    else -> {
+                        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                            note = "boot_advisor_unknown_action: ${advice.action}"))
+                        break
+                    }
+                }
+                toolset.step(buttons = emptyList(), frames = 8)
+            }
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_advisor_summary: entered=$entered totalCostUsd=$advisorTotalCost"))
+            if (!entered) {
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_outfit_summary: advisor_failed_to_enter_shop"))
+                return
+            }
+            // Update cached weapon-shop landmark with discovered sub-shop mapId.
+            val postRam = toolset.getState().ram
+            val postMapId = postRam["currentMapId"] ?: 0
+            val postX = postRam["smPlayerX"] ?: 0
+            val postY = postRam["smPlayerY"] ?: 0
+            val cached = landmarkMemory.findByKind(LandmarkKind.NPC_SHOPKEEPER)
+                .firstOrNull { it.note.contains("kind=weapon") }
+            if (cached != null && cached.mapId != postMapId) {
+                landmarkMemory.recordIfNew(cached.copy(
+                    mapId = postMapId,
+                    localX = postX,
+                    localY = postY,
+                    visited = true,
+                    note = cached.note + "; entered_via=opus-advisor",
+                ))
+                landmarkMemory.save()
+            }
+        }
+
+        // 3c. Spec 5: post-enter vision-driven approach. Run 13 confirmed
+        //     EnterShop reaches a sub-shop (mapId=24) but blocks at a wall
+        //     before the keeper, so BuyAtShop's tap-A loop never opens the
+        //     BUY menu. Use Pass 1 vision to spot the shopkeeper in the
+        //     screen and walk party to (sx, sy+1) facing N — same Spec 4
+        //     pipeline already proven in §empirical run 8.
+        run {
+            val screenshot = toolset.getScreen().base64
+            // Always dump post-enter screenshot for diagnostic — gives visual
+            // evidence of which sub-shop we entered.
+            try {
+                val bytes = java.util.Base64.getDecoder().decode(screenshot)
+                java.io.File("/tmp/spec5-postenter.png").writeBytes(bytes)
+            } catch (_: Throwable) {}
+            val scan = outfitVision!!.scanInteriorCandidates(screenshot)
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_post_enter_scan: count=${scan.candidates.size} " +
+                       "kinds=[${scan.candidates.joinToString(",") { it.kind }}] " +
+                       "costUsd=${scan.costUsd} (screenshot: /tmp/spec5-postenter.png)"))
+            val keeper = scan.candidates
+                .filter { it.kind == "shopkeeper" }
+                .maxByOrNull { it.confidence }
+            if (keeper != null) {
+                // Party renders at viewport tile (8, 7). Walk so party stands at
+                // (sx, sy + 1) facing N — directly south of keeper.
+                val dx = keeper.screenX - 8
+                val dyTarget = (keeper.screenY + 1) - 7
+                val xDir = if (dx < 0) "Left" else "Right"
+                val yDir = if (dyTarget < 0) "Up" else "Down"
+                repeat(kotlin.math.abs(dx)) {
+                    toolset.tap(button = xDir, count = 1, pressFrames = 12, gapFrames = 8)
+                    toolset.step(buttons = emptyList(), frames = 8)
+                }
+                repeat(kotlin.math.abs(dyTarget)) {
+                    toolset.tap(button = yDir, count = 1, pressFrames = 12, gapFrames = 8)
+                    toolset.step(buttons = emptyList(), frames = 8)
+                }
+                // Final N-tap so facing stays N (in case last move was horizontal
+                // or a Down for descending toward keeper).
+                toolset.tap(button = "Up", count = 1, pressFrames = 12, gapFrames = 8)
+                toolset.step(buttons = emptyList(), frames = 8)
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_keeper_approach: keeper_screenXY=(${keeper.screenX},${keeper.screenY}) " +
+                           "walked dx=$dx dy=$dyTarget"))
+            } else {
+                // Diagnostic dump: save the post-enter screenshot for manual inspection.
+                try {
+                    val bytes = java.util.Base64.getDecoder().decode(screenshot)
+                    java.io.File("/tmp/spec5-postenter-no-keeper.png").writeBytes(bytes)
+                } catch (_: Throwable) {}
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_keeper_approach: NO_SHOPKEEPER_IN_VIEW; " +
+                           "screenshot dumped to /tmp/spec5-postenter-no-keeper.png; " +
+                           "BuyAtShop will likely fail"))
+            }
         }
 
         // 4. Per-char buy loop.
