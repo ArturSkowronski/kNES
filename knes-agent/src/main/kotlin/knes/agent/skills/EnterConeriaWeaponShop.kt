@@ -120,8 +120,27 @@ class EnterConeriaWeaponShop(
         northSteps: Int,
         sweepDone: Int,
     ): SkillResult {
-        // Phase 4: walk N inside sub-shop to face the shopkeeper.
-        repeat(6) { tapMove("Up") }
+        // Phase 4: walk N inside sub-shop until party Y stops decreasing
+        // (= keeper sprite blocking forward movement). Run 12 showed 6 steps
+        // wasn't enough — party landed at (12,14) far below keeper, and the
+        // first BuyAtShop "Down" cursor tap walked the party back out the
+        // south door, dropping mapId back to 8 mid-purchase loop.
+        var prevY = entryRam["smPlayerY"] ?: 0
+        var sameYcount = 0
+        var subShopWalkSteps = 0
+        for (i in 0 until 14) {
+            tapMove("Up")
+            subShopWalkSteps++
+            val ram = toolset.getState().ram
+            val curY = ram["smPlayerY"] ?: 0
+            if (curY == prevY) {
+                sameYcount++
+                if (sameYcount >= 2) break
+            } else {
+                sameYcount = 0
+                prevY = curY
+            }
+        }
         val post = toolset.getState().ram
         val postMapId = post["currentMapId"] ?: newMapId
         val postX = post["smPlayerX"] ?: 0
@@ -145,7 +164,7 @@ class EnterConeriaWeaponShop(
         return SkillResult(
             ok = true,
             message = "Entered: via=$via northSteps=$northSteps sweepDone=$sweepDone " +
-                "subShopMapId=$postMapId localXY=($postX,$postY)",
+                "subShopWalkSteps=$subShopWalkSteps subShopMapId=$postMapId localXY=($postX,$postY)",
             ramAfter = post,
         )
     }
