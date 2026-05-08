@@ -80,6 +80,11 @@ fun main(args: Array<String>) {
                 }
             }
 
+            // Spec 5: dedicated Opus advisor for shop nav (always Anthropic,
+            // bypasses KNES_VISION dispatch). Implementation in
+            // AnthropicHaikuConsult.adviseShopApproach uses Opus 4.5 directly.
+            val outfitAdvisor: HaikuConsult = AnthropicHaikuConsult(apiKey = key)
+
             AgentSession(
                 toolset = toolset,
                 observer = observer,
@@ -90,6 +95,7 @@ fun main(args: Array<String>) {
                 fog = fog,
                 landmarkMemory = landmarkMemory,
                 outfitVision = visionBackend,
+                outfitAdvisor = outfitAdvisor,
                 outfitNavigator = visionInteriorNavigator,
                 outfitViewportSource = overworldMap,
                 outfitMapSession = mapSession,

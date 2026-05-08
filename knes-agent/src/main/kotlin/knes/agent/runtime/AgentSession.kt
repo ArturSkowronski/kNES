@@ -67,6 +67,7 @@ class AgentSession(
      * tests + e2e callers that don't yet wire vision/MapSession keep working.
      */
     private val outfitVision: HaikuConsult? = null,
+    private val outfitAdvisor: HaikuConsult? = null,
     private val outfitNavigator: VisionInteriorNavigator? = null,
     private val outfitViewportSource: ViewportSource? = null,
     private val outfitMapSession: MapSession? = null,
@@ -713,7 +714,8 @@ class AgentSession(
                     "Party is at smPlayer($sx, $sy) in Coneria town overlay (mapId=8). " +
                     "Goal: enter the WEAPON SHOP (building 3 — middle row, just east of armor shop). " +
                     "Avoid the CASTLE GATE at top-center of the plaza. Recommend ONE step toward the weapon shop."
-                val advice = outfitVision!!.adviseShopApproach(screenshot, context)
+                val advisor = outfitAdvisor ?: outfitVision!!
+                val advice = advisor.adviseShopApproach(screenshot, context)
                 advisorTotalCost += advice.costUsd
                 trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                     note = "boot_advisor[$iter]: action=${advice.action} reason=${advice.reason} costUsd=${advice.costUsd}"))
