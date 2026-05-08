@@ -103,6 +103,30 @@ class AnthropicHaikuConsult(
         return HaikuConsult.VerifyResult.Errored("stub-not-implemented", 0.0)
     }
 
+    /** Spec 5: Opus 4.5 advisor for one-step interior navigation. */
+    override suspend fun adviseShopApproach(
+        screenshotBase64: String?,
+        contextText: String,
+    ): HaikuConsult.AdviceResponse {
+        if (screenshotBase64.isNullOrEmpty()) {
+            return HaikuConsult.AdviceResponse("Fail", "no-screenshot", 0.0)
+        }
+        return try {
+            // Build body with Opus model override (bypassing default Haiku model).
+            val body = buildBodyWithModel(
+                modelOverride = ADVISOR_MODEL,
+                systemPrompt = SYSTEM_ADVISOR,
+                userText = contextText,
+                b64 = screenshotBase64,
+                maxTokens = 800,
+            )
+            val raw = postOrNull(body) ?: return HaikuConsult.AdviceResponse("Fail", "api-error", 0.0)
+            parseAdvice(raw)
+        } catch (e: Throwable) {
+            HaikuConsult.AdviceResponse("Fail", "exception: ${e.message}", 0.0)
+        }
+    }
+
     override fun close() { client.close() }
 
     private suspend fun postOrNull(body: String): String? {
@@ -138,9 +162,18 @@ class AnthropicHaikuConsult(
         return buildBody(systemPrompt = SYSTEM_DIALOG, userText = userText, b64 = b64, maxTokens = 200)
     }
 
-    private fun buildBody(systemPrompt: String, userText: String, b64: String?, maxTokens: Int): String {
+    private fun buildBody(systemPrompt: String, userText: String, b64: String?, maxTokens: Int): String =
+        buildBodyWithModel(model, systemPrompt, userText, b64, maxTokens)
+
+    private fun buildBodyWithModel(
+        modelOverride: String,
+        systemPrompt: String,
+        userText: String,
+        b64: String?,
+        maxTokens: Int,
+    ): String {
         val obj = buildJsonObject {
-            put("model", model)
+            put("model", modelOverride)
             put("max_tokens", maxTokens)
             put("system", systemPrompt)
             put("messages", buildJsonArray {
@@ -168,8 +201,69 @@ class AnthropicHaikuConsult(
         return obj.toString()
     }
 
+    private fun parseAdvice(raw: String): HaikuConsult.AdviceResponse {
+        return try {
+            val match = JSON_OBJECT.find(raw)?.value
+                ?: return HaikuConsult.AdviceResponse("Fail", "envelope-malformed", 0.0)
+            val envelope = json.parseToJsonElement(match).jsonObject
+            // Extract usage cost (Opus 4.5 pricing: $15/MTok in, $75/MTok out)
+            val usage = envelope["usage"]?.jsonObject
+            val inTok = usage?.get("input_tokens")?.jsonPrimitive?.intOrNull ?: 0
+            val outTok = usage?.get("output_tokens")?.jsonPrimitive?.intOrNull ?: 0
+            val cost = inTok * 15.0e-6 + outTok * 75.0e-6
+            // Extract content[0].text
+            val content = envelope["content"]?.jsonArray?.firstOrNull()?.jsonObject
+            val text = content?.get("text")?.jsonPrimitive?.contentOrNull
+                ?: return HaikuConsult.AdviceResponse("Fail", "no-content", cost)
+            // Find inner JSON in advice response
+            val innerMatch = JSON_OBJECT.find(text)?.value
+                ?: return HaikuConsult.AdviceResponse("Fail", "advice-not-json: ${text.take(80)}", cost)
+            val advice = json.parseToJsonElement(innerMatch).jsonObject
+            val action = advice["action"]?.jsonPrimitive?.contentOrNull ?: "Fail"
+            val reason = advice["reason"]?.jsonPrimitive?.contentOrNull ?: "no-reason"
+            HaikuConsult.AdviceResponse(action, reason, cost)
+        } catch (e: Throwable) {
+            HaikuConsult.AdviceResponse("Fail", "parse-exception: ${e.message}", 0.0)
+        }
+    }
+
     companion object {
         private const val API_URL = "https://api.anthropic.com/v1/messages"
+
+        // Spec 5: Opus 4.5 used for interior nav advice (richer spatial reasoning).
+        // The koog AnthropicModels enum tops out at Opus_4_5 in version 0.6.1; we
+        // hardcode the dated id directly to bypass the framework's model dispatch.
+        private const val ADVISOR_MODEL = "claude-opus-4-5-20251101"
+
+        private const val SYSTEM_ADVISOR =
+            """You are a navigation advisor for an autonomous Final Fantasy 1 (NES) agent inside Coneria town.
+
+The screenshot shows the FF1 NES viewport (256x240 px, 16x15 tiles). The party renders at viewport tile (8, 7).
+
+Coneria town map (per Mike's RPG Center reference):
+- Spawn: south of plaza, near building 1 (INN). Walking N enters the central plaza.
+- Building 1 (INN): south part of plaza, central
+- Building 2 (Armor shop): middle-row, west of plaza
+- Building 3 (Weapon shop): middle-row, east of armor (immediately right of building 2)
+- Building 4 (Black Magic): top-left, north of plaza
+- Building 5 (White Magic): top, immediately right of building 4
+- Building 6 (Clinic): top-right, far east
+- Building 7 (Item shop): middle-right, east side
+- Castle: north exit of plaza (gate at top-center, large pillared corridor leads to throne room)
+
+Doors are on the SOUTH wall of each building. To enter a building, walk to the door tile and step N — mapId will change.
+
+Your task: recommend ONE single-step action to move party closer to the WEAPON SHOP (building 3). Look at the screenshot carefully — identify the party (4-character sprite at viewport center), then identify the surrounding buildings.
+
+Output JSON only, no prose. Schema:
+{"action":"Up|Down|Left|Right|Tap_A|Done|Fail","reason":"<short>"}
+
+Rules:
+- Up/Down/Left/Right: move party one tile in that direction
+- Tap_A: try to interact with what's directly in front of party (e.g., open door, talk to NPC)
+- Done: party is already inside the weapon shop interior
+- Fail: cannot determine path — abort
+"""
 
         // Haiku 4.5 pricing (Anthropic, late 2025): $1 / MTok input, $5 / MTok output.
         // If pricing changes the absolute cost number drifts but the budget cap still triggers.

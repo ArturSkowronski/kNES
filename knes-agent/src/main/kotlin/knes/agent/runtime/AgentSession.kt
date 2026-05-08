@@ -691,16 +691,72 @@ class AgentSession(
         //     sub-interior so BuyAtShop's `landmark.mapId == currentMapId` precondition
         //     holds. Skipped if party already inside a sub-shop (mapId != 8) — e.g.
         //     warm-start where an earlier run left the party in the shop.
-        val currentMapId = toolset.getState().ram["currentMapId"] ?: 0
-        if (currentMapId == 8) {
-            val enterSkill = EnterConeriaWeaponShop(toolset, landmarkMemory)
-            val r = enterSkill.invoke(emptyMap())
-            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                note = "boot_enter_shop: ${r.message}"))
-            if (!r.ok) {
+        val initialMapId = toolset.getState().ram["currentMapId"] ?: 0
+        if (initialMapId == 8) {
+            // Spec 5 v2: Opus advisor-driven walk. Hardcoded sweep landed in
+            // castle (run 16 confirmed mapId=24 = castle entrance hall). Use
+            // Opus 4.5 with map context to find weapon shop door step-by-step.
+            val maxAdvisorIters = 20
+            var entered = false
+            var advisorTotalCost = 0.0
+            for (iter in 0 until maxAdvisorIters) {
+                val ram = toolset.getState().ram
+                val curMapId = ram["currentMapId"] ?: 0
+                if (curMapId != 8 && curMapId != 0) {
+                    entered = true
+                    break
+                }
+                val sx = ram["smPlayerX"] ?: 0
+                val sy = ram["smPlayerY"] ?: 0
+                val screenshot = toolset.getScreen().base64
+                val context = "Iteration $iter of $maxAdvisorIters. " +
+                    "Party is at smPlayer($sx, $sy) in Coneria town overlay (mapId=8). " +
+                    "Goal: enter the WEAPON SHOP (building 3 — middle row, just east of armor shop). " +
+                    "Avoid the CASTLE GATE at top-center of the plaza. Recommend ONE step toward the weapon shop."
+                val advice = outfitVision!!.adviseShopApproach(screenshot, context)
+                advisorTotalCost += advice.costUsd
                 trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                    note = "boot_outfit_summary: enter_shop_failed"))
+                    note = "boot_advisor[$iter]: action=${advice.action} reason=${advice.reason} costUsd=${advice.costUsd}"))
+                when (advice.action) {
+                    "Up", "Down", "Left", "Right" ->
+                        toolset.tap(advice.action, count = 1, pressFrames = 12, gapFrames = 8)
+                    "Tap_A" -> toolset.tap("A", count = 1, pressFrames = 5, gapFrames = 12)
+                    "Done", "Fail" -> {
+                        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                            note = "boot_advisor_terminate: ${advice.action} after $iter iters"))
+                        break
+                    }
+                    else -> {
+                        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                            note = "boot_advisor_unknown_action: ${advice.action}"))
+                        break
+                    }
+                }
+                toolset.step(buttons = emptyList(), frames = 8)
+            }
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_advisor_summary: entered=$entered totalCostUsd=$advisorTotalCost"))
+            if (!entered) {
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_outfit_summary: advisor_failed_to_enter_shop"))
                 return
+            }
+            // Update cached weapon-shop landmark with discovered sub-shop mapId.
+            val postRam = toolset.getState().ram
+            val postMapId = postRam["currentMapId"] ?: 0
+            val postX = postRam["smPlayerX"] ?: 0
+            val postY = postRam["smPlayerY"] ?: 0
+            val cached = landmarkMemory.findByKind(LandmarkKind.NPC_SHOPKEEPER)
+                .firstOrNull { it.note.contains("kind=weapon") }
+            if (cached != null && cached.mapId != postMapId) {
+                landmarkMemory.recordIfNew(cached.copy(
+                    mapId = postMapId,
+                    localX = postX,
+                    localY = postY,
+                    visited = true,
+                    note = cached.note + "; entered_via=opus-advisor",
+                ))
+                landmarkMemory.save()
             }
         }
 
