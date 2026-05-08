@@ -5,6 +5,9 @@ import knes.agent.perception.Landmark
 import knes.agent.perception.LandmarkKind
 import knes.agent.perception.LandmarkMemory
 
+/** Trace event sink. Same shape as runtime.InteriorTraceSink but defined here to avoid runtime↔skills coupling. */
+typealias InteriorTraceSink = (String) -> Unit
+
 /**
  * Two-pass vision scanner for interior landmark self-discovery.
  *
@@ -19,6 +22,7 @@ class InteriorScanner(
     private val memory: LandmarkMemory,
     private val runId: String,
     private val confidenceThreshold: Double = 0.5,
+    private val traceSink: InteriorTraceSink = {},
 ) {
     data class ScanResult(
         val candidates: List<HaikuConsult.CandidateLandmark>,
@@ -53,14 +57,31 @@ class InteriorScanner(
             candidate.screenY,
         )
         return when (verify) {
-            is HaikuConsult.VerifyResult.Errored ->
+            is HaikuConsult.VerifyResult.Errored -> {
+                traceSink(
+                    "interior_scan_error: pass=2, candidate=${candidate.kind}, " +
+                        "screenXY=(${candidate.screenX},${candidate.screenY}), " +
+                        "reason=${verify.reason}",
+                )
                 PersistResult.Errored(verify.reason, verify.costUsd)
-            is HaikuConsult.VerifyResult.Rejected ->
+            }
+            is HaikuConsult.VerifyResult.Rejected -> {
+                traceSink(
+                    "interior_scan_rejected: candidateKind=${candidate.kind}, " +
+                        "reason=pass2-rejected, pass2Reason=${verify.reason}",
+                )
                 PersistResult.Rejected(verify.reason, verify.costUsd)
+            }
             is HaikuConsult.VerifyResult.Confirmed -> {
                 val (lx, ly) = screenTileToLocal(
                     candidate.screenX, candidate.screenY, partyLocalX, partyLocalY,
-                ) ?: return PersistResult.Rejected("invalid-coords", verify.costUsd)
+                ) ?: run {
+                    traceSink(
+                        "interior_scan_rejected: candidateKind=${candidate.kind}, " +
+                            "reason=invalid-coords",
+                    )
+                    return PersistResult.Rejected("invalid-coords", verify.costUsd)
+                }
                 val kind = kindStringToEnum(verify.refinedKind)
                 val note = if (verify.refinedShopKind != null) {
                     "kind=${verify.refinedShopKind}; verified=pass2; reason=${verify.reason}"
@@ -79,6 +100,11 @@ class InteriorScanner(
                 )
                 memory.recordIfNew(landmark)
                 memory.save()
+                traceSink(
+                    "interior_scan_confirmed: kind=${landmark.kind}, " +
+                        "mapId=${landmark.mapId}, localXY=(${landmark.localX},${landmark.localY}), " +
+                        "note=${landmark.note}, runId=${landmark.discoveredRunId}",
+                )
                 PersistResult.Confirmed(landmark, verify.costUsd)
             }
         }

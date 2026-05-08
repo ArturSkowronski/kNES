@@ -268,6 +268,39 @@ class InteriorExplorerTest : FunSpec({
         outcome.shouldBeInstanceOf<InteriorExplorer.ExploreOutcome.EncounterTriggered>()
     }
 
+    test("Found path emits scan_triggered + scan_candidates + scan_confirmed traces") {
+        val captured = mutableListOf<String>()
+        val sink: InteriorTraceSink = { captured += it }
+
+        val haiku = FakeHaikuConsult(
+            candidatesScans = listOf(HaikuConsult.CandidatesScan(listOf(
+                HaikuConsult.CandidateLandmark("shopkeeper", 5, 3, 0.9),
+            ), 0.002)),
+            verifyResults = listOf(
+                HaikuConsult.VerifyResult.Confirmed("shopkeeper", "weapon", "ok", 0.005),
+            ),
+        )
+        val mem = newMemory()
+        val scanner = InteriorScanner(haiku, mem, "r1", traceSink = sink)
+        val frame = FrameChangeDetector()
+        val emu = StubEmulatorState(oam = setOf(FrameChangeDetector.SpriteSlot(0, 0xA0, 120, 112)))
+        val walk = StubWalkInteriorVision(sequence = listOf(WalkOutcome.Stepped("east")))
+        val explorer = InteriorExplorer(walk, scanner, frame, emu, mem, traceSink = sink)
+
+        val outcome = runBlocking {
+            explorer.exploreUntilFound(
+                LandmarkKind.NPC_SHOPKEEPER,
+                { it.note.contains("kind=weapon") },
+                capSteps = 50,
+            )
+        }
+
+        outcome.shouldBeInstanceOf<InteriorExplorer.ExploreOutcome.Found>()
+        captured.any { it.startsWith("interior_scan_triggered:") } shouldBe true
+        captured.any { it.startsWith("interior_scan_candidates:") } shouldBe true
+        captured.any { it.startsWith("interior_scan_confirmed:") } shouldBe true
+    }
+
     test("error result counted but does not bail explorer") {
         // Scan returns 1 candidate; verify returns Errored. Explorer continues.
         val haiku = FakeHaikuConsult(

@@ -8,6 +8,9 @@ import knes.agent.skills.InteriorScanner
 import knes.agent.skills.WalkInteriorVision
 import knes.agent.tools.EmulatorToolset
 
+/** Trace event sink. Receives the structured note string; caller-side wraps in TraceEvent. */
+typealias InteriorTraceSink = (String) -> Unit
+
 /**
  * Adapter for the emulator state needed by InteriorExplorer.
  *
@@ -47,6 +50,7 @@ class InteriorExplorer(
     private val frameDetector: FrameChangeDetector,
     private val emu: InteriorEmulatorState,
     private val memory: LandmarkMemory,
+    private val traceSink: InteriorTraceSink = {},
 ) {
     sealed interface ExploreOutcome {
         data class Found(val landmark: Landmark, val stats: ExploreStats) : ExploreOutcome
@@ -92,9 +96,17 @@ class InteriorExplorer(
 
             if (frameDetector.shouldScan(oam, pixels)) {
                 scansTriggered++
+                traceSink(
+                    "interior_scan_triggered: totalScansThisRun=$scansTriggered, " +
+                        "fallback=${frameDetector.mode}",
+                )
                 val screenshot = emu.captureScreenshotBase64()
                 val scan = scanner.scanCandidates(screenshot)
                 costUsd += scan.costUsd
+                traceSink(
+                    "interior_scan_candidates: count=${scan.candidates.size}, " +
+                        "kinds=[${scan.candidates.joinToString(",") { it.kind }}]",
+                )
                 if (scan.candidates.isEmpty()) {
                     consecutiveScanEmpty++
                     if (consecutiveScanEmpty >= 3) {

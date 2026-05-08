@@ -764,12 +764,16 @@ class AgentSession(
 
         val walkSkill = buildWalkInteriorVision(navigator, mapSession)
         val runId = resolvedRunDir.fileName?.toString() ?: "run"
+        val sink: InteriorTraceSink = { note ->
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT", note = note))
+        }
         val explorer = InteriorExplorer(
             walk = RealWalkInteriorVisionAdapter(walkSkill, toolset),
-            scanner = InteriorScanner(vision, landmarkMemory, runId),
+            scanner = InteriorScanner(vision, landmarkMemory, runId, traceSink = sink),
             frameDetector = FrameChangeDetector(),
             emu = RealInteriorEmulatorState(toolset),
             memory = landmarkMemory,
+            traceSink = sink,
         )
 
         val outcome = explorer.exploreUntilFound(
