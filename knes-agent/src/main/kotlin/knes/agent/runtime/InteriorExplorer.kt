@@ -63,12 +63,94 @@ class InteriorExplorer(
         val costUsd: Double,
     )
 
-    /** Goal-aware exploration. Task 9 fills the loop body. */
+    /** Goal-aware exploration. */
     suspend fun exploreUntilFound(
         goal: LandmarkKind,
         predicate: (Landmark) -> Boolean,
         capSteps: Int,
     ): ExploreOutcome {
-        TODO("implemented in Task 9")
+        var walkSteps = 0
+        var scansTriggered = 0
+        var candidatesEvaluated = 0
+        var confirmedCount = 0
+        var rejectedCount = 0
+        var erroredCount = 0
+        var costUsd = 0.0
+        var consecutiveStuck = 0
+        var consecutiveScanEmpty = 0
+
+        fun stats() = ExploreStats(
+            walkSteps, scansTriggered, candidatesEvaluated,
+            confirmedCount, rejectedCount, erroredCount, costUsd,
+        )
+
+        while (walkSteps < capSteps) {
+            val pixels = emu.capturePixels()
+            val oam = emu.captureOam()
+
+            if (frameDetector.shouldScan(oam, pixels)) {
+                scansTriggered++
+                val screenshot = emu.captureScreenshotBase64()
+                val scan = scanner.scanCandidates(screenshot)
+                costUsd += scan.costUsd
+                if (scan.candidates.isEmpty()) {
+                    consecutiveScanEmpty++
+                    if (consecutiveScanEmpty >= 3) {
+                        return ExploreOutcome.StuckBailout("pass1-degraded", stats())
+                    }
+                } else {
+                    consecutiveScanEmpty = 0
+                    for (cand in scan.candidates) {
+                        candidatesEvaluated++
+                        val focused = emu.captureFocusedCropBase64(cand.screenX, cand.screenY)
+                        val pr = scanner.verifyAndPersist(
+                            focused,
+                            cand,
+                            mapId = emu.currentMapId(),
+                            partyLocalX = emu.partyLocalX(),
+                            partyLocalY = emu.partyLocalY(),
+                        )
+                        when (pr) {
+                            is InteriorScanner.PersistResult.Confirmed -> {
+                                confirmedCount++
+                                costUsd += pr.costUsd
+                            }
+                            is InteriorScanner.PersistResult.Rejected -> {
+                                rejectedCount++
+                                costUsd += pr.costUsd
+                            }
+                            is InteriorScanner.PersistResult.Errored -> {
+                                erroredCount++
+                                costUsd += pr.costUsd
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Goal check after scan — landmark may have just been persisted.
+            val foundLandmark = memory.findByKind(goal).firstOrNull(predicate)
+            if (foundLandmark != null) {
+                return ExploreOutcome.Found(foundLandmark, stats())
+            }
+
+            // Walk step.
+            val walkOutcome = walk.step()
+            walkSteps++
+            when (walkOutcome) {
+                is WalkOutcome.Stepped -> consecutiveStuck = 0
+                is WalkOutcome.Stuck -> {
+                    consecutiveStuck++
+                    if (consecutiveStuck >= 3) {
+                        return ExploreOutcome.StuckBailout(
+                            "walk-stuck-after-${walkSteps}-steps", stats(),
+                        )
+                    }
+                }
+                is WalkOutcome.EncounterStarted ->
+                    return ExploreOutcome.EncounterTriggered(stats())
+            }
+        }
+        return ExploreOutcome.NotFoundCapReached(stats())
     }
 }
