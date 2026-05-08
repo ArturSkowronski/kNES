@@ -697,9 +697,12 @@ class AgentSession(
             // Spec 5 v2: Opus advisor-driven walk. Hardcoded sweep landed in
             // castle (run 16 confirmed mapId=24 = castle entrance hall). Use
             // Opus 4.5 with map context to find weapon shop door step-by-step.
-            val maxAdvisorIters = 20
+            val maxAdvisorIters = 25
             var entered = false
             var advisorTotalCost = 0.0
+            var prevSx = -1
+            var prevSy = -1
+            var stuckCount = 0
             for (iter in 0 until maxAdvisorIters) {
                 val ram = toolset.getState().ram
                 val curMapId = ram["currentMapId"] ?: 0
@@ -709,11 +712,24 @@ class AgentSession(
                 }
                 val sx = ram["smPlayerX"] ?: 0
                 val sy = ram["smPlayerY"] ?: 0
+                if (iter > 0 && sx == prevSx && sy == prevSy) {
+                    stuckCount++
+                } else {
+                    stuckCount = 0
+                }
+                prevSx = sx
+                prevSy = sy
                 val screenshot = toolset.getScreen().base64
+                val stuckHint = if (stuckCount > 0) {
+                    " IMPORTANT: party position has not changed for $stuckCount iteration(s) — " +
+                        "you are BLOCKED by a wall. Try a different direction (Left/Right) to find a door."
+                } else ""
                 val context = "Iteration $iter of $maxAdvisorIters. " +
                     "Party is at smPlayer($sx, $sy) in Coneria town overlay (mapId=8). " +
                     "Goal: enter the WEAPON SHOP (building 3 — middle row, just east of armor shop). " +
-                    "Avoid the CASTLE GATE at top-center of the plaza. Recommend ONE step toward the weapon shop."
+                    "Avoid the CASTLE GATE at top-center of the plaza." +
+                    stuckHint +
+                    " Recommend ONE step toward the weapon shop."
                 val advisor = outfitAdvisor ?: outfitVision!!
                 val advice = advisor.adviseShopApproach(screenshot, context)
                 advisorTotalCost += advice.costUsd
