@@ -11,8 +11,8 @@ class ModelRouterTest : FunSpec({
     test("executor in TitleOrMenu uses Sonnet 4.5") {
         router.modelFor(FfPhase.TitleOrMenu, AgentRole.EXECUTOR) shouldBe AnthropicModels.Sonnet_4_5
     }
-    test("advisor in TitleOrMenu uses Opus 4") {
-        router.modelFor(FfPhase.TitleOrMenu, AgentRole.ADVISOR) shouldBe AnthropicModels.Opus_4
+    test("advisor in TitleOrMenu uses Opus 4.5") {
+        router.modelFor(FfPhase.TitleOrMenu, AgentRole.ADVISOR) shouldBe AnthropicModels.Opus_4_5
     }
     test("executor in Overworld uses Haiku 4.5") {
         router.modelFor(FfPhase.Overworld(0, 0), AgentRole.EXECUTOR) shouldBe AnthropicModels.Haiku_4_5

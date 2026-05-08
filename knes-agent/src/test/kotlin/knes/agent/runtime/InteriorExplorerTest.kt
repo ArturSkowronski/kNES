@@ -172,13 +172,9 @@ class InteriorExplorerTest : FunSpec({
         outcome.reason.contains("walk-stuck") shouldBe true
     }
 
-    test("3 consecutive empty Pass 1 returns StuckBailout pass1-degraded") {
+    test("10 consecutive empty Pass 1 returns StuckBailout pass1-degraded") {
         val haiku = FakeHaikuConsult(
-            candidatesScans = listOf(
-                HaikuConsult.CandidatesScan(emptyList(), 0.001),
-                HaikuConsult.CandidatesScan(emptyList(), 0.001),
-                HaikuConsult.CandidatesScan(emptyList(), 0.001),
-            ),
+            candidatesScans = List(10) { HaikuConsult.CandidatesScan(emptyList(), 0.001) },
         )
         val mem = newMemory()
         val scanner = InteriorScanner(haiku, mem, "r1")
@@ -197,7 +193,7 @@ class InteriorExplorerTest : FunSpec({
             override fun partyLocalX() = 8
             override fun partyLocalY() = 7
         }
-        val walk = StubWalkInteriorVision(sequence = List(10) { WalkOutcome.Stepped("east") })
+        val walk = StubWalkInteriorVision(sequence = List(20) { WalkOutcome.Stepped("east") })
         val explorer = InteriorExplorer(walk, scanner, frame, emu, mem)
 
         val outcome = runBlocking {

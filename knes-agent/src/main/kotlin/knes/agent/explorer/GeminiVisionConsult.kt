@@ -82,7 +82,23 @@ class GeminiVisionConsult(
     override suspend fun scanInteriorCandidates(
         screenshotBase64: String?,
     ): HaikuConsult.CandidatesScan {
-        return HaikuConsult.CandidatesScan(emptyList(), 0.0)
+        if (screenshotBase64.isNullOrEmpty()) return HaikuConsult.CandidatesScan(emptyList(), 0.0)
+        return try {
+            // Gemini 2.5 Pro thinking mode mandatory → maxOutputTokens=2000.
+            val body = buildBody(
+                systemPrompt = SYSTEM_INTERIOR_SCAN,
+                userText = "Identify visible landmarks.",
+                b64 = screenshotBase64,
+                maxOutputTokens = 2000,
+            )
+            val raw = postOrNull(body) ?: return HaikuConsult.CandidatesScan(emptyList(), 0.0)
+            val (innerText, costUsd) = parseEnvelope(raw)
+            if (innerText == null) return HaikuConsult.CandidatesScan(emptyList(), costUsd)
+            HaikuConsult.CandidatesScan(parsePass1(innerText), costUsd)
+        } catch (e: Throwable) {
+            System.err.println("[gemini-vision] scanInteriorCandidates failed: ${e.message}")
+            HaikuConsult.CandidatesScan(emptyList(), 0.0)
+        }
     }
 
     override suspend fun verifyLandmark(
@@ -183,6 +199,15 @@ class GeminiVisionConsult(
 
         private val JSON_OBJECT = Regex("""\{[\s\S]*\}""")
         private val json = Json { ignoreUnknownKeys = true }
+
+        // Spec 4 §3.1 — Pass 1 candidate scan. Verbatim from design doc.
+        // Reuses AnthropicHaikuConsult.SYSTEM_INTERIOR_SCAN value to keep the prompt
+        // identical across providers (Gemini Pro tends to recognize NES sprites better
+        // than Haiku, per empirical 2026-05-08 runs — "pixele najlepiej w gemini").
+        const val SYSTEM_INTERIOR_SCAN = AnthropicHaikuConsult.SYSTEM_INTERIOR_SCAN
+
+        /** Pass-1 parser delegated to AnthropicHaikuConsult companion (same JSON schema). */
+        fun parsePass1(raw: String) = AnthropicHaikuConsult.parsePass1(raw)
 
         private const val SYSTEM_CLASSIFY =
             "You analyze a screenshot of a Final Fantasy 1 (NES) interior — castle, town, " +

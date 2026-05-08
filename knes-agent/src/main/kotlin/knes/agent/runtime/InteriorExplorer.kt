@@ -109,7 +109,7 @@ class InteriorExplorer(
                 )
                 if (scan.candidates.isEmpty()) {
                     consecutiveScanEmpty++
-                    if (consecutiveScanEmpty >= 3) {
+                    if (consecutiveScanEmpty >= 10) {
                         return ExploreOutcome.StuckBailout("pass1-degraded", stats())
                     }
                 } else {
