@@ -712,11 +712,17 @@ class AgentSession(
         //     pipeline already proven in §empirical run 8.
         run {
             val screenshot = toolset.getScreen().base64
+            // Always dump post-enter screenshot for diagnostic — gives visual
+            // evidence of which sub-shop we entered.
+            try {
+                val bytes = java.util.Base64.getDecoder().decode(screenshot)
+                java.io.File("/tmp/spec5-postenter.png").writeBytes(bytes)
+            } catch (_: Throwable) {}
             val scan = outfitVision!!.scanInteriorCandidates(screenshot)
             trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                 note = "boot_post_enter_scan: count=${scan.candidates.size} " +
                        "kinds=[${scan.candidates.joinToString(",") { it.kind }}] " +
-                       "costUsd=${scan.costUsd}"))
+                       "costUsd=${scan.costUsd} (screenshot: /tmp/spec5-postenter.png)"))
             val keeper = scan.candidates
                 .filter { it.kind == "shopkeeper" }
                 .maxByOrNull { it.confidence }
