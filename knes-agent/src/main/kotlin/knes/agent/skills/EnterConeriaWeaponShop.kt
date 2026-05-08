@@ -40,8 +40,11 @@ class EnterConeriaWeaponShop(
     private val settleFrames = 8
     private val maxNorthTaps = 15
 
-    /** X-axis offsets (relative to wall-hit X) to sweep when probing for the door. */
-    private val sweepOffsets = listOf(0, -1, +1, -2, +2, -3, +3, -4, +4, -5, +5)
+    /** X-axis offsets (relative to wall-hit X) to sweep when probing for the door.
+     *  Prior runs (12-14) entered mapId=24 at offset -2 (assumed wrong building —
+     *  Gemini Pass 1 saw zero landmarks there). Reorder to prefer further offsets
+     *  to find the actual weapon shop door. */
+    private val sweepOffsets = listOf(0, -3, +3, -4, +4, -2, +2, -1, +1, -5, +5)
 
     override suspend fun invoke(args: Map<String, String>): SkillResult {
         val pre = toolset.getState().ram

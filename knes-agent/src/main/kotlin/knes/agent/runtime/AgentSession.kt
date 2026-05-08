@@ -743,8 +743,15 @@ class AgentSession(
                     note = "boot_keeper_approach: keeper_screenXY=(${keeper.screenX},${keeper.screenY}) " +
                            "walked dx=$dx dy=$dyTarget"))
             } else {
+                // Diagnostic dump: save the post-enter screenshot for manual inspection.
+                try {
+                    val bytes = java.util.Base64.getDecoder().decode(screenshot)
+                    java.io.File("/tmp/spec5-postenter-no-keeper.png").writeBytes(bytes)
+                } catch (_: Throwable) {}
                 trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                    note = "boot_keeper_approach: NO_SHOPKEEPER_IN_VIEW; BuyAtShop will likely fail"))
+                    note = "boot_keeper_approach: NO_SHOPKEEPER_IN_VIEW; " +
+                           "screenshot dumped to /tmp/spec5-postenter-no-keeper.png; " +
+                           "BuyAtShop will likely fail"))
             }
         }
 
