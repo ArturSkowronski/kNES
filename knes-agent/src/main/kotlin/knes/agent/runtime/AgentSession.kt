@@ -704,6 +704,50 @@ class AgentSession(
             }
         }
 
+        // 3c. Spec 5: post-enter vision-driven approach. Run 13 confirmed
+        //     EnterShop reaches a sub-shop (mapId=24) but blocks at a wall
+        //     before the keeper, so BuyAtShop's tap-A loop never opens the
+        //     BUY menu. Use Pass 1 vision to spot the shopkeeper in the
+        //     screen and walk party to (sx, sy+1) facing N — same Spec 4
+        //     pipeline already proven in §empirical run 8.
+        run {
+            val screenshot = toolset.getScreen().base64
+            val scan = outfitVision!!.scanInteriorCandidates(screenshot)
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_post_enter_scan: count=${scan.candidates.size} " +
+                       "kinds=[${scan.candidates.joinToString(",") { it.kind }}] " +
+                       "costUsd=${scan.costUsd}"))
+            val keeper = scan.candidates
+                .filter { it.kind == "shopkeeper" }
+                .maxByOrNull { it.confidence }
+            if (keeper != null) {
+                // Party renders at viewport tile (8, 7). Walk so party stands at
+                // (sx, sy + 1) facing N — directly south of keeper.
+                val dx = keeper.screenX - 8
+                val dyTarget = (keeper.screenY + 1) - 7
+                val xDir = if (dx < 0) "Left" else "Right"
+                val yDir = if (dyTarget < 0) "Up" else "Down"
+                repeat(kotlin.math.abs(dx)) {
+                    toolset.tap(button = xDir, count = 1, pressFrames = 12, gapFrames = 8)
+                    toolset.step(buttons = emptyList(), frames = 8)
+                }
+                repeat(kotlin.math.abs(dyTarget)) {
+                    toolset.tap(button = yDir, count = 1, pressFrames = 12, gapFrames = 8)
+                    toolset.step(buttons = emptyList(), frames = 8)
+                }
+                // Final N-tap so facing stays N (in case last move was horizontal
+                // or a Down for descending toward keeper).
+                toolset.tap(button = "Up", count = 1, pressFrames = 12, gapFrames = 8)
+                toolset.step(buttons = emptyList(), frames = 8)
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_keeper_approach: keeper_screenXY=(${keeper.screenX},${keeper.screenY}) " +
+                           "walked dx=$dx dy=$dyTarget"))
+            } else {
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_keeper_approach: NO_SHOPKEEPER_IN_VIEW; BuyAtShop will likely fail"))
+            }
+        }
+
         // 4. Per-char buy loop.
         val buySkill = BuyAtShop(toolset, landmarkMemory)
         val charsBought = mutableListOf<Int>()
