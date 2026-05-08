@@ -133,12 +133,46 @@ class GeminiVisionConsult(
         }
     }
 
-    /** Spec 5: advisor stubbed in Gemini — Anthropic Opus is used for nav advice. */
+    /** Spec 5: Gemini 2.5 Pro thinking-mode advisor for one-step shop nav. */
     override suspend fun adviseShopApproach(
         screenshotBase64: String?,
         contextText: String,
-    ): HaikuConsult.AdviceResponse =
-        HaikuConsult.AdviceResponse("Fail", "gemini-stub-not-implemented", 0.0)
+    ): HaikuConsult.AdviceResponse {
+        if (screenshotBase64.isNullOrEmpty()) {
+            return HaikuConsult.AdviceResponse("Fail", "no-screenshot", 0.0)
+        }
+        return try {
+            // Gemini 2.5 Pro mandates thinking. Run #7 still hit envelope-malformed
+            // at iter 33 with budget 1500 / max 4000 (cost $0.042 — runaway).
+            // Bump headroom further so navigation thinking has room and JSON
+            // emission isn't truncated.
+            val body = buildBody(
+                systemPrompt = HaikuConsult.SYSTEM_ADVISOR,
+                userText = contextText,
+                b64 = screenshotBase64,
+                maxOutputTokens = 6000,
+                thinkingBudget = 2000,
+            )
+            val raw = postOrNull(body)
+                ?: return HaikuConsult.AdviceResponse("Fail", "api-error", 0.0)
+            val (innerText, costUsd) = parseEnvelope(raw)
+            if (innerText.isNullOrBlank()) {
+                return HaikuConsult.AdviceResponse("Fail", "envelope-malformed", costUsd)
+            }
+            // Strip ```json … ``` markdown fences before regex (Gemini sometimes
+            // wraps despite the system prompt asking for raw JSON).
+            val unfenced = innerText.replace(Regex("```(?:json)?\\s*"), "").replace("```", "")
+            val match = JSON_OBJECT.find(unfenced)?.value
+                ?: return HaikuConsult.AdviceResponse("Fail", "advice-not-json: ${innerText.take(80)}", costUsd)
+            val advice = json.parseToJsonElement(match).jsonObject
+            val action = advice["action"]?.jsonPrimitive?.contentOrNull ?: "Fail"
+            val reason = advice["reason"]?.jsonPrimitive?.contentOrNull ?: "no-reason"
+            HaikuConsult.AdviceResponse(action, reason, costUsd)
+        } catch (e: Throwable) {
+            System.err.println("[gemini-vision] adviseShopApproach failed: ${e.message}")
+            HaikuConsult.AdviceResponse("Fail", "exception: ${e.message}", 0.0)
+        }
+    }
 
     override fun close() { client.close() }
 
@@ -165,7 +199,13 @@ class GeminiVisionConsult(
             "Identify any NPCs visible on screen and stairs. Output JSON only:\n" +
             """{"landmarks":[{"kind":"NPC_KING|NPC_SHOPKEEPER|NPC_GENERIC|STAIRS_UP|STAIRS_DOWN","note":"<short>"}]}"""
 
-    private fun buildBody(systemPrompt: String, userText: String, b64: String?, maxOutputTokens: Int): String {
+    private fun buildBody(
+        systemPrompt: String,
+        userText: String,
+        b64: String?,
+        maxOutputTokens: Int,
+        thinkingBudget: Int? = null,
+    ): String {
         val obj = buildJsonObject {
             put("system_instruction", buildJsonObject {
                 put("parts", buildJsonArray {
@@ -191,6 +231,11 @@ class GeminiVisionConsult(
             put("generationConfig", buildJsonObject {
                 put("maxOutputTokens", maxOutputTokens)
                 put("temperature", 0)
+                if (thinkingBudget != null) {
+                    put("thinkingConfig", buildJsonObject {
+                        put("thinkingBudget", thinkingBudget)
+                    })
+                }
             })
         }
         return obj.toString()

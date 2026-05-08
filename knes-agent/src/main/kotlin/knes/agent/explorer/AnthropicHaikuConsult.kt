@@ -115,7 +115,7 @@ class AnthropicHaikuConsult(
             // Build body with Opus model override (bypassing default Haiku model).
             val body = buildBodyWithModel(
                 modelOverride = ADVISOR_MODEL,
-                systemPrompt = SYSTEM_ADVISOR,
+                systemPrompt = HaikuConsult.SYSTEM_ADVISOR,
                 userText = contextText,
                 b64 = screenshotBase64,
                 maxTokens = 800,
@@ -235,45 +235,7 @@ class AnthropicHaikuConsult(
         // hardcode the dated id directly to bypass the framework's model dispatch.
         private const val ADVISOR_MODEL = "claude-opus-4-5-20251101"
 
-        private const val SYSTEM_ADVISOR =
-            """You are a navigation advisor for an autonomous Final Fantasy 1 (NES) agent inside Coneria town.
-
-The screenshot shows the FF1 NES viewport (256x240 px, 16x15 tiles). The party renders at viewport tile (8, 7).
-
-CONERIA TOWN MAP (mapId=8) — empirically observed coordinate layout:
-- Party SPAWN: smPlayer(12, 35) — south plaza, just north of town entry
-- Plaza area: smPlayerY 18-30, smPlayerX 4-22 (open floor)
-- CASTLE GATE: smPlayer(~10-12, ~16-18) — TOP CENTER of plaza, leads to mapId=24 (NOT a shop! It's a long pillared corridor — AVOID).
-- Building doors are on south walls. To enter, step N onto door tile.
-
-CRITICAL — buildings to AVOID:
-- CASTLE GATE at smPlayer(10-12, ~17): if party blocked moving Up at Y=18 with X near 11-12, the wall in front IS the castle entrance. DO NOT enter.
-
-Building positions (approximate smPlayer X — verify with screenshot landmarks):
-- Building 1 INN: south plaza X=10-13, Y~30
-- Building 2 ARMOR shop: middle-west, X~5-7, Y~18-20
-- Building 3 WEAPON shop: middle-west, X~8-9 (just east of armor), Y~18-20
-- Building 4 BLACK MAGIC: top-west, X~3-5, Y~10
-- Building 5 WHITE MAGIC: top, X~7-9, Y~10
-- Building 7 ITEM shop: middle-east, X~22-24, Y~18-20
-
-Strategy from spawn (12, 35):
-1. Walk N until Y~21 (mid-plaza)
-2. Walk W (Left) until X~8-9 (toward weapon shop)
-3. Walk N — should now hit weapon shop south wall
-4. Try Tap_A or step onto specific door tile (door is one-tile gap in wall)
-
-If blocked moving Up between Y=17 and Y=18, you are at CASTLE GATE — back off (Down) and re-route West/East.
-
-Output JSON only, no prose. Schema:
-{"action":"Up|Down|Left|Right|Tap_A|Done|Fail","reason":"<short>"}
-
-Rules:
-- Up/Down/Left/Right: move party one tile in that direction
-- Tap_A: try to interact with what's directly in front of party
-- Done: party is already inside the weapon shop interior (mapId changed AND keeper visible)
-- Fail: cannot determine path — abort
-"""
+        // SYSTEM_ADVISOR moved to HaikuConsult.SYSTEM_ADVISOR (shared with Gemini).
 
         // Haiku 4.5 pricing (Anthropic, late 2025): $1 / MTok input, $5 / MTok output.
         // If pricing changes the absolute cost number drifts but the budget cap still triggers.

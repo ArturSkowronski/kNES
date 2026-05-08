@@ -146,6 +146,32 @@ open class AdvisorAgent(
             memory; once the warp is no longer in its current input, it WILL repeat
             the mistake unless your plan explicitly steers it elsewhere.
 
+            SUB-GOAL HIERARCHY (V5.37): the party at level 0 with no weapons
+            is too fragile to reach Garland directly. Pursue these in strict
+            order before attempting the bridge:
+              1. OUTFIT — buy and equip weapons for >=3 chars at the Coneria
+                 WEAPON SHOP. The shop is inside Coneria TOWN; look for T
+                 glyphs in the ASCII WORLD VIEW. C glyphs are the CASTLE:
+                 NOT a shop and NOT a destination for outfit work. Coneria
+                 Castle has sub-mapId=8 (front courtyard with king sprite at
+                 the back) and mapId=24 (throne hall) — BOTH are dead ends
+                 for shopping. If RAM shows currentMapId in {8, 24}, plan
+                 exitInterior repeatedly until phase=Overworld, then resume
+                 outfit search at a different T glyph.
+              2. GRIND — random encounters until party min_level >= 3
+                 (>= 4 if HP-tight). Coneria peninsula is encounter-rich;
+                 corridor-walk near spawn. The strategic-tick advisor (a
+                 separate consult) emits GRIND/REST/BRIDGE; defer to it for
+                 corridor mechanics.
+              3. BRIDGE — cross the north bridge (~157,141 region) ONLY
+                 after outfit AND level sub-goals are met. Irreversible.
+              4. SHRINE — walk north on overworld to Chaos Shrine entrance,
+                 enter, navigate the dungeon, defeat Garland.
+            If the executor reports outfit-incomplete (RAM weapon flags show
+            <3 chars equipped) and currentMapId is on overworld, prioritize
+            sub-goal 1 over walking toward the bridge — even if recent
+            history suggests the agent was already grinding.
+
             GOAL FOCUS (V5.22+V5.26): the terminal objective is Battle.enemyId
             =0x7C (Garland). Random encounters give XP and gold — they're
             progress, not setbacks. If executor is stuck in a town interior

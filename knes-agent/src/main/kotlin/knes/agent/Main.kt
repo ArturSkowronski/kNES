@@ -80,10 +80,22 @@ fun main(args: Array<String>) {
                 }
             }
 
-            // Spec 5: dedicated Opus advisor for shop nav (always Anthropic,
-            // bypasses KNES_VISION dispatch). Implementation in
-            // AnthropicHaikuConsult.adviseShopApproach uses Opus 4.5 directly.
-            val outfitAdvisor: HaikuConsult = AnthropicHaikuConsult(apiKey = key)
+            // Spec 5: dedicated advisor for shop nav. Uses Gemini 2.5 Pro thinking
+            // mode — empirically stronger NES sprite recognition than Opus 4.5
+            // (`pixele najlepiej w gemini`) and the thinking budget produces
+            // step-by-step spatial reasoning. Falls back to Anthropic Opus advisor
+            // (AnthropicHaikuConsult.adviseShopApproach) only if GEMINI_API_KEY
+            // is unset.
+            val outfitAdvisor: HaikuConsult = run {
+                val gKey = System.getenv("GEMINI_API_KEY")?.takeIf { it.isNotBlank() }
+                if (gKey != null) {
+                    System.err.println("[main] outfit advisor: Gemini 2.5 Pro (thinking mode)")
+                    GeminiVisionConsult(apiKey = gKey)
+                } else {
+                    System.err.println("[main] outfit advisor: Anthropic Opus 4.5 (GEMINI_API_KEY unset)")
+                    AnthropicHaikuConsult(apiKey = key)
+                }
+            }
 
             AgentSession(
                 toolset = toolset,

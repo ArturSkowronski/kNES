@@ -5,16 +5,12 @@ import knes.agent.advisor.StrategyAdvice
 import knes.agent.executor.ExecutorAgent
 import knes.agent.explorer.HaikuConsult
 import knes.agent.skills.BuyAtShop
-import knes.agent.skills.EnterConeriaWeaponShop
 import knes.agent.skills.EquipWeapon
 import knes.agent.skills.ExitInterior
 import knes.agent.skills.GrindLoop
-import knes.agent.skills.InteriorScanner
-import knes.agent.skills.WalkInteriorVision
 import knes.agent.skills.WalkOverworldTo
 import knes.agent.perception.FfPhase
 import knes.agent.perception.FogOfWar
-import knes.agent.perception.FrameChangeDetector
 import knes.agent.perception.Landmark
 import knes.agent.perception.LandmarkKind
 import knes.agent.perception.LandmarkMemory
@@ -190,6 +186,25 @@ class AgentSession(
         var advisorCalls = 0
         var skillsInvoked = 0
         val startMs = System.currentTimeMillis()
+
+        // Deterministic pre-boot: drive past the title screen and run the outfit
+        // boot phase BEFORE the LLM loop starts. Run #9 (2026-05-08) showed why
+        // this matters — when the LLM combined `pressStartUntilOverworld` and
+        // `walkOverworldTo(146, 150)` into a single turn 1 plan, the party
+        // walked through a warp tile at world (146, 152) into Coneria CASTLE
+        // (mapId=8) before the next turn boundary. The boot trigger never saw
+        // an Overworld observation and missed firing entirely. Driving the
+        // press-start + boot deterministically here removes that race.
+        try {
+            val preRam = toolset.getState().ram
+            val titleScreen = (preRam["char1_str"] ?: 0) == 0
+            if (titleScreen) {
+                println("[knes-agent] pre-boot: pressing Start until overworld")
+                knes.agent.skills.PressStartUntilOverworld(toolset).invoke(emptyMap())
+            }
+        } catch (e: Exception) {
+            println("[knes-agent] pre-boot pressStart failed: ${e.message}")
+        }
         // V5.23: cross-turn memory of FF1 ROM-encoded warp tiles the agent has tripped
         // into. Both AIAgent instances are spun up fresh each turn (singleRunStrategy +
         // newAgent per phase) so they have NO native memory of prior failures. We track
@@ -261,11 +276,17 @@ class AgentSession(
                     return outcome
                 }
 
-                // Spec 2: outfit boot phase — fires on FIRST Overworld observation
-                // (party RAM coords are 0,0 at title screen, so running this at
-                // session start would always fail walk-to-coneria). Best-effort:
-                // any failure logs and falls through to strategic loop.
-                if (!outfitBootPhaseDone && phase is FfPhase.Overworld) {
+                // Spec 2: outfit boot phase — fires once when the party is on the
+                // overworld with an initialized party (post-pressStart). Trigger is
+                // RAM-based, not FfPhase-based: in run #9 the LLM combined
+                // pressStart + walkOverworld in a single turn, so the party
+                // transitioned TitleOrMenu → Indoors without any Overworld phase
+                // observation at a turn boundary, and the boot phase never fired.
+                // RAM check (mapId=0 AND party stats > 0) is independent of
+                // FfPhase classification timing.
+                val bootMapId = ram["currentMapId"] ?: 0
+                val bootChar1Str = ram["char1_str"] ?: 0
+                if (!outfitBootPhaseDone && bootMapId == 0 && bootChar1Str > 0) {
                     outfitBootPhaseDone = true
                     try {
                         runOutfitBootPhase()
@@ -656,72 +677,163 @@ class AgentSession(
             return
         }
 
-        // 2b. Settle warp transition. WalkOverworldTo terminates the moment
-        //     party RAM coords match the destination, but the FF1 engine's
-        //     warp tile triggers a screen-fade + map-load that takes ~30
-        //     frames to update currentMapId. Without this, step 3's
-        //     WalkInteriorVision sees mapId=0 and returns NotInBuilding,
-        //     killing the boot phase before it can find the shop.
-        //     If after settling we're still on overworld (mapId=0), nudge
-        //     into the entry tile by stepping toward it from each cardinal.
-        toolset.step(buttons = emptyList(), frames = 30)
-        var postWalkMapId = toolset.getState().ram["currentMapId"] ?: 0
-        if (postWalkMapId == 0) {
-            for (dir in listOf("UP", "DOWN", "LEFT", "RIGHT")) {
-                toolset.tap(dir, count = 1, pressFrames = 24, gapFrames = 12)
-                toolset.step(buttons = emptyList(), frames = 30)
-                postWalkMapId = toolset.getState().ram["currentMapId"] ?: 0
-                if (postWalkMapId != 0) break
-            }
-        }
+        // 2b. Settle: give the emulator enough frames for any in-flight warp
+        //     transition + town-overlay fade-in to complete BEFORE we hand off
+        //     to the advisor. Run #3 (2026-05-09) showed 30 frames was too
+        //     short: iter 0 of the advisor caught a partly-rendered town
+        //     overlay where party sprite wasn't yet drawn → Gemini answered
+        //     "party not visible". 120 frames (~2s @ 60Hz) is enough for the
+        //     transition animation to finish and party to render stably.
+        //     We do NOT auto-tap cardinal directions to force entry — in
+        //     earlier sessions that reactive nudge tripped the party onto the
+        //     castle warp tile at world(146,152) and stranded the agent inside
+        //     mapId=8 (Coneria CASTLE, NOT a shop).
+        toolset.step(buttons = emptyList(), frames = 120)
+        val postWalkRam = toolset.getState().ram
+        val postWalkMapId = postWalkRam["currentMapId"] ?: 0
+        val postWalkMapflags = postWalkRam["mapflags"] ?: 0
+        val postWalkSmX = postWalkRam["smPlayerX"] ?: 0
+        val postWalkSmY = postWalkRam["smPlayerY"] ?: 0
         trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-            note = "boot_walk_settle: postWalkMapId=$postWalkMapId"))
+            note = "boot_walk_settle: postWalkMapId=$postWalkMapId " +
+                   "mapflags=$postWalkMapflags smPlayer=($postWalkSmX,$postWalkSmY)"))
 
-        // 3. Cached weapon shop or probe via DiscoverShop on candidate NPC_SHOPKEEPERs.
-        val cachedShop = landmarkMemory.findByKind(LandmarkKind.NPC_SHOPKEEPER)
-            .firstOrNull { it.note.contains("kind=weapon") }
-        val activeShop = cachedShop ?: discoverWeaponShop(outfitVision, outfitNavigator,
-            outfitMapSession, fog)
-        if (activeShop == null) {
-            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                note = "boot_outfit_summary: boot_shop_not_found"))
-            return
-        }
-
-        // 3b. Spec 5: navigate from town overlay (mapId=8) into the weapon shop
-        //     sub-interior so BuyAtShop's `landmark.mapId == currentMapId` precondition
-        //     holds. Skipped if party already inside a sub-shop (mapId != 8) — e.g.
-        //     warm-start where an earlier run left the party in the shop.
-        val initialMapId = toolset.getState().ram["currentMapId"] ?: 0
-        if (initialMapId == 8) {
-            // Spec 5 v2: Opus advisor-driven walk. Hardcoded sweep landed in
-            // castle (run 16 confirmed mapId=24 = castle entrance hall). Use
-            // Opus 4.5 with map context to find weapon shop door step-by-step.
-            val maxAdvisorIters = 30
+        // 3. Vision-driven advisor: scans the overworld screenshot for the
+        //    weapon-shop sign, walks party onto the matching door tile, and
+        //    detects shop entry by currentMapId changing from 0 → some non-zero
+        //    sub-shop mapId. Coneria's "town" buildings live on the overworld
+        //    (mapId=0); each shop is its own sub-mapId entered via its door
+        //    tile. mapId=8 is Coneria CASTLE — strictly avoid.
+        val initialMapId = postWalkMapId
+        if (initialMapId == 0 || initialMapId == 8) {
+            val maxAdvisorIters = 80
             var entered = false
             var advisorTotalCost = 0.0
-            var prevSx = -1
-            var prevSy = -1
-            var stuckCount = 0
+            // Rolling action log: each entry records what the advisor told us to do
+            // and whether the party position changed afterward. Passed back to the
+            // advisor each iteration so it can avoid repeating a blocked direction.
+            // Format: "iter N: <action> -> moved (sx,sy)->(sx',sy')" or "iter N: <action> -> NO MOVEMENT".
+            data class ActionLogEntry(val iter: Int, val action: String, val before: Pair<Int, Int>, val after: Pair<Int, Int>) {
+                fun render(): String {
+                    val (bx, by) = before
+                    val (ax, ay) = after
+                    return if (bx == ax && by == ay) {
+                        "iter $iter: $action -> NO MOVEMENT (still at $bx,$by) — direction blocked"
+                    } else {
+                        "iter $iter: $action -> moved ($bx,$by) -> ($ax,$ay)"
+                    }
+                }
+            }
+            val actionLog = ArrayDeque<ActionLogEntry>()
+            // V5.39: action log 6 → 30. Run #6 (2026-05-09) showed Gemini
+            // visually located the weapon shop in iter 23 but then oscillated
+            // (13,8) ↔ (13,9) ↔ (14,8) for 38 iters trying the same blocked
+            // cardinals. With only a 6-entry window the model couldn't see
+            // it had already attempted Left from (13,8) eight times. 30
+            // entries preserves enough history for the model to recognise
+            // the cycle and self-correct (or, failing that, gives a clean
+            // empirical signal that prompt-only memory isn't enough — at
+            // which point we'd graduate to a deterministic BFS fallback).
+            val actionLogMaxSize = 30
             var enteredWrongBuildingCount = 0
+            // V5.38 minimap: keep a running set of every smPlayer tile we've
+            // visited in the town overlay session, plus per-tile blocked-cardinal
+            // notes. Run #5 evidence: with only a 6-entry action log Gemini
+            // myopically circled INN for 40+ iters re-trying the same handful of
+            // tiles. A 2D grid of visited / blocked / current tiles, rendered
+            // each iter into the advisor context, lets the LLM see what's
+            // already explored and bias toward unexplored frontiers.
+            val visitedTiles: MutableSet<Pair<Int, Int>> = mutableSetOf()
+            val blockedFrom: MutableMap<Pair<Int, Int>, MutableSet<String>> = mutableMapOf()
+            // Render a (2*radius+1)x(2*radius+1) ASCII grid centred on `cur`.
+            // Glyphs: '@' = party, 'o' = visited, 'X' = visited and ALL 4
+            // cardinals are recorded blocked from there (corner / dead end),
+            // '.' = unvisited.
+            fun renderMinimap(cur: Pair<Int, Int>, radius: Int = 6): String {
+                if (visitedTiles.isEmpty() && cur !in visitedTiles) return ""
+                val (cx, cy) = cur
+                val sb = StringBuilder()
+                sb.append("Town-overlay minimap (radius $radius around party). ")
+                sb.append("Glyphs: @=party, o=visited, X=visited and all 4 cardinals tried-blocked from there, .=unvisited. ")
+                sb.append("Bias toward '.' tiles.\n")
+                sb.append("    ").append((cx - radius..cx + radius).joinToString("") {
+                    if (it < 0 || it > 99) "?" else (it % 10).toString()
+                }).append('\n')
+                for (y in (cy - radius)..(cy + radius)) {
+                    sb.append(if (y in 0..99) "%3d ".format(y) else "  ? ")
+                    for (x in (cx - radius)..(cx + radius)) {
+                        val t = x to y
+                        sb.append(when {
+                            t == cur -> '@'
+                            t in visitedTiles && (blockedFrom[t]?.size ?: 0) >= 4 -> 'X'
+                            t in visitedTiles -> 'o'
+                            else -> '.'
+                        })
+                    }
+                    sb.append('\n')
+                }
+                return sb.toString()
+            }
+            // Position-reading helper. FF1 has THREE coord regimes, distinguished
+            // by `mapflags bit 0` ($2D bit 0, "in standard map" per Disch disasm),
+            // not by mapId alone:
+            //   - genuine overworld:  mapflags.0 = 0          → worldX/worldY
+            //   - sub-shop interior:  mapflags.0 = 1, mapId>0 → smPlayerX/smPlayerY
+            //   - town overlay:       mapflags.0 = 1, mapId=0 → smPlayerX/smPlayerY
+            // Run #3 (2026-05-09) caught the third case empirically: party walked
+            // onto Coneria town overlay entry tile, mapflags flipped 2→1, mapId
+            // stayed 0, and worldX/Y froze at the entry. Reading worldX/Y here
+            // made every advisor tap look "blocked" because the actual movement
+            // was happening in smPlayerX/Y. Branch on mapflags so we follow the
+            // engine's view of party position regardless of mapId.
+            fun readPos(ram: Map<String, Int>, mapId: Int): Pair<Int, Int> {
+                val inStandardMap = ((ram["mapflags"] ?: 0) and 0x01) != 0
+                return if (!inStandardMap && mapId == 0) {
+                    (ram["worldX"] ?: 0) to (ram["worldY"] ?: 0)
+                } else {
+                    (ram["smPlayerX"] ?: 0) to (ram["smPlayerY"] ?: 0)
+                }
+            }
+            // Detect the moment the agent enters a sub-shop from overworld.
+            // initialMapId records what we started at. Any change to a different
+            // non-zero map means we're inside a sub-shop and should verify.
             for (iter in 0 until maxAdvisorIters) {
                 val ram = toolset.getState().ram
                 val curMapId = ram["currentMapId"] ?: 0
-                if (curMapId != 8 && curMapId != 0) {
-                    // Verify it's a shop with shopkeeper visible (not castle).
-                    val verifyShot = toolset.getScreen().base64
-                    val verifyScan = outfitVision!!.scanInteriorCandidates(verifyShot)
-                    val keeperPresent = verifyScan.candidates.any { it.kind == "shopkeeper" }
-                    trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                        note = "boot_advisor_verify[$iter]: mapId=$curMapId " +
-                               "candidates=${verifyScan.candidates.size} " +
-                               "kinds=[${verifyScan.candidates.joinToString(",") { it.kind }}] " +
-                               "keeperPresent=$keeperPresent"))
+                // We've entered a sub-shop if curMapId is non-zero AND different
+                // from the starting overworld (0). For backwards-compat with
+                // old castle-mapId=8 paths, we also treat mapId=8 as "outside
+                // the shop" — a sub-shop mapId would be something else.
+                val inSubShop = curMapId != 0 && curMapId != initialMapId
+                if (inSubShop) {
+                    // V5.37 castle short-circuit: mapId 8/24 are Coneria Castle —
+                    // never a weapon shop. Skip the vision scan (saves ~$0.005)
+                    // and immediately treat as wrong building. The advisor system
+                    // prompt is told to output Fail in this state, but it can't
+                    // act until the next iteration; this guard catches BFS-walked
+                    // entry into the castle where no advisor turn intervened.
+                    val isCastle = curMapId == 8 || curMapId == 24
+                    val keeperPresent = if (isCastle) {
+                        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                            note = "boot_advisor_castle_shortcircuit[$iter]: mapId=$curMapId — " +
+                                   "Coneria Castle, not a shop; skipping vision scan"))
+                        false
+                    } else {
+                        val verifyShot = toolset.getScreen().base64
+                        val verifyScan = outfitVision!!.scanInteriorCandidates(verifyShot)
+                        val present = verifyScan.candidates.any { it.kind == "shopkeeper" }
+                        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                            note = "boot_advisor_verify[$iter]: mapId=$curMapId " +
+                                   "candidates=${verifyScan.candidates.size} " +
+                                   "kinds=[${verifyScan.candidates.joinToString(",") { it.kind }}] " +
+                                   "keeperPresent=$present"))
+                        present
+                    }
                     if (keeperPresent) {
                         entered = true
                         break
                     }
-                    // Wrong building — exit and continue.
+                    // Wrong building — exit and continue scanning the overworld.
                     enteredWrongBuildingCount++
                     trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                         note = "boot_advisor_wrong_building[$iter]: mapId=$curMapId, " +
@@ -731,44 +843,164 @@ class AgentSession(
                             note = "boot_advisor_give_up: 3+ wrong buildings entered"))
                         break
                     }
-                    // Tap S many times to exit.
+                    // Tap S many times to exit back to the previous map (typically
+                    // mapId=0 overworld; or mapId=8 if we somehow ended up in
+                    // castle and are exiting back to town overworld).
                     repeat(15) {
                         toolset.tap("Down", count = 1, pressFrames = 12, gapFrames = 8)
                         toolset.step(buttons = emptyList(), frames = 6)
-                        if ((toolset.getState().ram["currentMapId"] ?: 0) == 8) return@repeat
+                        val nowMid = toolset.getState().ram["currentMapId"] ?: 0
+                        if (nowMid == initialMapId) return@repeat
                     }
-                    continue  // back to advisor loop in town overlay
+                    actionLog.clear()
+                    continue
                 }
-                val sx = ram["smPlayerX"] ?: 0
-                val sy = ram["smPlayerY"] ?: 0
-                if (iter > 0 && sx == prevSx && sy == prevSy) {
-                    stuckCount++
-                } else {
-                    stuckCount = 0
-                }
-                prevSx = sx
-                prevSy = sy
+                val (px, py) = readPos(ram, curMapId)
                 val screenshot = toolset.getScreen().base64
-                val stuckHint = if (stuckCount > 0) {
-                    " IMPORTANT: party position has not changed for $stuckCount iteration(s) — " +
-                        "you are BLOCKED by a wall. Try a different direction (Left/Right) to find a door."
-                } else ""
-                val context = "Iteration $iter of $maxAdvisorIters. " +
-                    "Party is at smPlayer($sx, $sy) in Coneria town overlay (mapId=8). " +
-                    "Goal: enter the WEAPON SHOP (building 3 — middle row, just east of armor shop). " +
-                    "Avoid the CASTLE GATE at top-center of the plaza." +
-                    stuckHint +
-                    " Recommend ONE step toward the weapon shop."
+                // Diagnostic dump: persist exactly what the advisor sees this iter,
+                // so we can post-mortem "party not visible" / wrong-direction calls.
+                // Filename encodes both the position regime we read (px,py) AND the
+                // raw smPlayerX/Y, so we can verify readPos picked the right regime.
+                try {
+                    val bytes = java.util.Base64.getDecoder().decode(screenshot)
+                    val mapflags = ram["mapflags"] ?: 0
+                    val smX = ram["smPlayerX"] ?: 0
+                    val smY = ram["smPlayerY"] ?: 0
+                    val wX = ram["worldX"] ?: 0
+                    val wY = ram["worldY"] ?: 0
+                    val fname = "/tmp/spec5-boot-iter-%02d-mid%d-mf%d-pos%d_%d-sm%d_%d-w%d_%d.png"
+                        .format(iter, curMapId, mapflags, px, py, smX, smY, wX, wY)
+                    java.io.File(fname).writeBytes(bytes)
+                } catch (_: Throwable) {}
+                val historyText = if (actionLog.isEmpty()) {
+                    "(no prior actions — this is the first iteration)"
+                } else {
+                    actionLog.joinToString(separator = "\n") { it.render() }
+                }
+                val mapflagsBit0 = ((ram["mapflags"] ?: 0) and 0x01) != 0
+                val regime = when {
+                    !mapflagsBit0 && curMapId == 0 -> "OVERWORLD"
+                    mapflagsBit0 && curMapId == 0 -> "TOWN_OVERLAY"
+                    else -> "SUB_MAP"
+                }
+                // Record current tile as visited (only meaningful in town overlay
+                // / sub-map; smPlayer is identity-frozen on the genuine overworld).
+                if (regime == "TOWN_OVERLAY" || regime == "SUB_MAP") {
+                    visitedTiles += px to py
+                }
+                val minimapBlock = if (regime == "TOWN_OVERLAY") renderMinimap(px to py) else ""
+                val context = buildString {
+                    append("Iteration $iter of $maxAdvisorIters. ")
+                    append("currentMapId=$curMapId mapflags.bit0=${if (mapflagsBit0) 1 else 0} regime=$regime. ")
+                    when (regime) {
+                        "OVERWORLD" -> {
+                            append("Party is on the OVERWORLD at worldX=$px worldY=$py. ")
+                            append("Coneria town buildings are visible around you. ")
+                            append("Identify the WEAPON SHOP by its sword/dagger/hammer sign and walk onto its door tile.\n\n")
+                        }
+                        "TOWN_OVERLAY" -> {
+                            append("Party is INSIDE Coneria TOWN OVERLAY at smPlayer($px, $py). ")
+                            append("This is the town interior layer — walk between buildings to find the WEAPON SHOP. ")
+                            append("Each shop is a small building; the weapon shop has weapon icons (sword/dagger/hammer) on its sign. ")
+                            append("Walk onto a shop's door tile to enter — currentMapId will change to the shop's sub-mapId. ")
+                            append("DO NOT output Done while still in the town overlay (mapId=0); only after entering a sub-shop.\n\n")
+                            if (minimapBlock.isNotEmpty()) {
+                                append(minimapBlock)
+                                append("\n")
+                            }
+                        }
+                        else -> {
+                            append("Party is INSIDE a sub-map (mapId=$curMapId) at smPlayer($px, $py). ")
+                            append("Walk Up to face the shopkeeper sprite, then output Done.\n\n")
+                        }
+                    }
+                    append("Recent advisor actions (oldest first):\n")
+                    append(historyText)
+                    append("\n\nRecommend ONE next step.")
+                }
                 val advisor = outfitAdvisor ?: outfitVision!!
-                val advice = advisor.adviseShopApproach(screenshot, context)
-                advisorTotalCost += advice.costUsd
+                val firstAdvice = advisor.adviseShopApproach(screenshot, context)
+                advisorTotalCost += firstAdvice.costUsd
                 trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                    note = "boot_advisor[$iter]: action=${advice.action} reason=${advice.reason} costUsd=${advice.costUsd}"))
+                    note = "boot_advisor[$iter]: action=${firstAdvice.action} reason=${firstAdvice.reason} costUsd=${firstAdvice.costUsd}"))
+                // MANDATORY DOUBLE-CHECK: if Gemini bailed with "party not visible"
+                // (or any close paraphrase), force a second look. The party IS in
+                // the viewport — town overlay sometimes splits it across multiple
+                // small sprites instead of one stacked figure, which trips Pro 2.5's
+                // initial scan. A retry with explicit re-examination context usually
+                // breaks the false-Fail. Costs ~one extra advisor call (~$0.012).
+                val partyDoubtPattern = Regex(
+                    "(?i)(party.*(not\\s+visible|not\\s+seen|cannot\\s+(see|find|locate)|" +
+                        "isn't\\s+visible|invisible))|" +
+                        "((not|cannot|can'?t|unable\\s+to)\\s+(see|find|locate|spot)\\s+.{0,30}party)|" +
+                        "(no\\s+party\\s+(visible|sprite|figure))"
+                )
+                val needsDoubleCheck = firstAdvice.action == "Fail" &&
+                    partyDoubtPattern.containsMatchIn(firstAdvice.reason)
+                val advice = if (!needsDoubleCheck) firstAdvice else {
+                    // Re-fetch screenshot in case the first frame was mid-render,
+                    // then re-call advisor with explicit re-examination prompt.
+                    toolset.step(buttons = emptyList(), frames = 8)
+                    val retryShot = toolset.getScreen().base64
+                    val retryContext = buildString {
+                        append("DOUBLE CHECK MANDATORY. Your previous response: ")
+                        append("\"${firstAdvice.reason.take(120)}\".\n")
+                        append("That conclusion is WRONG — the party IS in this viewport. ")
+                        append("On the FF1 NES overworld it appears as a 4-character figure stacked at viewport (8,7). ")
+                        append("In TOWN OVERLAY (mapflags.bit0=1) the party may render as separate small sprites scattered ")
+                        append("near the centre of the visible game area (NOT in the black border / status row). ")
+                        append("Look AGAIN — scan tile-by-tile starting from (8,7) outward, and treat ANY humanoid sprite ")
+                        append("near the centre as the party. Do NOT output Fail with 'party not visible' again.\n\n")
+                        append(context)
+                    }
+                    val retryAdvice = advisor.adviseShopApproach(retryShot, retryContext)
+                    advisorTotalCost += retryAdvice.costUsd
+                    trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                        note = "boot_advisor_doublecheck[$iter]: action=${retryAdvice.action} " +
+                               "reason=${retryAdvice.reason} costUsd=${retryAdvice.costUsd}"))
+                    retryAdvice
+                }
+                val beforeXY = px to py
+                val isMovement = advice.action in setOf("Up", "Down", "Left", "Right")
                 when (advice.action) {
                     "Up", "Down", "Left", "Right" ->
                         toolset.tap(advice.action, count = 1, pressFrames = 12, gapFrames = 8)
                     "Tap_A" -> toolset.tap("A", count = 1, pressFrames = 5, gapFrames = 12)
-                    "Done", "Fail" -> {
+                    "Done" -> {
+                        // Done is only meaningful inside a sub-shop. On overworld
+                        // (mapId=0) reject Done — the agent must enter a sub-map first.
+                        val nowMid = toolset.getState().ram["currentMapId"] ?: 0
+                        if (nowMid == 0 || nowMid == initialMapId) {
+                            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                                note = "boot_advisor_done_rejected[$iter]: still on starting map " +
+                                       "(mapId=$nowMid) — Done only valid after entering a sub-shop"))
+                            actionLog.addLast(ActionLogEntry(iter,
+                                "Done(rejected-overworld)", beforeXY, px to py))
+                            while (actionLog.size > actionLogMaxSize) actionLog.removeFirst()
+                            continue
+                        }
+                        // Inside sub-map. Verify an NPC sprite is visible. Liberal:
+                        // any NPC-like candidate counts; if BuyAtShop opens the wrong-
+                        // class menu downstream, it returns WrongClass and the agent
+                        // moves on — cheaper than looping more advisor turns here.
+                        val verifyShot = toolset.getScreen().base64
+                        val verifyScan = outfitVision!!.scanInteriorCandidates(verifyShot)
+                        advisorTotalCost += verifyScan.costUsd
+                        val npcKinds = setOf("shopkeeper", "king", "innkeeper", "generic_npc")
+                        val npcPresent = verifyScan.candidates.any { it.kind in npcKinds }
+                        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                            note = "boot_advisor_done_verify[$iter]: npcPresent=$npcPresent " +
+                                   "candidates=${verifyScan.candidates.size} " +
+                                   "kinds=[${verifyScan.candidates.joinToString(",") { it.kind }}]"))
+                        if (npcPresent) {
+                            entered = true
+                            break
+                        }
+                        actionLog.addLast(ActionLogEntry(iter, "Done(rejected-no-npc)", beforeXY, px to py))
+                        while (actionLog.size > actionLogMaxSize) actionLog.removeFirst()
+                        continue
+                    }
+                    "Fail" -> {
                         trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                             note = "boot_advisor_terminate: ${advice.action} after $iter iters"))
                         break
@@ -780,6 +1012,29 @@ class AgentSession(
                     }
                 }
                 toolset.step(buttons = emptyList(), frames = 8)
+                // Retry on no-movement: NES walk animation has tile-boundary latency
+                // and a single tap after an idle period sometimes fails to register.
+                val afterRamRead = toolset.getState().ram
+                val afterMid = afterRamRead["currentMapId"] ?: 0
+                var (afterX, afterY) = readPos(afterRamRead, afterMid)
+                if (isMovement && afterX == px && afterY == py && afterMid == curMapId) {
+                    toolset.tap(advice.action, count = 1, pressFrames = 12, gapFrames = 8)
+                    toolset.step(buttons = emptyList(), frames = 12)
+                    val r2 = toolset.getState().ram
+                    val r2Mid = r2["currentMapId"] ?: 0
+                    val r2pos = readPos(r2, r2Mid)
+                    afterX = r2pos.first
+                    afterY = r2pos.second
+                }
+                actionLog.addLast(ActionLogEntry(iter, advice.action, beforeXY, afterX to afterY))
+                while (actionLog.size > actionLogMaxSize) actionLog.removeFirst()
+                // Minimap update: tag this direction as blocked-from-this-tile
+                // when the action was a cardinal that produced no movement and
+                // we stayed in the same map regime (so the block is geometric,
+                // not a regime-transition like entering a sub-shop).
+                if (isMovement && afterX == px && afterY == py && afterMid == curMapId) {
+                    blockedFrom.getOrPut(px to py) { mutableSetOf() } += advice.action
+                }
             }
             trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                 note = "boot_advisor_summary: entered=$entered totalCostUsd=$advisorTotalCost"))
@@ -788,7 +1043,10 @@ class AgentSession(
                     note = "boot_outfit_summary: advisor_failed_to_enter_shop"))
                 return
             }
-            // Update cached weapon-shop landmark with discovered sub-shop mapId.
+            // Update cached weapon-shop landmark with the mapId we ended up in.
+            // For hypothesis B (Coneria), this is mapId=8 itself (no sub-shop).
+            // For towns with real sub-shops, this is the sub-shop mapId. BuyAtShop
+            // precondition `landmark.mapId == currentMapId` passes either way.
             val postRam = toolset.getState().ram
             val postMapId = postRam["currentMapId"] ?: 0
             val postX = postRam["smPlayerX"] ?: 0
@@ -918,88 +1176,13 @@ class AgentSession(
         // 6. Summary.
         val finalGold = StrategyContext.totalGold(toolset.getState().ram)
         val goldSpent = (initialGold - finalGold).coerceAtLeast(0)
-        val summary = "candidatesProbed=${if (cachedShop == null) 1 else 0} " +
-            "weaponShopFound=true weaponsBought=${charsBought.size} " +
+        val summary = "weaponsBought=${charsBought.size} " +
             "weaponsEquipped=${charsEquipped.size} totalGoldSpent=$goldSpent"
         println("[boot_outfit] boot_outfit_summary: $summary")
         trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
             note = "boot_outfit_summary: $summary"))
     }
 
-    private suspend fun discoverWeaponShop(
-        vision: HaikuConsult,
-        navigator: VisionInteriorNavigator,
-        mapSession: MapSession,
-        fog: FogOfWar,
-    ): Landmark? {
-        // Spec 4 (2026-05-08): brittle DiscoverShop probe loop replaced with
-        // goal-aware InteriorExplorer (two-pass scanner + frame-change-gated
-        // walking). WalkInteriorVision is unchanged per autonomy_principle.md.
-        // See docs/superpowers/specs/2026-05-08-ff1-interior-self-discovery-design.md.
-        // `navigator`, `mapSession`, `fog` are retained on the signature for
-        // source compatibility; navigator is consumed by the WalkInteriorVision
-        // helper, the others are currently unused (cleanup in a follow-up).
-
-        val walkSkill = buildWalkInteriorVision(navigator, mapSession)
-        val runId = resolvedRunDir.fileName?.toString() ?: "run"
-        val sink: InteriorTraceSink = { note ->
-            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT", note = note))
-        }
-        val explorer = InteriorExplorer(
-            walk = RealWalkInteriorVisionAdapter(walkSkill, toolset),
-            scanner = InteriorScanner(vision, landmarkMemory, runId, traceSink = sink),
-            frameDetector = FrameChangeDetector(),
-            emu = RealInteriorEmulatorState(toolset),
-            memory = landmarkMemory,
-            traceSink = sink,
-        )
-
-        val outcome = explorer.exploreUntilFound(
-            goal = LandmarkKind.NPC_SHOPKEEPER,
-            predicate = { it.note.contains("kind=weapon") },
-            capSteps = 200,
-        )
-
-        return when (outcome) {
-            is InteriorExplorer.ExploreOutcome.Found -> {
-                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                    note = "interior_explore_outcome: Found, " +
-                        "scans=${outcome.stats.scansTriggered}, " +
-                        "confirmed=${outcome.stats.confirmed}, " +
-                        "walkSteps=${outcome.stats.walkSteps}, " +
-                        "costUsd=${outcome.stats.costUsd}"))
-                outcome.landmark
-            }
-            is InteriorExplorer.ExploreOutcome.NotFoundCapReached -> {
-                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                    note = "interior_explore_outcome: NotFoundCapReached, " +
-                        "scans=${outcome.stats.scansTriggered}, " +
-                        "candidates=${outcome.stats.candidatesEvaluated}, " +
-                        "walkSteps=${outcome.stats.walkSteps}, " +
-                        "costUsd=${outcome.stats.costUsd}"))
-                null
-            }
-            is InteriorExplorer.ExploreOutcome.StuckBailout -> {
-                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                    note = "interior_explore_outcome: StuckBailout reason=${outcome.reason}, " +
-                        "walkSteps=${outcome.stats.walkSteps}, costUsd=${outcome.stats.costUsd}"))
-                null
-            }
-            is InteriorExplorer.ExploreOutcome.EncounterTriggered -> {
-                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                    note = "interior_explore_outcome: EncounterTriggered, " +
-                        "walkSteps=${outcome.stats.walkSteps}"))
-                null
-            }
-        }
-    }
-
-    private fun buildWalkInteriorVision(
-        navigator: VisionInteriorNavigator,
-        mapSession: MapSession,
-    ): WalkInteriorVision {
-        return WalkInteriorVision(toolset, navigator, mapSession = mapSession)
-    }
 
     companion object {
         /** Matches `WalkOverworldTo`'s `aborted` toolCallLog entry:
