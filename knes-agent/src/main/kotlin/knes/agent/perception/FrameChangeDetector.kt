@@ -49,19 +49,9 @@ class FrameChangeDetector {
     private fun pixelHash(pixels: ByteArray): Long {
         if (pixels.isEmpty()) return 0L
         var h = 0xCBF29CE484222325UL.toLong()
-        for (ty in 0 until 15) {
-            for (tx in 0 until 16) {
-                var sum = 0
-                for (py in 0 until 16) {
-                    for (px in 0 until 16) {
-                        val idx = (ty * 16 + py) * 256 + (tx * 16 + px)
-                        if (idx < pixels.size) sum += pixels[idx].toInt() and 0xFF
-                    }
-                }
-                val avg = (sum shr 8).toByte()
-                h = h xor avg.toLong()
-                h *= 0x100000001B3L
-            }
+        for (b in pixels) {
+            h = h xor (b.toLong() and 0xFF)
+            h *= 0x100000001B3L
         }
         return h
     }
