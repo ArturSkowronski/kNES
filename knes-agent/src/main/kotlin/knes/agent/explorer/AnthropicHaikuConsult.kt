@@ -70,6 +70,21 @@ class AnthropicHaikuConsult(
     ): HaikuConsult.OverworldClassification =
         HaikuConsult.OverworldClassification.NotFound(0.0)
 
+    override suspend fun scanInteriorCandidates(
+        screenshotBase64: String?,
+    ): HaikuConsult.CandidatesScan {
+        return HaikuConsult.CandidatesScan(emptyList(), 0.0)
+    }
+
+    override suspend fun verifyLandmark(
+        focusedScreenshotBase64: String?,
+        candidateKind: String,
+        candidateScreenX: Int,
+        candidateScreenY: Int,
+    ): HaikuConsult.VerifyResult {
+        return HaikuConsult.VerifyResult.Errored("stub-not-implemented", 0.0)
+    }
+
     override fun close() { client.close() }
 
     private suspend fun postOrNull(body: String): String? {
