@@ -83,7 +83,7 @@ interface VisionInteriorNavigator {
  */
 class AnthropicVisionInteriorNavigator(
     private val apiKey: String,
-    private val model: String = "claude-sonnet-4-6",
+    private val model: String = "claude-opus-4-5-20251101",
     private val client: HttpClient = HttpClient(CIO) {
         install(HttpTimeout) { requestTimeoutMillis = 30_000 }
     },
