@@ -1,14 +1,13 @@
 # FF1 Interior Self-Discovery Landmark Scan — Design (Spec 4 / Spec 3a unblocker)
 
-**Date:** 2026-05-08
-**Branch target:** TBD (cut from `ff1-bridge-and-walk-to-tof` HEAD `ed9a6e9` after Spec 2 lands)
-**Parent context:** Spec 3a (`2026-05-07-ff1-bridge-and-walk-to-tof-design.md`) is functionally implemented + 5 empirical-run fixes landed locally, but its end-to-end validation is **upstream-blocked** by cold-start shop discovery in Coneria. Three autonomous runs hit `boot_shop_not_found` because `discoverWeaponShop`'s `maxAttempts = count(NPC_SHOPKEEPER).coerceAtLeast(1).coerceAtMost(4)` collapses to 1 attempt with no seed, and the underlying `WalkInteriorVision` is goal-blind (asks Sonnet only for "next direction", not "is a shopkeeper visible"). This spec replaces the brittle probe with a goal-aware self-discovery explorer that scans interior frames for any visible landmark (NPCs, stairs, chests, signs, dialogue triggers) using two-pass vision and persists confirmed landmarks across runs.
+**Date:** 2026-05-08 **Branch target:** TBD (cut from `ff1-bridge-and-walk-to-tof` HEAD `ed9a6e9` after Spec 2 lands) **Parent context:** Spec 3a (`2026-05-07-ff1-bridge-and-walk-to-tof-design.md`) is functionally implemented + 5 empirical-run fixes landed locally, but its end-to-end validation is **upstream-blocked** by cold-start shop discovery in Coneria. Three autonomous runs hit `boot_shop_not_found` because `discoverWeaponShop`'s `maxAttempts = count(NPC_SHOPKEEPER).coerceAtLeast(1).coerceAtMost(4)` collapses to 1 attempt with no seed, and the underlying `WalkInteriorVision` is goal-blind (asks Sonnet only for "next direction", not "is a shopkeeper visible"). This spec replaces the brittle probe with a goal-aware self-discovery explorer that scans interior frames for any visible landmark (NPCs, stairs, chests, signs, dialogue triggers) using two-pass vision and persists confirmed landmarks across runs.
 
 ## 1. Goal & success criteria
 
 **Goal:** Cold-start `OutfitBootPhase` in Coneria reliably finds the weapon shopkeeper without per-town hardcoded seeds, by composing the existing `WalkInteriorVision` (next-step direction, unchanged) with a new frame-triggered two-pass vision scanner that auto-persists confirmed landmarks. The mechanism is generic — same code reusable for Pravoka, Elfheim, etc., and for non-shop landmarks (kings, stairs, chests, signs, dialogue triggers).
 
 **Success criteria (measurable, per session):**
+
 1. **Functional (MVP):** After `OutfitBootPhase` enters Coneria interior, in ≥ 2/3 cold-start manual validation runs the explorer returns `Found(NPC_SHOPKEEPER, kind=weapon)` within ≤ 50 walk steps and ≤ $0.50 incremental vision cost. `BuyAtShop` then succeeds for at least 1 character.
 2. **Persistence:** confirmed landmarks (kind, mapId, localX/Y, refined note) persist to `~/.knes/ff1-landmarks.json` via `LandmarkMemory.recordIfNew()`. Subsequent runs skip the explorer for cached landmarks (existing `cachedShop` path in `OutfitBootPhase`).
 3. **Stability:** zero regressions in 302 baseline tests. `WalkInteriorVision` unchanged. 3 pre-existing baseline failures unchanged.
@@ -16,6 +15,7 @@
 5. **Genericity (verified by code review + unit tests, not full e2e):** explorer is callable for any `LandmarkKind` + predicate, not weapon-shop-specific. Same call shape works for `NPC_KING` in Coneria castle, validated by unit tests; multi-town e2e deferred.
 
 **Non-goals:**
+
 - Multi-town empirical validation (Pravoka, Elfheim, etc.). Generic by construction; validated by Coneria-only in MVP.
 - Castle/dungeon exploration end-to-end. Same explorer applies, but no e2e runs.
 - Pre-seeding landmarks from FF1 disasm ROM tables (option B from handoff). Orthogonal effort; not needed if self-discovery works.
@@ -73,11 +73,13 @@ A new compositional class `InteriorExplorer` sits between `OutfitBootPhase` and 
 ```
 
 **Why composition (option C), not inline (A) or peer-skill (B):**
+
 - (A) Inline (drugi vision call wewnątrz `WalkInteriorVision`): puchnie `WalkInteriorVision` do walk + scan + verify + persist + goal-check w jednej klasie. Trzy concerns. Test-unfriendly.
 - (B) Peer skill obok walk, sterowane przez `OutfitBootPhase`: state frame-diff musi być współdzielony, orkiestracja przecieka do `OutfitBootPhase` (już 130+ LoC).
 - (C) Composition: każdy komponent ma jeden cel, testowalny izolowanie, `WalkInteriorVision` zostaje bez zmian (per `autonomy_principle.md`), `InteriorScanner` jako pure function (screenshot → candidates → confirmed) bez zależności od emulatora.
 
 **Key invariants:**
+
 - `WalkInteriorVision` unchanged — its scope is "next step direction", end of story. Goal-awareness lives in `InteriorExplorer`, never leaks into the navigator.
 - `InteriorScanner` is **stateless** — `scanCandidates` and `verifyCandidate` are pure functions of (screenshot, candidate). State (OAM history, scan counters) lives in `InteriorExplorer` or `FrameChangeDetector`.
 - `LandmarkMemory.recordIfNew` is the single persistence path — explorer never writes JSON directly.
@@ -89,6 +91,7 @@ A new compositional class `InteriorExplorer` sits between `OutfitBootPhase` and 
 ### 3.1 Pass 1 (candidate scan, Anthropic Haiku 4.5)
 
 System prompt (`SYSTEM_INTERIOR_SCAN`):
+
 ```
 You are reading a Final Fantasy 1 (NES) interior screenshot. The image is
 256x240 px, a 16-tile-wide x 15-tile-tall viewport (each tile 16x16 px).
@@ -120,6 +123,7 @@ User text: `"Identify visible landmarks."`
 ### 3.2 Pass 2 (verify, Gemini 2.5 Pro)
 
 System prompt (`SYSTEM_VERIFY_LANDMARK`):
+
 ```
 You are verifying a Final Fantasy 1 (NES) interior landmark candidate.
 The image is a focused 32x32 pixel crop centered on tile coordinates the
@@ -165,6 +169,7 @@ Return ONLY JSON.
 User text: `"Verify candidate kind=<kind> at tile (<x>, <y>)."`
 
 The persisted `Landmark.note` is then formatted as:
+
 - For confirmed shopkeeper: `"kind=<refinedShopKind>; verified=pass2; reason=<...>"` (matches existing `cachedShop` lookup `note.contains("kind=weapon")`).
 - For other confirmed kinds: `"verified=pass2; reason=<...>"` — `kind` field of `Landmark` already carries the discriminator.
 
@@ -230,27 +235,29 @@ InteriorExplorer.exploreUntilFound(...)
 ```
 
 **Per-call state:**
+
 - `prevOAMSnapshot: Set<SpriteSlot>` — for FrameChangeDetector.
 - `scanCount: Int`, `confirmedThisRun: Set<Landmark>`, `consecutiveMalformed: Int`.
 
 **Cross-run state:** unchanged — `LandmarkMemory` JSON.
 
 **Cost projection per Coneria cold-start run:**
-- Walk: 30-50 Sonnet 4.6 calls = ~$0.30-0.50 (existing baseline, unchanged).
-- FrameChangeDetector trigger rate: ~30-40% of steps → ~12-20 scans.
-- Pass 1 (Haiku): 12-20 × ~$0.002 = $0.02-0.04.
-- Pass 2 (Gemini Pro): ~10-30 verifies × ~$0.005 = $0.05-0.15.
-- **Total incremental:** ~$0.07-0.19 per run.
+
+- Walk: 30-50 Sonnet 4.6 calls = \~$0.30-0.50 (existing baseline, unchanged).
+- FrameChangeDetector trigger rate: \~30-40% of steps → \~12-20 scans.
+- Pass 1 (Haiku): 12-20 × \~$0.002 = $0.02-0.04.
+- Pass 2 (Gemini Pro): \~10-30 verifies × \~$0.005 = $0.05-0.15.
+- **Total incremental:** \~$0.07-0.19 per run.
 
 ## 5. Error handling matrix
 
 | Failure | Detection | Reaction |
-|---|---|---|
+| --- | --- | --- |
 | Vision API timeout / 5xx / rate-limit (Pass 1 or Pass 2) | Exception from `HaikuConsult` | 1× retry with jitter (200ms + rand). Further fail → treat iter as `Skipped(reason="vision-error")`, continue walk. Trace: `interior_scan_error`. |
 | Pass 1 malformed JSON | `JSON_OBJECT` regex miss / parse exception | Log, `Skipped(reason="malformed-pass1")`. After 3 consecutive in same call → `StuckBailout("pass1-degraded")`. |
 | Pass 2 malformed JSON | jw | Treat candidate as `Rejected(reason="malformed-pass2")`. Other candidates continue. |
 | PPU OAM API unavailable | `mcp__knes__get_state` lacks OAM field / throws | `FrameChangeDetector` switches to fallback: 16×15 grid pixel hash, threshold ≥ 3 changed tiles. Sticky for the call. Trace: `frame_detector: fallback=pixel-hash`. |
-| Pass 1 false-positive epidemic (Pass 2 rejects > 80% of candidates after N ≥ 5 scans) | Counter | Log warning, do NOT bail — castle/dungeon legitimately has many "candidate-but-not" sprites. Telemetry only. |
+| Pass 1 false-positive epidemic (Pass 2 rejects &gt; 80% of candidates after N ≥ 5 scans) | Counter | Log warning, do NOT bail — castle/dungeon legitimately has many "candidate-but-not" sprites. Telemetry only. |
 | Walk STUCK signal from `WalkInteriorVision` (3× consecutive STUCK) | Existing sticky stuck in `WalkInteriorVision` | Return `StuckBailout(reason="walk-stuck-after-N", confirmedSoFar=K)`. |
 | Encounter triggered in interior (defensive — should not happen) | RAM phase change → `Battle` | Return `EncounterTriggered`. |
 | `screenTile → localXY` mapping fail | `ViewportMap.localToWorld` returns null / throws | Treat candidate as `Rejected(reason="invalid-coords")`. Trace anomaly. |
@@ -259,12 +266,14 @@ InteriorExplorer.exploreUntilFound(...)
 | Duplicate candidate across consecutive frames (same NPC visible 3 frames) | `LandmarkMemory.recordIfNew` dedup on `(kind, mapId, localX, localY)` | No-op. Telemetry shows "confirmed-but-already-known". Pass 2 still runs (stateless), giving extra signal. |
 
 **Invariants:**
+
 - Single-iter failure never aborts the explorer. Only sticky degradation or cap exhaustion does.
 - Pass 1 and Pass 2 are independent. Pass 2 fail doesn't undo Pass 1; Pass 1 fail just skips the iter.
 - Persistence is opt-in for current-call success. In-memory state suffices for `Found`.
 - Cap blocks new work, not cleanup of in-flight work.
 
 **Anti-patterns explicitly avoided:**
+
 - No retry on malformed JSON (won't fix on second call with same input).
 - No dedicated circuit breaker (3-consecutive sticky counters suffice).
 - No fallback "Pass 1 only without Pass 2" when Gemini Pro is down — Pass 2 down → no candidates confirmed for this call; next call retries.
@@ -272,10 +281,10 @@ InteriorExplorer.exploreUntilFound(...)
 
 ## 6. Testing strategy
 
-### 6.1 Unit tests (~25-30 new, all deterministic)
+### 6.1 Unit tests (\~25-30 new, all deterministic)
 
 | Component | Tests | Mocks |
-|---|---|---|
+| --- | --- | --- |
 | `FrameChangeDetector` | (1) first frame always triggers; (2) party-only motion (slots 0-3) doesn't trigger; (3) new OAM slot triggers; (4) fallback to pixel-hash when OAM null; (5) sticky fallback per call. | `OamSnapshot` test fixtures + `FakeEmulatorState`. |
 | `InteriorScanner` Pass 1 | (1) parse valid JSON list; (2) malformed JSON throws; (3) confidence filter ≥ 0.5; (4) empty candidates list; (5) prompt shape (snapshot test). | `FakeHaikuConsult` with scriptable responses. |
 | `InteriorScanner` Pass 2 | (1) confirmed → Landmark with refined note; (2) rejected → reason; (3) malformed → `Rejected("malformed")`; (4) crop logic 32×32 around candidate tile. | `FakeGeminiVisionConsult` + screenshot fixtures. |
@@ -286,9 +295,9 @@ InteriorExplorer.exploreUntilFound(...)
 ### 6.2 Integration tests (gated `KNES_LIVE_VISION=true`, skipped in CI)
 
 | Test | Scope | Cost |
-|---|---|---|
-| `InteriorExplorerLiveTest` | Real ROM → mapId=8 entry → `exploreUntilFound(NPC_SHOPKEEPER, kind=weapon)` → expect `Found` in < 50 steps. | ~$0.20 + 2-3 min wall clock. |
-| `InteriorScannerSnapshotTest` | Real Gemini Pro + 5 fixed Coneria interior screenshot fixtures → expected candidates. Updated when prompt changes. | ~$0.05. |
+| --- | --- | --- |
+| `InteriorExplorerLiveTest` | Real ROM → mapId=8 entry → `exploreUntilFound(NPC_SHOPKEEPER, kind=weapon)` → expect `Found` in &lt; 50 steps. | \~$0.20 + 2-3 min wall clock. |
+| `InteriorScannerSnapshotTest` | Real Gemini Pro + 5 fixed Coneria interior screenshot fixtures → expected candidates. Updated when prompt changes. | \~$0.05. |
 
 ### 6.3 Empirical validation runs (manual, on-demand only — NOT in CI)
 
@@ -353,19 +362,21 @@ Existing `~/.knes/ff1-landmarks.json` files written before this spec parse fine 
 
 If the cold-start Coneria validation run hits `NotFoundCapReached` or `StuckBailout`, escalate in this order:
 
-1. **R1: OAM cross-reference as Pass 1.5.** Insert deterministic OAM check between Pass 1 and Pass 2 — if no sprite slot exists at the candidate's pixel position, skip Pass 2. Eliminates 30-50% of Gemini Pro calls and bad landmarks at $0. ~50 LoC.
+1. **R0: Use Gemini Pro for just everything. Not worry about a cost, just switch model and check results**
 
-2. **R2: Three-tier confidence ladder** (`candidate | confirmed | verified-on-use`). Persist Pass 1 candidates with `candidate` flag; bump to `confirmed` after Pass 2; bump to `verified-on-use` after `BuyAtShop`/equivalent succeeds. Allows callers to filter by confidence level.
+2. **R1: OAM cross-reference as Pass 1.5.** Insert deterministic OAM check between Pass 1 and Pass 2 — if no sprite slot exists at the candidate's pixel position, skip Pass 2. Eliminates 30-50% of Gemini Pro calls and bad landmarks at $0. \~50 LoC.
 
-3. **R3: Goal hierarchy** (`primary | secondary | tertiary`) in `exploreUntilGoals(...)` API. `primary` is hard target; `secondary`/`tertiary` are persisted-if-seen but don't block return. Amortizes one explore call across multiple downstream specs.
+3. **R2: Three-tier confidence ladder** (`candidate | confirmed | verified-on-use`). Persist Pass 1 candidates with `candidate` flag; bump to `confirmed` after Pass 2; bump to `verified-on-use` after `BuyAtShop`/equivalent succeeds. Allows callers to filter by confidence level.
 
-4. **R4: Token-per-call telemetry + 100k context warning.** Add `tokensIn`/`tokensOut` per trace event. Warn if cumulative > 80k tokens (GPP-validated context-degradation threshold).
+4. **R3: Goal hierarchy** (`primary | secondary | tertiary`) in `exploreUntilGoals(...)` API. `primary` is hard target; `secondary`/`tertiary` are persisted-if-seen but don't block return. Amortizes one explore call across multiple downstream specs.
 
-5. **R5: Sprite-dict from CHR-ROM.** Build a deterministic mapping (sprite tile ID → kind) by extracting CHR-ROM patterns. Replaces Pass 2 entirely for sprite-based discrimination. Requires new CHR extraction tooling. Spec 5 candidate.
+5. **R4: Token-per-call telemetry + 100k context warning.** Add `tokensIn`/`tokensOut` per trace event. Warn if cumulative &gt; 80k tokens (GPP-validated context-degradation threshold).
 
-6. **R6: Critique instance.** Temporary Gemini Pro reviewing the current run's trace for stuck-loops and goal contamination (GPP's `criticizeAgent`). Useful once we have > 1 town to explore.
+6. **R5: Sprite-dict from CHR-ROM.** Build a deterministic mapping (sprite tile ID → kind) by extracting CHR-ROM patterns. Replaces Pass 2 entirely for sprite-based discrimination. Requires new CHR extraction tooling. Spec 5 candidate.
 
-7. **R7: Pre-seed landmarks from FF1 disasm** (handoff option B). Orthogonal — could run alongside self-discovery to give explorer a head start. Not needed if self-discovery alone meets the success criteria.
+7. **R6: Critique instance.** Temporary Gemini Pro reviewing the current run's trace for stuck-loops and goal contamination (GPP's `criticizeAgent`). Useful once we have &gt; 1 town to explore.
+
+8. **R7: Pre-seed landmarks from FF1 disasm** (handoff option B). Orthogonal — could run alongside self-discovery to give explorer a head start. Not needed if self-discovery alone meets the success criteria.
 
 **Design principle (not escalation, but worth restating):** the `capSteps` parameter is a HARD stop. No implicit fallback "search a bit more" is allowed. Anti-pattern: GPP's "obsessive tile coverage" loops drained budget without progress. If `capSteps` reached, return `NotFoundCapReached` and let the caller decide whether to re-call.
 
@@ -375,27 +386,38 @@ If the cold-start Coneria validation run hits `NotFoundCapReached` or `StuckBail
 
 2. **PPU OAM API availability.** Spec assumes `mcp__knes__get_state` (or emulator core) exposes OAM (Object Attribute Memory — 256 bytes, 64 4-byte sprite slots). If not, `FrameChangeDetector` falls back to pixel-grid hash. Verification step in plan phase.
 
-3. **Is `DiscoverShop`'s 4×A still correct after `WalkInteriorTo(seed)`?** When the explorer points at a confirmed shopkeeper landmark at `(localX, localY)`, `BuyAtShop` is then called by `OutfitBootPhase` and presumably walks-to-and-talks-to. The 4×A pattern (approach + dialog → BUY/Sell → BUY) may need adjustment if the party arrives at a different facing direction. To verify in implementation by reading `BuyAtShop` source.
+3. **Is** `DiscoverShop`**'s 4×A still correct after** `WalkInteriorTo(seed)`**?** When the explorer points at a confirmed shopkeeper landmark at `(localX, localY)`, `BuyAtShop` is then called by `OutfitBootPhase` and presumably walks-to-and-talks-to. The 4×A pattern (approach + dialog → BUY/Sell → BUY) may need adjustment if the party arrives at a different facing direction. To verify in implementation by reading `BuyAtShop` source.
 
-4. **Pass 1 prompt rates `confidence` — is Haiku's confidence calibration usable?** Threshold 0.5 chosen conservatively. May need tuning after first empirical scan results. GPP's lesson: don't trust LLM confidence absolutely — use it only as a coarse filter.
+4. **Pass 1 prompt rates** `confidence` **— is Haiku's confidence calibration usable?** Threshold 0.5 chosen conservatively. May need tuning after first empirical scan results. GPP's lesson: don't trust LLM confidence absolutely — use it only as a coarse filter.
 
-5. **Pass 2 `refinedNote` format.** Spec defines `"kind=weapon; items=..."` shape but `OutfitBootPhase`'s existing `cachedShop` lookup checks `note.contains("kind=weapon")`. Format must match exactly. Implementation must use the same string format both directions.
+5. **Pass 2** `refinedNote` **format.** Spec defines `"kind=weapon; items=..."` shape but `OutfitBootPhase`'s existing `cachedShop` lookup checks `note.contains("kind=weapon")`. Format must match exactly. Implementation must use the same string format both directions.
 
 6. **Frame-diff trigger rate empirically.** Spec assumes 30-40% of steps trigger scan. If real rate is much higher (e.g., NES sprite flicker causes spurious OAM deltas) cost projection blows up. Telemetry will reveal post-MVP.
 
 ## 11. Acceptance criteria / Definition of Done
 
 - [ ] `LandmarkKind` enum extended with `CHEST`, `SIGN`, `DIALOGUE_TRIGGER`. Existing landmarks JSON files load without errors.
+
 - [ ] `HaikuConsult` interface gains `scanInteriorCandidates(image)` and `verifyLandmark(image, candidate)`. Anthropic and Gemini implementations both compile; `FakeHaikuConsult` supports scripting both.
+
 - [ ] `InteriorScanner` class implemented with Pass 1 + Pass 2 flow. Unit tests (5 Pass 1 + 4 Pass 2) green.
+
 - [ ] `FrameChangeDetector` class implemented with OAM primary + pixel-hash fallback. Unit tests (5) green.
+
 - [ ] `InteriorExplorer` class implemented with `exploreUntilFound(...)` and `exploreFully(...)`. 8 unit tests green.
+
 - [ ] `OutfitBootPhase` updated: `discoverWeaponShop` replaced (or wrapped) with `explorer.exploreUntilFound(NPC_SHOPKEEPER, predicate=kind=weapon, capSteps=50)`. `cachedShop` path unchanged.
+
 - [ ] All 7 new trace events emitted at appropriate points; existing traces unchanged.
+
 - [ ] 302 baseline tests still green; 3 baseline failures unchanged.
+
 - [ ] Empirical run #1 (cold start, empty `~/.knes/`): `boot_outfit_summary: weaponsBought ≥ 1`. PASS.
+
 - [ ] Empirical run #2 (warm start, persisted landmarks): `cachedShop` hit logged, no new Pass 1/Pass 2 calls in `interior_scan_*` traces.
+
 - [ ] Open question §10.1 (mapId=8 town vs castle) resolved via run-time RAM log; documented in implementation notes.
+
 - [ ] Open question §10.2 (PPU OAM availability) verified or fallback engaged; documented.
 
 ## 12. Repo paths

@@ -12,9 +12,12 @@ import io.ktor.http.isSuccess
 import knes.agent.perception.Landmark
 import knes.agent.perception.LandmarkKind
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.add
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -74,6 +77,60 @@ class GeminiVisionConsult(
             maxOutputTokens = 2000)
         val raw = postOrNull(body) ?: return HaikuConsult.OverworldClassification.NotFound(0.0)
         return parseOverworldResponse(raw)
+    }
+
+    override suspend fun scanInteriorCandidates(
+        screenshotBase64: String?,
+    ): HaikuConsult.CandidatesScan {
+        if (screenshotBase64.isNullOrEmpty()) return HaikuConsult.CandidatesScan(emptyList(), 0.0)
+        return try {
+            // Gemini 2.5 Pro thinking mode mandatory → maxOutputTokens=2000.
+            val body = buildBody(
+                systemPrompt = SYSTEM_INTERIOR_SCAN,
+                userText = "Identify visible landmarks.",
+                b64 = screenshotBase64,
+                maxOutputTokens = 2000,
+            )
+            val raw = postOrNull(body) ?: return HaikuConsult.CandidatesScan(emptyList(), 0.0)
+            val (innerText, costUsd) = parseEnvelope(raw)
+            if (innerText == null) return HaikuConsult.CandidatesScan(emptyList(), costUsd)
+            HaikuConsult.CandidatesScan(parsePass1(innerText), costUsd)
+        } catch (e: Throwable) {
+            System.err.println("[gemini-vision] scanInteriorCandidates failed: ${e.message}")
+            HaikuConsult.CandidatesScan(emptyList(), 0.0)
+        }
+    }
+
+    override suspend fun verifyLandmark(
+        focusedScreenshotBase64: String?,
+        candidateKind: String,
+        candidateScreenX: Int,
+        candidateScreenY: Int,
+    ): HaikuConsult.VerifyResult {
+        if (focusedScreenshotBase64.isNullOrEmpty()) {
+            return HaikuConsult.VerifyResult.Errored("no-screenshot", 0.0)
+        }
+        return try {
+            // Mirror the classifyShopMenu / classifyOverworldLandmark pattern:
+            // build request body, POST to Gemini, parse envelope -> innerText + costUsd,
+            // then parsePass2. maxOutputTokens=2000 because gemini-2.5-pro requires
+            // thinking mode (which consumes ~400-600 tokens before producing JSON).
+            val body = buildBody(
+                systemPrompt = SYSTEM_VERIFY_LANDMARK,
+                userText = "Verify candidate kind=$candidateKind at tile ($candidateScreenX, $candidateScreenY).",
+                b64 = focusedScreenshotBase64,
+                maxOutputTokens = 2000,
+            )
+            val raw = postOrNull(body)
+                ?: return HaikuConsult.VerifyResult.Errored("api-error: no response", 0.0)
+            val (innerText, costUsd) = parseEnvelope(raw)
+            if (innerText == null) {
+                return HaikuConsult.VerifyResult.Errored("envelope-malformed", costUsd)
+            }
+            parsePass2(innerText, costUsd)
+        } catch (e: Throwable) {
+            HaikuConsult.VerifyResult.Errored("api-error: ${e.message}", 0.0)
+        }
     }
 
     override fun close() { client.close() }
@@ -143,6 +200,15 @@ class GeminiVisionConsult(
         private val JSON_OBJECT = Regex("""\{[\s\S]*\}""")
         private val json = Json { ignoreUnknownKeys = true }
 
+        // Spec 4 §3.1 — Pass 1 candidate scan. Verbatim from design doc.
+        // Reuses AnthropicHaikuConsult.SYSTEM_INTERIOR_SCAN value to keep the prompt
+        // identical across providers (Gemini Pro tends to recognize NES sprites better
+        // than Haiku, per empirical 2026-05-08 runs — "pixele najlepiej w gemini").
+        const val SYSTEM_INTERIOR_SCAN = AnthropicHaikuConsult.SYSTEM_INTERIOR_SCAN
+
+        /** Pass-1 parser delegated to AnthropicHaikuConsult companion (same JSON schema). */
+        fun parsePass1(raw: String) = AnthropicHaikuConsult.parsePass1(raw)
+
         private const val SYSTEM_CLASSIFY =
             "You analyze a screenshot of a Final Fantasy 1 (NES) interior — castle, town, " +
                 "or dungeon room. Identify visible NPCs and staircases. " +
@@ -178,6 +244,79 @@ class GeminiVisionConsult(
                 "Return ONLY JSON, no prose."
 
         private const val SHOP_USER_TEXT = "Classify this shop BUY menu."
+
+        /** Pass 2 system prompt (Spec 4 §3.2). Verbatim — public for unit test only. */
+        const val SYSTEM_VERIFY_LANDMARK: String = """You are verifying a Final Fantasy 1 (NES) interior landmark candidate.
+The image is a focused 32x32 pixel crop centered on tile coordinates the
+candidate scanner reported. The candidate's claimed kind is provided in
+the user message.
+
+Two-step task:
+(1) Confirm or reject that the candidate kind matches what you see.
+(2) If confirmed AND the candidate kind is "shopkeeper", additionally
+    classify the shop type from visual context (counter contents, NPC
+    sprite palette): weapon|armor|whiteMagic|blackMagic|item|unknown.
+    For non-shopkeeper kinds, refinedShopKind = null.
+
+Output JSON only. Schema:
+{"confirmed": true,
+ "refinedKind":"<same as candidate kind>",
+ "refinedShopKind":"<weapon|armor|whiteMagic|blackMagic|item|unknown>"
+                    OR null for non-shopkeeper,
+ "reason":"<short>"}
+or
+{"confirmed": false, "reason":"<short>"}
+
+Confirmed examples by kind:
+- shopkeeper: NPC behind a counter; refinedShopKind required.
+  - weapon shop:  counter shows weapons (sword/axe/dagger/hammer/staff).
+  - armor shop:   counter shows shields/helms/body armor.
+  - whiteMagic:   CURE/HARM/FOG/RUSE scroll sprites.
+  - blackMagic:   FIRE/LIT/SLEP/LOCK scroll sprites.
+  - item shop:    potion/tent/cabin sprites.
+  - unknown:      shopkeeper sprite clear but counter unclear.
+- innkeeper: NPC near a bed/inn counter; refinedShopKind = null.
+- king: NPC on throne; refinedShopKind = null.
+- generic_npc / chest / sign / stairs_up / stairs_down / exit_tile:
+  refinedShopKind = null.
+
+Note: "innkeeper" is its own kind. Do NOT classify a shopkeeper as
+"inn" — if you see a bed/inn context, the kind is "innkeeper", not
+"shopkeeper" with shop type "inn".
+
+Return ONLY JSON."""
+
+        /** Pure parser for Pass 2 inner text. Public for unit test.
+         *  Returns [HaikuConsult.VerifyResult.Confirmed] when JSON has confirmed=true
+         *  with a refinedKind; [HaikuConsult.VerifyResult.Rejected] when confirmed=false
+         *  OR the inner text is malformed (the envelope already responded — only the
+         *  vision content is bad). Use [HaikuConsult.VerifyResult.Errored] only for
+         *  HTTP/network/setup failures upstream of this function. */
+        fun parsePass2(raw: String, costUsd: Double): HaikuConsult.VerifyResult {
+            return try {
+                val match = JSON_OBJECT.find(raw)?.value
+                    ?: return HaikuConsult.VerifyResult.Rejected("malformed: no JSON object", costUsd)
+                val obj = json.parseToJsonElement(match).jsonObject
+                val confirmed = obj["confirmed"]?.jsonPrimitive?.booleanOrNull ?: false
+                if (!confirmed) {
+                    val reason = obj["reason"]?.jsonPrimitive?.contentOrNull ?: "no reason"
+                    return HaikuConsult.VerifyResult.Rejected(reason, costUsd)
+                }
+                val refinedKind = obj["refinedKind"]?.jsonPrimitive?.contentOrNull
+                    ?: return HaikuConsult.VerifyResult.Rejected("malformed: missing refinedKind", costUsd)
+                // refinedShopKind may be JsonNull or absent for non-shopkeeper kinds.
+                val rsk = obj["refinedShopKind"]
+                val refinedShopKind = if (rsk == null || rsk is JsonNull) {
+                    null
+                } else {
+                    rsk.jsonPrimitive.contentOrNull
+                }
+                val reason = obj["reason"]?.jsonPrimitive?.contentOrNull ?: ""
+                HaikuConsult.VerifyResult.Confirmed(refinedKind, refinedShopKind, reason, costUsd)
+            } catch (e: Throwable) {
+                HaikuConsult.VerifyResult.Rejected("malformed: ${e.message}", costUsd)
+            }
+        }
 
         /** Parse the Gemini response envelope and the inner LLM-emitted JSON.
          *  Visible for testing — pure function, no side effects. */

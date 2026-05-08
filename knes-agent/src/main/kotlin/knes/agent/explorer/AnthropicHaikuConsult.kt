@@ -16,6 +16,9 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -69,6 +72,36 @@ class AnthropicHaikuConsult(
         kind: String,
     ): HaikuConsult.OverworldClassification =
         HaikuConsult.OverworldClassification.NotFound(0.0)
+
+    override suspend fun scanInteriorCandidates(
+        screenshotBase64: String?,
+    ): HaikuConsult.CandidatesScan {
+        if (screenshotBase64.isNullOrEmpty()) return HaikuConsult.CandidatesScan(emptyList(), 0.0)
+        return try {
+            val body = buildBody(
+                systemPrompt = SYSTEM_INTERIOR_SCAN,
+                userText = "Identify visible landmarks.",
+                b64 = screenshotBase64,
+                maxTokens = 1500,
+            )
+            val raw = postOrNull(body) ?: return HaikuConsult.CandidatesScan(emptyList(), 0.0)
+            val (innerText, costUsd) = parseEnvelope(raw)
+            if (innerText == null) return HaikuConsult.CandidatesScan(emptyList(), costUsd)
+            HaikuConsult.CandidatesScan(parsePass1(innerText), costUsd)
+        } catch (e: Exception) {
+            System.err.println("[haiku-consult] scanInteriorCandidates failed: ${e.message}")
+            HaikuConsult.CandidatesScan(emptyList(), 0.0)
+        }
+    }
+
+    override suspend fun verifyLandmark(
+        focusedScreenshotBase64: String?,
+        candidateKind: String,
+        candidateScreenX: Int,
+        candidateScreenY: Int,
+    ): HaikuConsult.VerifyResult {
+        return HaikuConsult.VerifyResult.Errored("stub-not-implemented", 0.0)
+    }
 
     override fun close() { client.close() }
 
@@ -155,6 +188,31 @@ class AnthropicHaikuConsult(
                 "STAIRS_UP / STAIRS_DOWN: ascending / descending staircase tile. " +
                 "Return ONLY JSON, no prose."
 
+        const val SYSTEM_INTERIOR_SCAN =
+            """You are reading a Final Fantasy 1 (NES) interior screenshot. The image is
+256x240 px, a 16-tile-wide x 15-tile-tall viewport (each tile 16x16 px).
+The party (4 sprites overlapping into one figure) renders at tile (8, 7).
+
+Identify ALL visible non-party landmarks. Possible kinds:
+- "shopkeeper"        — NPC behind a counter, often dressed distinctively
+- "king"              — NPC on a throne / royal sprite
+- "innkeeper"         — NPC near a bed/inn counter
+- "generic_npc"       — generic townsperson/villager (dialogue trigger)
+- "stairs_up"         — stair sprite leading up
+- "stairs_down"       — stair sprite leading down
+- "chest"             — treasure chest (open or closed)
+- "sign"              — sign or tablet
+- "exit_tile"         — door/staircase clearly leading outside
+
+Output JSON only. Schema:
+{"candidates":[{"kind":"<kind>","screenX":<int 0..15>,
+                "screenY":<int 0..14>,"confidence":<float 0..1>}]}
+
+If no landmarks visible: {"candidates":[]}.
+
+Do NOT guess. confidence ≥ 0.7 only when you can see the sprite clearly.
+Return ONLY JSON."""
+
         private const val SYSTEM_DIALOG =
             "You read short on-screen dialog text from a Final Fantasy 1 (NES) screenshot. " +
                 "Dialog appears as a white-bordered box near the bottom of the screen with white " +
@@ -202,6 +260,29 @@ class AnthropicHaikuConsult(
             } catch (e: Exception) {
                 System.err.println("[haiku-consult] parseDialog failed: ${e.message}")
                 HaikuConsult.DialogReading("", null, costUsd)
+            }
+        }
+
+        /** Parse Pass-1 candidate scan inner text. Public for unit testing.
+         *  Returns empty list on any parse failure. */
+        fun parsePass1(raw: String): List<HaikuConsult.CandidateLandmark> {
+            return try {
+                val match = JSON_OBJECT.find(raw) ?: return emptyList()
+                val obj = json.parseToJsonElement(match.value).jsonObject
+                val arr = obj["candidates"]?.jsonArray ?: return emptyList()
+                arr.mapNotNull { el ->
+                    val o = el.jsonObject
+                    val kind = o["kind"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                    val sx = o["screenX"]?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
+                    val sy = o["screenY"]?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
+                    val conf = o["confidence"]?.jsonPrimitive?.doubleOrNull ?: return@mapNotNull null
+                    HaikuConsult.CandidateLandmark(
+                        kind = kind, screenX = sx, screenY = sy, confidence = conf,
+                    )
+                }
+            } catch (e: Exception) {
+                System.err.println("[haiku-consult] parsePass1 failed: ${e.message}")
+                emptyList()
             }
         }
 

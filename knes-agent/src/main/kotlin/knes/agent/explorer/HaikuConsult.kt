@@ -37,6 +37,32 @@ interface HaikuConsult {
         data class NotFound(val costUsd: Double) : OverworldClassification
     }
 
+    data class CandidateLandmark(
+        /** "shopkeeper" | "king" | "innkeeper" | "generic_npc" | "stairs_up" |
+         *  "stairs_down" | "chest" | "sign" | "exit_tile" */
+        val kind: String,
+        val screenX: Int,    // 0..15
+        val screenY: Int,    // 0..14
+        val confidence: Double,
+    )
+
+    data class CandidatesScan(
+        val candidates: List<CandidateLandmark>,
+        val costUsd: Double,
+    )
+
+    sealed interface VerifyResult {
+        /** refinedShopKind is null for non-shopkeeper kinds. */
+        data class Confirmed(
+            val refinedKind: String,
+            val refinedShopKind: String?,
+            val reason: String,
+            val costUsd: Double,
+        ) : VerifyResult
+        data class Rejected(val reason: String, val costUsd: Double) : VerifyResult
+        data class Errored(val reason: String, val costUsd: Double) : VerifyResult
+    }
+
     /** Called after [knes.agent.skills.ExploreInteriorFrontier] finishes a fresh interior.
      *  Implementation should look at screenshot + visited tile count and return any
      *  Landmark records to add (NPC_KING / NPC_SHOPKEEPER / NPC_GENERIC / etc.). */
@@ -68,6 +94,21 @@ interface HaikuConsult {
         screenshotBase64: String?,
         kind: String,
     ): OverworldClassification
+
+    /** Pass 1: enumerate visible interior landmarks. Returns empty list on any
+     *  failure (no exception leaks). */
+    suspend fun scanInteriorCandidates(
+        screenshotBase64: String?,
+    ): CandidatesScan
+
+    /** Pass 2: verify a single candidate against a focused crop. Returns
+     *  [VerifyResult.Errored] on any infrastructure failure (no exception leaks). */
+    suspend fun verifyLandmark(
+        focusedScreenshotBase64: String?,
+        candidateKind: String,
+        candidateScreenX: Int,
+        candidateScreenY: Int,
+    ): VerifyResult
 }
 
 /** Test fake. Pass canned results in constructor; assert calls via `interiorCalls`/`dialogCalls`/`shopCalls`. */
@@ -76,11 +117,16 @@ class FakeHaikuConsult(
     private val dialogReadings: List<HaikuConsult.DialogReading> = emptyList(),
     private val shopClassifications: List<HaikuConsult.ShopClassification> = emptyList(),
     private val overworldClassifications: List<HaikuConsult.OverworldClassification> = emptyList(),
+    private val candidatesScans: List<HaikuConsult.CandidatesScan> = emptyList(),
+    private val verifyResults: List<HaikuConsult.VerifyResult> = emptyList(),
 ) : HaikuConsult {
     var interiorCalls: Int = 0; private set
     var dialogCalls: Int = 0; private set
     var shopCalls: Int = 0; private set
     var overworldCalls: Int = 0; private set
+    var scanCalls: Int = 0; private set
+    var verifyCalls: Int = 0; private set
+    val verifyArgs: MutableList<Triple<String, Int, Int>> = mutableListOf()
 
     override suspend fun classifyInterior(
         mapId: Int, visitedTileCount: Int, screenshotBase64: String?, runId: String,
@@ -112,6 +158,28 @@ class FakeHaikuConsult(
         val res = overworldClassifications.getOrNull(overworldCalls)
             ?: HaikuConsult.OverworldClassification.NotFound(0.0)
         overworldCalls++
+        return res
+    }
+
+    override suspend fun scanInteriorCandidates(
+        screenshotBase64: String?,
+    ): HaikuConsult.CandidatesScan {
+        val res = candidatesScans.getOrNull(scanCalls)
+            ?: HaikuConsult.CandidatesScan(emptyList(), 0.0)
+        scanCalls++
+        return res
+    }
+
+    override suspend fun verifyLandmark(
+        focusedScreenshotBase64: String?,
+        candidateKind: String,
+        candidateScreenX: Int,
+        candidateScreenY: Int,
+    ): HaikuConsult.VerifyResult {
+        verifyArgs.add(Triple(candidateKind, candidateScreenX, candidateScreenY))
+        val res = verifyResults.getOrNull(verifyCalls)
+            ?: HaikuConsult.VerifyResult.Errored("fake-not-scripted", 0.0)
+        verifyCalls++
         return res
     }
 }

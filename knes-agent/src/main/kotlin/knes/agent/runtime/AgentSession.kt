@@ -5,14 +5,15 @@ import knes.agent.advisor.StrategyAdvice
 import knes.agent.executor.ExecutorAgent
 import knes.agent.explorer.HaikuConsult
 import knes.agent.skills.BuyAtShop
-import knes.agent.skills.DiscoverShop
 import knes.agent.skills.EquipWeapon
 import knes.agent.skills.ExitInterior
 import knes.agent.skills.GrindLoop
+import knes.agent.skills.InteriorScanner
 import knes.agent.skills.WalkInteriorVision
 import knes.agent.skills.WalkOverworldTo
 import knes.agent.perception.FfPhase
 import knes.agent.perception.FogOfWar
+import knes.agent.perception.FrameChangeDetector
 import knes.agent.perception.Landmark
 import knes.agent.perception.LandmarkKind
 import knes.agent.perception.LandmarkMemory
@@ -753,32 +754,73 @@ class AgentSession(
         mapSession: MapSession,
         fog: FogOfWar,
     ): Landmark? {
-        // Vision-driven retry probe: WalkInteriorVision navigates to whatever the
-        // vision system identifies, with no coordinate hint. We retry up to N
-        // times, calling DiscoverShop after each navigation in hopes of landing
-        // at a shopkeeper tile. If Spec 2 e2e validation shows this is unreliable,
-        // a follow-up spec should add coord-targeted interior navigation.
-        val maxAttempts = landmarkMemory.findByKind(LandmarkKind.NPC_SHOPKEEPER).size
-            .coerceAtLeast(1).coerceAtMost(4)
-        val discoverSkill = DiscoverShop(toolset, landmarkMemory, vision)
-        repeat(maxAttempts) { attemptIdx ->
-            val walk = WalkInteriorVision(toolset, navigator, mapSession = mapSession).invoke(emptyMap())
-            if (!walk.ok) {
-                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                    note = "boot_shop_probe: attempt=$attemptIdx walk_failed: ${walk.message}"))
-                return@repeat
-            }
-            val classify = discoverSkill.invoke(emptyMap())
-            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                note = "boot_shop_probe: attempt=$attemptIdx classify=${classify.message}"))
-            if (classify.ok && classify.message.contains("kind=weapon")) {
-                return landmarkMemory.findByKind(LandmarkKind.NPC_SHOPKEEPER)
-                    .first { it.note.contains("kind=weapon") }
-            }
-            // Exit current interior to try next candidate.
-            ExitInterior(toolset, mapSession, fog).invoke(emptyMap())
+        // Spec 4 (2026-05-08): brittle DiscoverShop probe loop replaced with
+        // goal-aware InteriorExplorer (two-pass scanner + frame-change-gated
+        // walking). WalkInteriorVision is unchanged per autonomy_principle.md.
+        // See docs/superpowers/specs/2026-05-08-ff1-interior-self-discovery-design.md.
+        // `navigator`, `mapSession`, `fog` are retained on the signature for
+        // source compatibility; navigator is consumed by the WalkInteriorVision
+        // helper, the others are currently unused (cleanup in a follow-up).
+
+        val walkSkill = buildWalkInteriorVision(navigator, mapSession)
+        val runId = resolvedRunDir.fileName?.toString() ?: "run"
+        val sink: InteriorTraceSink = { note ->
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT", note = note))
         }
-        return null
+        val explorer = InteriorExplorer(
+            walk = RealWalkInteriorVisionAdapter(walkSkill, toolset),
+            scanner = InteriorScanner(vision, landmarkMemory, runId, traceSink = sink),
+            frameDetector = FrameChangeDetector(),
+            emu = RealInteriorEmulatorState(toolset),
+            memory = landmarkMemory,
+            traceSink = sink,
+        )
+
+        val outcome = explorer.exploreUntilFound(
+            goal = LandmarkKind.NPC_SHOPKEEPER,
+            predicate = { it.note.contains("kind=weapon") },
+            capSteps = 200,
+        )
+
+        return when (outcome) {
+            is InteriorExplorer.ExploreOutcome.Found -> {
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "interior_explore_outcome: Found, " +
+                        "scans=${outcome.stats.scansTriggered}, " +
+                        "confirmed=${outcome.stats.confirmed}, " +
+                        "walkSteps=${outcome.stats.walkSteps}, " +
+                        "costUsd=${outcome.stats.costUsd}"))
+                outcome.landmark
+            }
+            is InteriorExplorer.ExploreOutcome.NotFoundCapReached -> {
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "interior_explore_outcome: NotFoundCapReached, " +
+                        "scans=${outcome.stats.scansTriggered}, " +
+                        "candidates=${outcome.stats.candidatesEvaluated}, " +
+                        "walkSteps=${outcome.stats.walkSteps}, " +
+                        "costUsd=${outcome.stats.costUsd}"))
+                null
+            }
+            is InteriorExplorer.ExploreOutcome.StuckBailout -> {
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "interior_explore_outcome: StuckBailout reason=${outcome.reason}, " +
+                        "walkSteps=${outcome.stats.walkSteps}, costUsd=${outcome.stats.costUsd}"))
+                null
+            }
+            is InteriorExplorer.ExploreOutcome.EncounterTriggered -> {
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "interior_explore_outcome: EncounterTriggered, " +
+                        "walkSteps=${outcome.stats.walkSteps}"))
+                null
+            }
+        }
+    }
+
+    private fun buildWalkInteriorVision(
+        navigator: VisionInteriorNavigator,
+        mapSession: MapSession,
+    ): WalkInteriorVision {
+        return WalkInteriorVision(toolset, navigator, mapSession = mapSession)
     }
 
     companion object {
