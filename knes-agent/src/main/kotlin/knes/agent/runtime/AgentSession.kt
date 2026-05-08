@@ -5,6 +5,7 @@ import knes.agent.advisor.StrategyAdvice
 import knes.agent.executor.ExecutorAgent
 import knes.agent.explorer.HaikuConsult
 import knes.agent.skills.BuyAtShop
+import knes.agent.skills.EnterConeriaWeaponShop
 import knes.agent.skills.EquipWeapon
 import knes.agent.skills.ExitInterior
 import knes.agent.skills.GrindLoop
@@ -684,6 +685,23 @@ class AgentSession(
             trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                 note = "boot_outfit_summary: boot_shop_not_found"))
             return
+        }
+
+        // 3b. Spec 5: navigate from town overlay (mapId=8) into the weapon shop
+        //     sub-interior so BuyAtShop's `landmark.mapId == currentMapId` precondition
+        //     holds. Skipped if party already inside a sub-shop (mapId != 8) — e.g.
+        //     warm-start where an earlier run left the party in the shop.
+        val currentMapId = toolset.getState().ram["currentMapId"] ?: 0
+        if (currentMapId == 8) {
+            val enterSkill = EnterConeriaWeaponShop(toolset, landmarkMemory)
+            val r = enterSkill.invoke(emptyMap())
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_enter_shop: ${r.message}"))
+            if (!r.ok) {
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_outfit_summary: enter_shop_failed"))
+                return
+            }
         }
 
         // 4. Per-char buy loop.
