@@ -38,10 +38,15 @@ class EnterConeriaWeaponShop(
     private val pressFrames = 12
     private val gapFrames = 8
     private val settleFrames = 8
-    private val maxNorthTaps = 15
 
-    /** X-axis offsets (relative to wall-hit X) to sweep when probing for the door. */
-    private val sweepOffsets = listOf(0, -1, +1, -2, +2, -3, +3, -4, +4, -5, +5)
+    /** Run 16 confirmed mapId=24 reached via 16 N-taps was Coneria CASTLE entrance,
+     *  not weapon shop. Castle gate sits at top center of plaza; shop doors are
+     *  *between* spawn and castle. Walk only ~7 N steps to mid-plaza, then sweep
+     *  wider X range for shop doors. */
+    private val maxNorthTaps = 7
+
+    /** Sweep offsets up to ±8 — Coneria buildings span the whole plaza width. */
+    private val sweepOffsets = listOf(0, -1, +1, -2, +2, -3, +3, -4, +4, -5, +5, -6, +6, -7, +7, -8, +8)
 
     override suspend fun invoke(args: Map<String, String>): SkillResult {
         val pre = toolset.getState().ram
