@@ -76,6 +76,16 @@ class WalkInteriorVision(
 
             val frame = toolset.getState().frame
             val shotB64 = toolset.getScreen().base64
+            // 2026-05-09 cont 4: per-iter PNG for offline diagnosis. Without
+            // these, a 60-step vision drift leaves zero visual evidence of
+            // what the model saw or whether the party moved tile-to-tile.
+            // Per `feedback_per_iter_screenshots.md`.
+            try {
+                val mfPre = ramPre["mapflags"] ?: 0
+                val fn = "/tmp/spec5-vision-exit-iter-%02d-sm%d_%d-mf%d.png".format(
+                    stepsTaken, partyXPre, partyYPre, mfPre)
+                java.io.File(fn).writeBytes(java.util.Base64.getDecoder().decode(shotB64))
+            } catch (_: Throwable) { /* dev noise */ }
             // V5.11: compute frontier hint when memory + mapSession are available.
             var frontierHint: InteriorMove? = null
             var unvisitedReachable = 0
