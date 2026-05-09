@@ -390,25 +390,41 @@ class BuyAtShop(
         }
 
         // Drive into MAIN_MENU. Returns true if reached, false if shop closed.
-        suspend fun driveToMainMenu(maxSteps: Int = 8): Boolean {
+        // V5.44.1 (2026-05-09): UNKNOWN handler is now step+retry (no taps)
+        // for the first 2 attempts. Run #15 evidence: blindly tapping B on
+        // UNKNOWN closed the shop entirely when the actual phase was MAIN_MENU
+        // misclassified by Gemini stochastic.
+        suspend fun driveToMainMenu(maxSteps: Int = 10): Boolean {
+            var unknownCount = 0
             for (step in 0 until maxSteps) {
                 val phase = classify()
-                log("invokeManyStateful.driveToMainMenu[$step]: phase=$phase")
+                log("invokeManyStateful.driveToMainMenu[$step]: phase=$phase unknownCount=$unknownCount")
                 when (phase) {
                     HaikuConsult.ShopMenuPhase.MAIN_MENU -> return true
                     HaikuConsult.ShopMenuPhase.WELCOME -> {
                         toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 15)
+                        unknownCount = 0
                     }
                     HaikuConsult.ShopMenuPhase.ITEM_LIST,
                     HaikuConsult.ShopMenuPhase.FOR_WHOM,
                     HaikuConsult.ShopMenuPhase.BUY_CONFIRM,
-                    HaikuConsult.ShopMenuPhase.ANOTHER,
-                    HaikuConsult.ShopMenuPhase.UNKNOWN -> {
+                    HaikuConsult.ShopMenuPhase.ANOTHER -> {
                         toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12)
+                        unknownCount = 0
+                    }
+                    HaikuConsult.ShopMenuPhase.UNKNOWN -> {
+                        unknownCount++
+                        if (unknownCount >= 3) {
+                            // Tap B only after 3 consecutive UNKNOWN — assume
+                            // we're really in some unrecognized sub-menu.
+                            toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12)
+                            unknownCount = 0
+                        }
+                        // Otherwise: just step frames and re-classify.
                     }
                     HaikuConsult.ShopMenuPhase.CLOSED -> return false
                 }
-                toolset.step(buttons = emptyList(), frames = 6)
+                toolset.step(buttons = emptyList(), frames = 8)
             }
             return false
         }

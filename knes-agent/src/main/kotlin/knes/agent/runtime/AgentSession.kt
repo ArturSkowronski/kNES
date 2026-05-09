@@ -1077,19 +1077,29 @@ class AgentSession(
             // party. Detector reuses RAM gate + classifyShopMenu.
             val postEnterRam = toolset.getState().ram
             val postEnterDetect = ShopUiDetector.detect(postEnterRam, screenshot, outfitVision)
+            // V5.44.2 (2026-05-09): in addition to the kind-classifier (which
+            // is stochastic and has flipped between open/closed on identical
+            // screens — runs #10, #15), also consult the menu-phase classifier
+            // and treat ANY non-CLOSED phase as "shop UI is up". This catches
+            // the case where kind-classifier returns unknown but the dialog is
+            // genuinely on screen. Run #15 evidence: post_enter said closed,
+            // keeper_approach walked cardinals into the open menu, state
+            // machine couldn't recover and all 4 pairs got ShopClosed.
+            val postEnterPhase = outfitVision!!.classifyShopMenuPhase(screenshot)
+            val phaseSaysOpen = postEnterPhase.phase != HaikuConsult.ShopMenuPhase.CLOSED &&
+                postEnterPhase.phase != HaikuConsult.ShopMenuPhase.UNKNOWN
             trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                 note = "boot_post_enter_detect: open=${postEnterDetect.open} " +
-                       "source=${postEnterDetect.source} kind=${postEnterDetect.kind}"))
-            if (postEnterDetect.open && postEnterDetect.kind == "weapon") {
-                // Weapon shop dialog already on screen (advisor opened
-                // BUY/SELL/EXIT before emitting Done). Don't B-spam — instead
-                // pass menuAlreadyOpen=true to BuyAtShop so it skips the
-                // dialog-opening A-tap. Run #3 (2026-05-09) showed B-spam
-                // left the menu in a misaligned state and all 12 purchase
-                // attempts failed with WrongClass.
+                       "source=${postEnterDetect.source} kind=${postEnterDetect.kind} " +
+                       "phase=${postEnterPhase.phase} phaseSaysOpen=$phaseSaysOpen"))
+            if ((postEnterDetect.open && postEnterDetect.kind == "weapon") || phaseSaysOpen) {
+                // Either classifier confirms shop UI on screen — skip the
+                // cardinals walk because cardinals navigate menu cursor not
+                // party when dialog is open.
                 menuAlreadyOpen = true
                 trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                    note = "boot_keeper_approach: skipped — weapon shop UI already open; " +
+                    note = "boot_keeper_approach: skipped — shop UI on screen " +
+                           "(kind=${postEnterDetect.kind} phase=${postEnterPhase.phase}); " +
                            "BuyAtShop will run with menuAlreadyOpen=true"))
                 return@run
             }
