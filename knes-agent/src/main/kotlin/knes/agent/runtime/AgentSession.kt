@@ -948,16 +948,28 @@ class AgentSession(
                         // because kind=armor is a valid shop kind — but boot
                         // phase wants weapons, so all 12 BuyAtShop attempts
                         // failed with WrongClass. Now require kind=="weapon".
+                        // V5.45.1: ALSO consult phase classifier. Run #19 trace:
+                        // advisor saw BUY/SELL/EXIT (iter 79), but kind classifier
+                        // returned null on the same screen (Gemini stochastic
+                        // flip). The phase classifier is independent and may
+                        // recognize MAIN_MENU when kind misses. Accept Done if
+                        // EITHER says shop UI is up.
                         val expectedShopKind = "weapon"
                         val nowRam = toolset.getState().ram
                         val verifyShot = toolset.getScreen().base64
                         val detection = ShopUiDetector.detect(nowRam, verifyShot, outfitVision)
                         advisorTotalCost += detection.costUsd
+                        val phaseClass = outfitVision!!.classifyShopMenuPhase(verifyShot)
+                        advisorTotalCost += phaseClass.costUsd
+                        val phaseSaysOpen = phaseClass.phase != HaikuConsult.ShopMenuPhase.CLOSED &&
+                            phaseClass.phase != HaikuConsult.ShopMenuPhase.UNKNOWN
+                        val kindMatches = detection.open && detection.kind == expectedShopKind
                         trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                             note = "boot_advisor_done_verify[$iter]: open=${detection.open} " +
                                    "source=${detection.source} kind=${detection.kind} " +
-                                   "costUsd=${detection.costUsd}"))
-                        if (detection.open && detection.kind == expectedShopKind) {
+                                   "phase=${phaseClass.phase} phaseSaysOpen=$phaseSaysOpen " +
+                                   "costUsd=${detection.costUsd + phaseClass.costUsd}"))
+                        if (kindMatches || phaseSaysOpen) {
                             entered = true
                             break
                         }
