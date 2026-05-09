@@ -667,15 +667,30 @@ class AgentSession(
                 return
             }
 
+        // V5.46.4 (2026-05-09): when KNES_FF1_LOAD_SAVESTATE was honoured
+        // pre-boot, the savestate restored party + map state directly inside
+        // the shop UI. Walking the overworld + running the nav-advisor would
+        // press Up/Down/Left/Right on the active shop dialog, which (a) closes
+        // the dialog and (b) eventually lands us on the title screen via FF1's
+        // dialog menus. Skip walk + nav-advisor in that case and fall through
+        // to the post-enter detect, which already does ShopUiDetector and sets
+        // menuAlreadyOpen for BuyAtShop.
+        val savestateLoaded = !System.getenv("KNES_FF1_LOAD_SAVESTATE").isNullOrBlank()
+
         // 2. Walk to Coneria
-        val walkResult = WalkOverworldTo(toolset, outfitViewportSource, fog).invoke(mapOf(
-            "targetX" to (coneriaEntry.worldX ?: 0).toString(),
-            "targetY" to (coneriaEntry.worldY ?: 0).toString(),
-        ))
-        if (!walkResult.ok) {
+        if (!savestateLoaded) {
+            val walkResult = WalkOverworldTo(toolset, outfitViewportSource, fog).invoke(mapOf(
+                "targetX" to (coneriaEntry.worldX ?: 0).toString(),
+                "targetY" to (coneriaEntry.worldY ?: 0).toString(),
+            ))
+            if (!walkResult.ok) {
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_outfit_summary: walk_to_coneria_failed: ${walkResult.message}"))
+                return
+            }
+        } else {
             trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                note = "boot_outfit_summary: walk_to_coneria_failed: ${walkResult.message}"))
-            return
+                note = "boot_savestate_skip_walk_nav: KNES_FF1_LOAD_SAVESTATE set, skipping walk-to-coneria + nav advisor"))
         }
 
         // 2b. Settle: give the emulator enough frames for any in-flight warp
@@ -706,7 +721,7 @@ class AgentSession(
         //    (mapId=0); each shop is its own sub-mapId entered via its door
         //    tile. mapId=8 is Coneria CASTLE — strictly avoid.
         val initialMapId = postWalkMapId
-        if (initialMapId == 0 || initialMapId == 8) {
+        if (!savestateLoaded && (initialMapId == 0 || initialMapId == 8)) {
             val maxAdvisorIters = 80
             var entered = false
             var advisorTotalCost = 0.0
@@ -948,17 +963,44 @@ class AgentSession(
                         // because kind=armor is a valid shop kind — but boot
                         // phase wants weapons, so all 12 BuyAtShop attempts
                         // failed with WrongClass. Now require kind=="weapon".
+                        // V5.45.1: ALSO consult phase classifier. Run #19 trace:
+                        // advisor saw BUY/SELL/EXIT (iter 79), but kind classifier
+                        // returned null on the same screen (Gemini stochastic
+                        // flip). The phase classifier is independent and may
+                        // recognize MAIN_MENU when kind misses. Accept Done if
+                        // EITHER says shop UI is up.
                         val expectedShopKind = "weapon"
                         val nowRam = toolset.getState().ram
                         val verifyShot = toolset.getScreen().base64
                         val detection = ShopUiDetector.detect(nowRam, verifyShot, outfitVision)
                         advisorTotalCost += detection.costUsd
+                        val phaseClass = outfitVision!!.classifyShopMenuPhase(verifyShot)
+                        advisorTotalCost += phaseClass.costUsd
+                        val phaseSaysOpen = phaseClass.phase != HaikuConsult.ShopMenuPhase.CLOSED &&
+                            phaseClass.phase != HaikuConsult.ShopMenuPhase.UNKNOWN
+                        val kindMatches = detection.open && detection.kind == expectedShopKind
                         trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                             note = "boot_advisor_done_verify[$iter]: open=${detection.open} " +
                                    "source=${detection.source} kind=${detection.kind} " +
-                                   "costUsd=${detection.costUsd}"))
-                        if (detection.open && detection.kind == expectedShopKind) {
+                                   "phase=${phaseClass.phase} phaseSaysOpen=$phaseSaysOpen " +
+                                   "costUsd=${detection.costUsd + phaseClass.costUsd}"))
+                        if (kindMatches || phaseSaysOpen) {
                             entered = true
+                            // V5.46: dump savestate so subsequent dev runs can
+                            // load it via KNES_FF1_LOAD_SAVESTATE and skip the
+                            // pre-boot pressStart + advisor navigation. Saves
+                            // ~$1+ per dev iteration on shop-side bugs.
+                            try {
+                                val bytes = toolset.session.saveState()
+                                java.io.File("/tmp/spec5-shop-entered.savestate").writeBytes(bytes)
+                                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                                    note = "boot_savestate_dumped: bytes=${bytes.size} " +
+                                           "path=/tmp/spec5-shop-entered.savestate " +
+                                           "(set KNES_FF1_LOAD_SAVESTATE to load)"))
+                            } catch (e: Throwable) {
+                                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                                    note = "boot_savestate_dump_failed: ${e.message}"))
+                            }
                             break
                         }
                         if (detection.open && detection.kind != null &&
@@ -1077,19 +1119,29 @@ class AgentSession(
             // party. Detector reuses RAM gate + classifyShopMenu.
             val postEnterRam = toolset.getState().ram
             val postEnterDetect = ShopUiDetector.detect(postEnterRam, screenshot, outfitVision)
+            // V5.44.2 (2026-05-09): in addition to the kind-classifier (which
+            // is stochastic and has flipped between open/closed on identical
+            // screens — runs #10, #15), also consult the menu-phase classifier
+            // and treat ANY non-CLOSED phase as "shop UI is up". This catches
+            // the case where kind-classifier returns unknown but the dialog is
+            // genuinely on screen. Run #15 evidence: post_enter said closed,
+            // keeper_approach walked cardinals into the open menu, state
+            // machine couldn't recover and all 4 pairs got ShopClosed.
+            val postEnterPhase = outfitVision!!.classifyShopMenuPhase(screenshot)
+            val phaseSaysOpen = postEnterPhase.phase != HaikuConsult.ShopMenuPhase.CLOSED &&
+                postEnterPhase.phase != HaikuConsult.ShopMenuPhase.UNKNOWN
             trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                 note = "boot_post_enter_detect: open=${postEnterDetect.open} " +
-                       "source=${postEnterDetect.source} kind=${postEnterDetect.kind}"))
-            if (postEnterDetect.open && postEnterDetect.kind == "weapon") {
-                // Weapon shop dialog already on screen (advisor opened
-                // BUY/SELL/EXIT before emitting Done). Don't B-spam — instead
-                // pass menuAlreadyOpen=true to BuyAtShop so it skips the
-                // dialog-opening A-tap. Run #3 (2026-05-09) showed B-spam
-                // left the menu in a misaligned state and all 12 purchase
-                // attempts failed with WrongClass.
+                       "source=${postEnterDetect.source} kind=${postEnterDetect.kind} " +
+                       "phase=${postEnterPhase.phase} phaseSaysOpen=$phaseSaysOpen"))
+            if ((postEnterDetect.open && postEnterDetect.kind == "weapon") || phaseSaysOpen) {
+                // Either classifier confirms shop UI on screen — skip the
+                // cardinals walk because cardinals navigate menu cursor not
+                // party when dialog is open.
                 menuAlreadyOpen = true
                 trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                    note = "boot_keeper_approach: skipped — weapon shop UI already open; " +
+                    note = "boot_keeper_approach: skipped — shop UI on screen " +
+                           "(kind=${postEnterDetect.kind} phase=${postEnterPhase.phase}); " +
                            "BuyAtShop will run with menuAlreadyOpen=true"))
                 return@run
             }
@@ -1136,37 +1188,191 @@ class AgentSession(
             }
         }
 
-        // 4. Per-char buy loop.
+        // 4. Per-char buy loop — V5.43: single invokeMany call drives ALL 4
+        // chars in one continuous shop dialog so NPC drift between chars no
+        // longer breaks re-engagement (run #9 evidence: char1 succeeded then
+        // shopkeeper wandered off-screen, char2/3/4 reengage hit
+        // NO_SHOPKEEPER_IN_VIEW). Pairs are constructed with the same
+        // class-naive mapping as before (char N → slot N-1); the next escalation
+        // is class-aware mapping (see HANDOFF §"Remaining work").
         val buySkill = BuyAtShop(toolset, landmarkMemory)
         val charsBought = mutableListOf<Int>()
         val initialGold = StrategyContext.totalGold(toolset.getState().ram)
         // Default mapping: each char gets one of the 4 first inventory slots.
         val weaponSlotByChar = mapOf(1 to 0, 2 to 1, 3 to 2, 4 to 3)
-        for (charSlot in 1..4) {
-            if (StrategyContext.anyWeaponEquipped(toolset.getState().ram, charSlot)) continue
-            var slot = weaponSlotByChar[charSlot] ?: continue
-            var retries = 0
-            while (retries < 3) {
-                val r = buySkill.invoke(mapOf(
-                    "itemSlot" to slot.toString(),
-                    "forCharSlot" to charSlot.toString(),
-                    "expectedKeeperKind" to "weapon",
-                    // Only the FIRST call benefits from skipping the dialog-
-                    // open A-tap; once the first purchase completes, BuyAtShop
-                    // exits via 2 B-taps which lands at "facing keeper, no
-                    // menu" — subsequent calls re-open via the standard A-tap.
-                    "menuAlreadyOpen" to (menuAlreadyOpen && charsBought.isEmpty()).toString(),
-                ))
+        // V5.42 (2026-05-09): keeper re-approach helper. NPCs in FF1 NES towns
+        // walk between tiles each frame; during BuyAtShop's 30+ A/Down/B taps
+        // the shopkeeper has typically moved away from the previously-engaged
+        // tile. This helper re-runs the vision scan and walks party adjacent
+        // to wherever the keeper is now. Returns true if keeper found and walk
+        // attempted (caller should then probe shop UI). Returns false if no
+        // keeper visible (next BuyAtShop will fail; caller should bail).
+        // Diagnostic: write a base64-png to /tmp under a stable name so any
+        // failure stage can be inspected after the fact. Best-effort; never
+        // throws.
+        fun dumpShot(name: String, base64: String) {
+            try {
+                val bytes = java.util.Base64.getDecoder().decode(base64)
+                java.io.File("/tmp/spec5-$name.png").writeBytes(bytes)
+            } catch (_: Throwable) {}
+        }
+        suspend fun reEngageKeeper(tag: String): Boolean {
+            val shot = toolset.getScreen().base64
+            dumpShot("buy-$tag-reengage-pre", shot)
+            val scan = outfitVision!!.scanInteriorCandidates(shot)
+            val keeper = scan.candidates
+                .filter { it.kind == "shopkeeper" }
+                .maxByOrNull { it.confidence }
+            if (keeper == null) {
                 trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                    note = "boot_purchase: char$charSlot slot=$slot result=${r.message}"))
-                if (r.ok) { charsBought += charSlot; break }
-                if (r.message.contains("WrongClass")) {
-                    slot = (slot + 1) % 4
-                    retries++
-                    continue
-                }
-                break
+                    note = "boot_keeper_reengage[$tag]: NO_SHOPKEEPER_IN_VIEW " +
+                           "candidates=${scan.candidates.size} costUsd=${scan.costUsd} " +
+                           "(screenshot: /tmp/spec5-buy-$tag-reengage-pre.png)"))
+                return false
             }
+            val dx = keeper.screenX - 8
+            val dyTarget = (keeper.screenY + 1) - 7
+            val xDir = if (dx < 0) "Left" else "Right"
+            val yDir = if (dyTarget < 0) "Up" else "Down"
+            repeat(kotlin.math.abs(dx)) {
+                toolset.tap(button = xDir, count = 1, pressFrames = 12, gapFrames = 8)
+                toolset.step(buttons = emptyList(), frames = 8)
+            }
+            repeat(kotlin.math.abs(dyTarget)) {
+                toolset.tap(button = yDir, count = 1, pressFrames = 12, gapFrames = 8)
+                toolset.step(buttons = emptyList(), frames = 8)
+            }
+            // Final Up — walking INTO the keeper tile triggers the dialog
+            // automatically in FF1 town overlay (no Tap_A needed).
+            toolset.tap(button = "Up", count = 1, pressFrames = 12, gapFrames = 8)
+            toolset.step(buttons = emptyList(), frames = 12)
+            dumpShot("buy-$tag-reengage-post", toolset.getScreen().base64)
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_keeper_reengage[$tag]: keeper_screenXY=(${keeper.screenX},${keeper.screenY}) " +
+                       "walked dx=$dx dy=$dyTarget costUsd=${scan.costUsd} " +
+                       "(screenshots: /tmp/spec5-buy-$tag-reengage-{pre,post}.png)"))
+            return true
+        }
+        // V5.44.3: trust menuAlreadyOpen from run{} block. It used the dual
+        // classifier (kind + phase) check. Re-probing here just adds another
+        // chance for stochastic flip → unwanted reengage walk → scrambled
+        // menu cursor. Only reengage if menuAlreadyOpen is false.
+        var batchMenuOpen = menuAlreadyOpen
+        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+            note = "boot_purchase_batch_initial: menuOpen=$batchMenuOpen " +
+                   "(trusting run{} block's dual-classifier decision)"))
+        if (!batchMenuOpen) {
+            val reEngaged = reEngageKeeper(tag = "batch-pre")
+            if (reEngaged) {
+                val rs = toolset.getScreen().base64
+                val probe2 = ShopUiDetector.detect(toolset.getState().ram, rs, outfitVision)
+                val phase2 = outfitVision!!.classifyShopMenuPhase(rs)
+                val phase2SaysOpen = phase2.phase != HaikuConsult.ShopMenuPhase.CLOSED &&
+                    phase2.phase != HaikuConsult.ShopMenuPhase.UNKNOWN
+                batchMenuOpen = (probe2.open && probe2.kind == "weapon") || phase2SaysOpen
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_purchase_batch_reengage_probe: menuOpen=$batchMenuOpen " +
+                           "kind=${probe2.kind} phase=${phase2.phase}"))
+            }
+        }
+        dumpShot("buy-batch-pre", toolset.getScreen().base64)
+        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+            note = "boot_purchase_batch_probe: menuAlreadyOpen=$batchMenuOpen " +
+                   "(screenshot: /tmp/spec5-buy-batch-pre.png)"))
+
+        // Build initial pair list (one per char missing a weapon). We do up to
+        // 4 invokeMany rounds: round 0 uses default mapping, subsequent rounds
+        // shift slot by +1 mod 4 for any char still without a weapon. Each
+        // invokeMany round runs in a single shop dialog so NPC drift between
+        // pairs no longer matters.
+        val MAX_BATCH_ROUNDS = 4
+        // charSlot -> attempted slot for the current round.
+        val pendingChars: MutableMap<Int, Int> = (1..4)
+            .filter { !StrategyContext.anyWeaponEquipped(toolset.getState().ram, it) }
+            .associateWith { weaponSlotByChar[it] ?: 0 }
+            .toMutableMap()
+
+        // V5.45: vision-advisor drives the in-shop purchase. Read each char's
+        // class from RAM so the advisor can pick class-compatible items. Class
+        // is at $6100/$6140/$6180/$61C0 (FF1 disasm) — values 0..5 for
+        // Fighter / Thief / BlackBelt / RedMage / WhiteMage / BlackMage.
+        val classRam = toolset.getState().ram
+        val charClasses: Map<Int, Int> = (1..4).associateWith { c ->
+            classRam["char${c}_class"] ?: 0
+        }
+        val charsNeeding: List<Int> = pendingChars.keys.toList().sorted()
+        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+            note = "boot_purchase_advisor_start: chars=$charsNeeding " +
+                   "classes=${charClasses.entries.joinToString { "char${it.key}=${it.value}" }}"))
+        val advisorBought = buySkill.invokeWithAdvisor(
+            charSlotsNeedingWeapons = charsNeeding,
+            charClasses = charClasses,
+            expectedKeeperKind = "weapon",
+            vision = outfitVision!!,
+            traceLog = { msg ->
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_purchase_advisor: $msg"))
+            },
+            // Run A2 (post-NameTable-fix): 3/4 chars BOUGHT in 80 iter with the
+            // POST-PURCHASE-FLOW prompt update. char3 finished at iter 75 leaving
+            // no headroom for char4. 120 gives all 4 chars room plus recovery
+            // budget for occasional cursor mis-reads on FOR_WHOM/BUY_CONFIRM.
+            maxAdvisorCalls = 120,
+        )
+        for ((charSlot, wasBought) in advisorBought) {
+            if (wasBought) charsBought += charSlot
+        }
+        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+            note = "boot_purchase_advisor_done: bought=$charsBought of needs=$charsNeeding"))
+
+        // Legacy stateful-batch retry path — only used if advisor served zero
+        // chars (e.g., advisor immediately gave up). Kept as a safety net.
+        var roundIdx = 0
+        var roundMenuOpen = false  // advisor exit B-spammed; menu likely closed
+        while (charsBought.isEmpty() && pendingChars.isNotEmpty() && roundIdx < MAX_BATCH_ROUNDS) {
+            val pairs = pendingChars.entries.map { it.value to it.key } // (itemSlot, charSlot)
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_purchase_batch[$roundIdx]: pairs=${pairs.joinToString { "(s${it.first},c${it.second})" }} " +
+                       "menuAlreadyOpen=$roundMenuOpen mode=stateful_fallback"))
+            val results = buySkill.invokeManyStateful(
+                pairs = pairs,
+                expectedKeeperKind = "weapon",
+                vision = outfitVision!!,
+                traceLog = { msg ->
+                    trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                        note = "boot_purchase_state[$roundIdx]: $msg"))
+                },
+            )
+            dumpShot("buy-batch-r$roundIdx-post", toolset.getScreen().base64)
+            for (res in results) {
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_purchase: char${res.charSlot} slot=${res.itemSlot} round=$roundIdx " +
+                           "result=${res.message}"))
+                if (res.ok) {
+                    charsBought += res.charSlot
+                    pendingChars.remove(res.charSlot)
+                } else if (res.message.contains("WrongClass")) {
+                    // Cycle to next slot for retry next round.
+                    pendingChars[res.charSlot] = ((pendingChars[res.charSlot] ?: 0) + 1) % 4
+                } else {
+                    // Structural failure (NotInShop, etc) — abort the rest.
+                    pendingChars.remove(res.charSlot)
+                }
+            }
+            // After invokeMany's final 5-B exit, shop dialog is closed. For
+            // the next round we must re-engage the keeper.
+            if (pendingChars.isNotEmpty()) {
+                val reEngaged = reEngageKeeper(tag = "batch-r${roundIdx + 1}-pre")
+                if (!reEngaged) {
+                    trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                        note = "boot_purchase_batch[$roundIdx]: re-engage failed, aborting"))
+                    break
+                }
+                val nextProbeShot = toolset.getScreen().base64
+                val nextProbe = ShopUiDetector.detect(toolset.getState().ram, nextProbeShot, outfitVision)
+                roundMenuOpen = nextProbe.open && nextProbe.kind == "weapon"
+            }
+            roundIdx++
         }
 
         // 5. Exit shop interior; equip on overworld.

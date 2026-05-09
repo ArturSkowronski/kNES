@@ -34,12 +34,53 @@ fun main(args: Array<String>) {
     val key = System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() }
         ?: error("ANTHROPIC_API_KEY not set")
 
+    // V5.46 (2026-05-09): savestate-based fast iteration. When
+    // KNES_FF1_LOAD_SAVESTATE points to a readable file, the emulator state is
+    // restored after ROM load — typically used to skip pre-boot pressStart +
+    // navigation loop and go directly into the in-shop purchase advisor for
+    // dev iteration on shop-side bugs without burning nav budget.
+    val loadStatePath = System.getenv("KNES_FF1_LOAD_SAVESTATE")?.takeIf { it.isNotBlank() }
+
     val outcome: Outcome = runBlocking {
         AnthropicSession(key).use { anthropic ->
             val session = EmulatorSession()
             val toolset = EmulatorToolset(session)
             require(toolset.loadRom(rom).ok) { "Failed to load ROM: $rom" }
             require(toolset.applyProfile(profile).ok) { "Failed to apply profile: $profile" }
+            if (loadStatePath != null) {
+                val f = File(loadStatePath)
+                if (f.exists() && f.canRead()) {
+                    // V5.46.5 (2026-05-09): pre-warm PPU before loadState. Empirical:
+                    //   - 0 pre-warm frames  → loadState ok=true but RAM resets after pump
+                    //                          (init pass overwrites loaded state).
+                    //   - 1 pre-warm frame   → RAM sticks but framebuffer renders gray
+                    //                          (PPU rendering pipeline never engages).
+                    //   - 120 pre-warm frames → RAM sticks AND framebuffer renders the
+                    //                           restored scene correctly.
+                    // 120 frames lets FF1's boot reach intro/title before we yank state.
+                    session.advanceFrames(120)
+                    val bytes = f.readBytes()
+                    val ok = session.loadState(bytes)
+                    if (ok) {
+                        session.advanceFrames(120)
+                        // Sanity dump: write what the screen looks like right after load+pump.
+                        try {
+                            File("/tmp/spec5-postload-mainkt.png").writeBytes(session.getScreenPng())
+                            val mapId = session.readMemory(0x0048)
+                            val mapflags = session.readMemory(0x002D)
+                            val smX = session.readMemory(0x0068)
+                            val smY = session.readMemory(0x0069)
+                            val char1Str = session.readMemory(0x6110)
+                            System.err.println("[main] post-load+120f: mapId=$mapId mapflags=0x${mapflags.toString(16)} smPlayer=($smX,$smY) char1_str=$char1Str (screenshot /tmp/spec5-postload-mainkt.png)")
+                        } catch (_: Throwable) {}
+                        System.err.println("[main] loaded savestate from $loadStatePath (${bytes.size} bytes); pumped 120 frames")
+                    } else {
+                        System.err.println("[main] FAILED to load savestate from $loadStatePath — continuing fresh")
+                    }
+                } else {
+                    System.err.println("[main] KNES_FF1_LOAD_SAVESTATE=$loadStatePath does not exist; continuing fresh")
+                }
+            }
 
             val router = ModelRouter()
             val overworldMap = OverworldMap.fromRom(File(rom))

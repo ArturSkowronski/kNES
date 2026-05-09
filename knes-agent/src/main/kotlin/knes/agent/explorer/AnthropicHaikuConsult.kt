@@ -66,6 +66,19 @@ class AnthropicHaikuConsult(
     override suspend fun classifyShopMenu(screenshotBase64: String?): HaikuConsult.ShopClassification =
         HaikuConsult.ShopClassification("unknown", emptyList(), 0.0)
 
+    /** Stub: shop menu phase classification is delegated to Gemini in this codebase. */
+    override suspend fun classifyShopMenuPhase(
+        screenshotBase64: String?,
+    ): HaikuConsult.ShopMenuPhaseClassification =
+        HaikuConsult.ShopMenuPhaseClassification(HaikuConsult.ShopMenuPhase.UNKNOWN, 0.0)
+
+    /** Stub: shop purchase advisor delegated to Gemini in this codebase. */
+    override suspend fun adviseShopPurchase(
+        screenshotBase64: String?,
+        contextText: String,
+    ): HaikuConsult.ShopPurchaseAdvice =
+        HaikuConsult.ShopPurchaseAdvice("Fail", "anthropic-stub-not-implemented", 0.0)
+
     /** Stub: overworld landmark classification is delegated to Gemini in this codebase. */
     override suspend fun classifyOverworldLandmark(
         screenshotBase64: String?,

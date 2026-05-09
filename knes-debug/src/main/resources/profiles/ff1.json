@@ -31,6 +31,7 @@
     "responseRate": {"address": "0x00FA", "description": "Response rate setting (1-8)"},
     "bootFlag": {"address": "0x00F9", "description": "Boot flag (0x4D=warm boot, skips intro)"},
 
+    "char1_class": {"address": "0x6100", "description": "Char 1 class: 0=FT 1=TH 2=BB 3=RM 4=WM 5=BM (post-promotion: 0=KN 1=NJ 2=MA 3=RW 4=WW 5=BW)"},
     "char1_status": {"address": "0x6101", "description": "Char 1 status flags (bit0=dead, bit1=stone, bit2=poison, bit3=blind, bit5=sleep, bit6=mute)"},
     "char1_xpLow": {"address": "0x6107", "description": "Char 1 XP (low byte)"},
     "char1_xpHigh": {"address": "0x6108", "description": "Char 1 XP (high byte)"},
@@ -45,6 +46,7 @@
     "char1_luck": {"address": "0x6114", "description": "Char 1 luck"},
     "char1_level": {"address": "0x6126", "description": "Char 1 level (stored as level-1)"},
 
+    "char2_class": {"address": "0x6140", "description": "Char 2 class (see char1_class)"},
     "char2_status": {"address": "0x6141", "description": "Char 2 status flags"},
     "char2_xpLow": {"address": "0x6147", "description": "Char 2 XP (low byte)"},
     "char2_xpHigh": {"address": "0x6148", "description": "Char 2 XP (high byte)"},
@@ -59,6 +61,7 @@
     "char2_luck": {"address": "0x6154", "description": "Char 2 luck"},
     "char2_level": {"address": "0x6166", "description": "Char 2 level (stored as level-1)"},
 
+    "char3_class": {"address": "0x6180", "description": "Char 3 class (see char1_class)"},
     "char3_status": {"address": "0x6181", "description": "Char 3 status flags"},
     "char3_xpLow": {"address": "0x6187", "description": "Char 3 XP (low byte)"},
     "char3_xpHigh": {"address": "0x6188", "description": "Char 3 XP (high byte)"},
@@ -73,6 +76,7 @@
     "char3_luck": {"address": "0x6194", "description": "Char 3 luck"},
     "char3_level": {"address": "0x61A6", "description": "Char 3 level (stored as level-1)"},
 
+    "char4_class": {"address": "0x61C0", "description": "Char 4 class (see char1_class)"},
     "char4_status": {"address": "0x61C1", "description": "Char 4 status flags"},
     "char4_xpLow": {"address": "0x61C7", "description": "Char 4 XP (low byte)"},
     "char4_xpHigh": {"address": "0x61C8", "description": "Char 4 XP (high byte)"},

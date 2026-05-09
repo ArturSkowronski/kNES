@@ -86,16 +86,22 @@ open class MapperDefault(nes: NES) : MemoryMapper {
         mapperInternalStateSave(buf)
     }
 
+    // V5.46.1 (2026-05-09): function bodies were swapped — Load was writing to
+    // buffer and Save was reading. The outer stateSave/stateLoad functions were
+    // correct (write joypad ints + call mapperInternalStateSave on save; read
+    // joypad ints + call mapperInternalStateLoad on load), but the internal
+    // helpers had the operations reversed, corrupting the saved blob and the
+    // restored state. Fixed: Load now reads, Save now writes.
     fun mapperInternalStateLoad(buf: knes.emulator.ByteBuffer) {
-        buf.putByte(joy1StrobeState.toShort())
-        buf.putByte(joy2StrobeState.toShort())
-        buf.putByte(joypadLastWrite.toShort())
-    }
-
-    fun mapperInternalStateSave(buf: knes.emulator.ByteBuffer) {
         joy1StrobeState = buf.readByte().toInt()
         joy2StrobeState = buf.readByte().toInt()
         joypadLastWrite = buf.readByte().toInt()
+    }
+
+    fun mapperInternalStateSave(buf: knes.emulator.ByteBuffer) {
+        buf.putByte(joy1StrobeState.toShort())
+        buf.putByte(joy2StrobeState.toShort())
+        buf.putByte(joypadLastWrite.toShort())
     }
 
     override fun write(address: Int, value: Short) {

@@ -1,5 +1,6 @@
 package knes.agent.skills
 
+import knes.agent.explorer.HaikuConsult
 import knes.agent.perception.LandmarkKind
 import knes.agent.perception.LandmarkMemory
 import knes.agent.runtime.StrategyContext
@@ -134,8 +135,12 @@ class BuyAtShop(
             val curGold = StrategyContext.totalGold(ram)
             val curInvSum = (0..3).sumOf { StrategyContext.weaponId(StrategyContext.weaponSlot(ram, forCharSlot, it)) }
             if (curGold < preGold && curInvSum > preInvSum) {
-                // 2 B-taps backs out of "another?" prompt + BUY list, leaves us at shop main menu.
-                repeat(2) { toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 15) }
+                // 5 B-taps fully exits the dialog stack (any of: confirm-YES,
+                // for-whom, item list, BUY/SELL/EXIT) back to "facing keeper,
+                // no menu" so the next BuyAtShop call has a predictable
+                // starting state (run #5 evidence: 2-B left state ambiguous,
+                // char2/3/4 hit off-by-one). B is no-op once shop is closed.
+                repeat(5) { toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12) }
                 return SkillResult(
                     ok = true,
                     message = "Bought: cost=${preGold - curGold} char=$forCharSlot slot=$itemSlot " +
@@ -146,8 +151,9 @@ class BuyAtShop(
             if (curGold == preGold && curInvSum == preInvSum) {
                 unchangedTaps++
                 if (unchangedTaps >= wrongClassFrames) {
-                    // 3 B-taps unwinds further: confirm-dialog dismiss + BUY list + shop main menu.
-                    repeat(3) { toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 15) }
+                    // 5 B-taps fully exits the dialog stack — same rationale
+                    // as the success branch: predictable post-call state.
+                    repeat(5) { toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12) }
                     return SkillResult(ok = false,
                         message = "WrongClass: char=$forCharSlot itemSlot=$itemSlot — gold/inventory " +
                             "unchanged after $unchangedTaps dismiss taps",
@@ -177,4 +183,515 @@ class BuyAtShop(
     }
     private fun failResult(message: String, ram: Map<String, Int>) =
         SkillResult(ok = false, message = message, ramAfter = ram)
+
+    data class PairResult(
+        val itemSlot: Int,
+        val charSlot: Int,
+        val ok: Boolean,
+        val message: String,
+    )
+
+    /**
+     * V5.43 (2026-05-09): list-mode purchase. Stays in the shop dialog for ALL
+     * pairs in a single keeper engagement, eliminating the NPC-drift problem
+     * where the shopkeeper wanders away between separate BuyAtShop calls.
+     *
+     * Per-pair flow (executed in a continuous BUY/SELL/EXIT session):
+     *   1. Reset cursor to BUY: Up × 2 (idempotent — at top of 3-row menu).
+     *   2. A → item list (cursor on item 0).
+     *   3. Down × itemSlot, A → "for whom?" (cursor on char 1).
+     *   4. Down × (charSlot - 1), A → "Buy for X? YES/NO".
+     *   5. A → YES → dismiss A-taps until gold drop + inv increase OR 5 unchanged.
+     *   6. B × 3 to reset to BUY/SELL/EXIT for next pair.
+     *
+     * Single open A-tap fires only when [menuAlreadyOpen]=false (caller knows
+     * dialog state via vision / probe). Closing 5 × B at the end fully exits.
+     *
+     * Returns one PairResult per input pair, in input order. Pairs that error
+     * out structurally (NotInShop, LandmarkKindMismatch) abort the rest with
+     * a synthetic failure for each remaining pair.
+     */
+    suspend fun invokeMany(
+        pairs: List<Pair<Int, Int>>,
+        expectedKeeperKind: String,
+        menuAlreadyOpen: Boolean,
+    ): List<PairResult> {
+        if (pairs.isEmpty()) return emptyList()
+        if (expectedKeeperKind != "weapon") {
+            return pairs.map { PairResult(it.first, it.second, false,
+                "UnsupportedKind: BuyAtShop currently supports kind=weapon only (got $expectedKeeperKind)") }
+        }
+        val pre = toolset.getState().ram
+        val mapId = pre["currentMapId"] ?: 0
+        val mapflagsBit0 = ((pre["mapflags"] ?: 0) and 0x01) != 0
+        val inStandardMap = mapflagsBit0 || mapId > 0
+        if (!inStandardMap) {
+            return pairs.map { PairResult(it.first, it.second, false,
+                "NotInShop: not in standard map (mapflags.bit0=0, mapId=0)") }
+        }
+        val candidates = landmarks.findByKind(LandmarkKind.NPC_SHOPKEEPER)
+        val landmark = if (mapId != 0) {
+            candidates.firstOrNull { it.mapId == mapId }
+        } else {
+            candidates.firstOrNull { parseKind(it.note) == expectedKeeperKind }
+        } ?: return pairs.map { PairResult(it.first, it.second, false,
+            "NotInShop: no NPC_SHOPKEEPER landmark for ${if (mapId != 0) "mapId=$mapId" else "kind=$expectedKeeperKind"}") }
+        val landmarkKind = parseKind(landmark.note)
+        if (landmarkKind != expectedKeeperKind) {
+            return pairs.map { PairResult(it.first, it.second, false,
+                "LandmarkKindMismatch: expected=$expectedKeeperKind landmark=$landmarkKind") }
+        }
+        val items = parseItems(landmark.note)
+
+        // Open dialog if not already open. After this point we are at
+        // "Welcome + BUY/SELL/EXIT" with cursor on Buy (or somewhere on the
+        // 3-row menu — the per-pair Up×2 reset normalises it).
+        if (!menuAlreadyOpen) {
+            toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
+        }
+
+        val results = mutableListOf<PairResult>()
+        for ((itemSlot, charSlot) in pairs) {
+            val priceCheck = items.getOrNull(itemSlot)?.second
+            if (priceCheck == null) {
+                results += PairResult(itemSlot, charSlot, false,
+                    "Bad args: itemSlot $itemSlot out of range (have ${items.size})")
+                continue
+            }
+            val ramSnap = toolset.getState().ram
+            val preGold = StrategyContext.totalGold(ramSnap)
+            if (preGold < priceCheck) {
+                results += PairResult(itemSlot, charSlot, false,
+                    "InsufficientGold: preGold=$preGold expectedPrice=$priceCheck")
+                continue
+            }
+            val preInvSum = (0..3).sumOf {
+                StrategyContext.weaponId(StrategyContext.weaponSlot(ramSnap, charSlot, it))
+            }
+
+            // Reset cursor to BUY (idempotent) and select.
+            repeat(2) { toolset.tap(button = "Up", count = 1, pressFrames = 3, gapFrames = 10) }
+            toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
+            // Item nav.
+            repeat(itemSlot) { toolset.tap(button = "Down", count = 1, pressFrames = 3, gapFrames = 10) }
+            toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
+            // For-whom nav.
+            repeat(charSlot - 1) { toolset.tap(button = "Down", count = 1, pressFrames = 3, gapFrames = 10) }
+            toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
+            // YES on confirm.
+            toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
+
+            var dismissTaps = 0
+            var unchangedTaps = 0
+            var resolved: PairResult? = null
+            while (dismissTaps < maxDismissFrames) {
+                toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 15)
+                dismissTaps++
+                val r = toolset.getState().ram
+                val curGold = StrategyContext.totalGold(r)
+                val curInvSum = (0..3).sumOf {
+                    StrategyContext.weaponId(StrategyContext.weaponSlot(r, charSlot, it))
+                }
+                if (curGold < preGold && curInvSum > preInvSum) {
+                    resolved = PairResult(itemSlot, charSlot, true,
+                        "Bought: cost=${preGold - curGold} char=$charSlot slot=$itemSlot " +
+                            "weaponSum $preInvSum->$curInvSum")
+                    break
+                }
+                if (curGold == preGold && curInvSum == preInvSum) {
+                    unchangedTaps++
+                    if (unchangedTaps >= wrongClassFrames) {
+                        resolved = PairResult(itemSlot, charSlot, false,
+                            "WrongClass: char=$charSlot itemSlot=$itemSlot — gold/inventory " +
+                                "unchanged after $unchangedTaps dismiss taps")
+                        break
+                    }
+                } else {
+                    unchangedTaps = 0
+                }
+            }
+            results += (resolved ?: PairResult(itemSlot, charSlot, false,
+                "DismissCapExhausted: $maxDismissFrames taps without confirmed gold drop"))
+
+            // V5.43.2: B × 1 only (run #11 evidence: B × 3 over-exits the
+            // shop entirely. From the dismiss-loop end state — item list or
+            // "another?" prompt — one B reliably backs to BUY/SELL/EXIT.
+            // Two B's would close the shop dialog from item list. The next
+            // iter's Up × 2 + A normalises cursor to Buy regardless.)
+            toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12)
+        }
+
+        // Final exit: 5 × B fully closes any remaining dialog layer back to
+        // "facing keeper, no menu".
+        repeat(5) { toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12) }
+        return results
+    }
+
+    /**
+     * V5.44 (2026-05-09): vision-classified state-machine purchase. Uses
+     * [vision.classifyShopMenuPhase] to observe which sub-screen of the FF1
+     * shop dialog is currently drawn after each tap, and dispatches the next
+     * action accordingly. Replaces the brittle "guess by tap count" approach.
+     *
+     * Trade-off: ~5-8 vision calls per pair (~$0.025-0.04 per pair) vs
+     * empirically reliable per-pair correctness. Acceptable when previous
+     * deterministic approach was buying only 1/4 chars per run.
+     *
+     * Flow per pair:
+     *   1. Classify phase. Drive into MAIN_MENU regardless of starting state
+     *      (B-tap to back out of nested screens; A-tap to advance Welcome).
+     *   2. From MAIN_MENU: Up×2 + A → ITEM_LIST.
+     *   3. Down × itemSlot + A → FOR_WHOM.
+     *   4. Down × (charSlot - 1) + A → BUY_CONFIRM.
+     *   5. A on YES (default cursor position) → dismiss loop until gold
+     *      drops + inv increases (Bought) or 5 unchanged (WrongClass).
+     *   6. After result: B × 1 to back toward MAIN_MENU for next pair.
+     *
+     * On CLOSED phase mid-batch: aborts remaining pairs (caller must
+     * re-engage keeper).
+     */
+    suspend fun invokeManyStateful(
+        pairs: List<Pair<Int, Int>>,
+        expectedKeeperKind: String,
+        vision: HaikuConsult,
+        traceLog: ((String) -> Unit)? = null,
+    ): List<PairResult> {
+        val log = { msg: String -> traceLog?.invoke(msg) ?: Unit }
+        if (pairs.isEmpty()) return emptyList()
+        if (expectedKeeperKind != "weapon") {
+            return pairs.map { PairResult(it.first, it.second, false,
+                "UnsupportedKind: BuyAtShop currently supports kind=weapon only (got $expectedKeeperKind)") }
+        }
+        val pre0 = toolset.getState().ram
+        val mapId0 = pre0["currentMapId"] ?: 0
+        val mapflagsBit0 = ((pre0["mapflags"] ?: 0) and 0x01) != 0
+        if (!mapflagsBit0 && mapId0 == 0) {
+            return pairs.map { PairResult(it.first, it.second, false,
+                "NotInShop: not in standard map (mapflags.bit0=0, mapId=0)") }
+        }
+        val candidates = landmarks.findByKind(LandmarkKind.NPC_SHOPKEEPER)
+        val landmark = if (mapId0 != 0) {
+            candidates.firstOrNull { it.mapId == mapId0 }
+        } else {
+            candidates.firstOrNull { parseKind(it.note) == expectedKeeperKind }
+        } ?: return pairs.map { PairResult(it.first, it.second, false,
+            "NotInShop: no NPC_SHOPKEEPER landmark for ${if (mapId0 != 0) "mapId=$mapId0" else "kind=$expectedKeeperKind"}") }
+        val landmarkKind = parseKind(landmark.note)
+        if (landmarkKind != expectedKeeperKind) {
+            return pairs.map { PairResult(it.first, it.second, false,
+                "LandmarkKindMismatch: expected=$expectedKeeperKind landmark=$landmarkKind") }
+        }
+        val items = parseItems(landmark.note)
+
+        suspend fun classify(): HaikuConsult.ShopMenuPhase {
+            val shot = toolset.getScreen().base64
+            val res = vision.classifyShopMenuPhase(shot)
+            return res.phase
+        }
+
+        // Drive into MAIN_MENU. Returns true if reached, false if shop closed.
+        // V5.44.1 (2026-05-09): UNKNOWN handler is now step+retry (no taps)
+        // for the first 2 attempts. Run #15 evidence: blindly tapping B on
+        // UNKNOWN closed the shop entirely when the actual phase was MAIN_MENU
+        // misclassified by Gemini stochastic.
+        suspend fun driveToMainMenu(maxSteps: Int = 10): Boolean {
+            var unknownCount = 0
+            for (step in 0 until maxSteps) {
+                val phase = classify()
+                log("invokeManyStateful.driveToMainMenu[$step]: phase=$phase unknownCount=$unknownCount")
+                when (phase) {
+                    HaikuConsult.ShopMenuPhase.MAIN_MENU -> return true
+                    HaikuConsult.ShopMenuPhase.WELCOME -> {
+                        toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 15)
+                        unknownCount = 0
+                    }
+                    HaikuConsult.ShopMenuPhase.ITEM_LIST,
+                    HaikuConsult.ShopMenuPhase.FOR_WHOM,
+                    HaikuConsult.ShopMenuPhase.BUY_CONFIRM,
+                    HaikuConsult.ShopMenuPhase.ANOTHER -> {
+                        toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12)
+                        unknownCount = 0
+                    }
+                    HaikuConsult.ShopMenuPhase.UNKNOWN -> {
+                        unknownCount++
+                        // Run #16 evidence: Welcome→BUY/SELL/EXIT transition
+                        // produces a frame with WEAPON banner + empty dialog
+                        // box that classifier reports as UNKNOWN. Tapping A
+                        // advances the dialog (or selects BUY if we're at
+                        // MAIN_MENU misclassified). Try A on first UNKNOWN.
+                        // If still UNKNOWN after A, step+retry. Tap B only
+                        // after multiple persistent UNKNOWNs (last resort).
+                        when (unknownCount) {
+                            1 -> {
+                                toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 15)
+                            }
+                            2 -> {
+                                // Just step+retry; classifier may have caught
+                                // an animation frame.
+                            }
+                            else -> {
+                                toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12)
+                                unknownCount = 0
+                            }
+                        }
+                    }
+                    HaikuConsult.ShopMenuPhase.CLOSED -> return false
+                }
+                toolset.step(buttons = emptyList(), frames = 8)
+            }
+            return false
+        }
+
+        val results = mutableListOf<PairResult>()
+        for ((itemSlot, charSlot) in pairs) {
+            val priceCheck = items.getOrNull(itemSlot)?.second
+            if (priceCheck == null) {
+                results += PairResult(itemSlot, charSlot, false,
+                    "Bad args: itemSlot $itemSlot out of range (have ${items.size})")
+                continue
+            }
+
+            // Step 1: drive into MAIN_MENU.
+            if (!driveToMainMenu()) {
+                results += PairResult(itemSlot, charSlot, false,
+                    "ShopClosed: phase classifier returned CLOSED before pair (itemSlot=$itemSlot, charSlot=$charSlot)")
+                // Remaining pairs likely also fail; mark them with synthetic result.
+                continue
+            }
+
+            val ramSnap = toolset.getState().ram
+            val preGold = StrategyContext.totalGold(ramSnap)
+            if (preGold < priceCheck) {
+                results += PairResult(itemSlot, charSlot, false,
+                    "InsufficientGold: preGold=$preGold expectedPrice=$priceCheck")
+                continue
+            }
+            val preInvSum = (0..3).sumOf {
+                StrategyContext.weaponId(StrategyContext.weaponSlot(ramSnap, charSlot, it))
+            }
+
+            // Step 2: at MAIN_MENU, force cursor to BUY (Up×2 in 3-row no-wrap menu).
+            repeat(2) { toolset.tap(button = "Up", count = 1, pressFrames = 3, gapFrames = 10) }
+            toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
+            toolset.step(buttons = emptyList(), frames = 6)
+
+            // Verify we landed on ITEM_LIST.
+            val afterBuyPhase = classify()
+            log("invokeManyStateful.afterBuySelect: phase=$afterBuyPhase")
+            if (afterBuyPhase != HaikuConsult.ShopMenuPhase.ITEM_LIST) {
+                results += PairResult(itemSlot, charSlot, false,
+                    "PhaseMismatch: expected ITEM_LIST after BUY-A, got $afterBuyPhase")
+                // Try to recover by B-spamming to MAIN_MENU and continuing next pair.
+                continue
+            }
+
+            // Step 3: navigate to itemSlot and confirm.
+            repeat(itemSlot) { toolset.tap(button = "Down", count = 1, pressFrames = 3, gapFrames = 10) }
+            toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
+            toolset.step(buttons = emptyList(), frames = 6)
+
+            // Step 4: navigate to charSlot.
+            repeat(charSlot - 1) { toolset.tap(button = "Down", count = 1, pressFrames = 3, gapFrames = 10) }
+            toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
+            toolset.step(buttons = emptyList(), frames = 6)
+
+            // Step 5: confirm YES (cursor on YES by default in BUY_CONFIRM).
+            toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
+
+            // Step 6: dismiss loop watching for gold drop.
+            var dismissTaps = 0
+            var unchangedTaps = 0
+            var resolved: PairResult? = null
+            while (dismissTaps < maxDismissFrames) {
+                toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 15)
+                dismissTaps++
+                val r = toolset.getState().ram
+                val curGold = StrategyContext.totalGold(r)
+                val curInvSum = (0..3).sumOf {
+                    StrategyContext.weaponId(StrategyContext.weaponSlot(r, charSlot, it))
+                }
+                if (curGold < preGold && curInvSum > preInvSum) {
+                    resolved = PairResult(itemSlot, charSlot, true,
+                        "Bought: cost=${preGold - curGold} char=$charSlot slot=$itemSlot " +
+                            "weaponSum $preInvSum->$curInvSum")
+                    break
+                }
+                if (curGold == preGold && curInvSum == preInvSum) {
+                    unchangedTaps++
+                    if (unchangedTaps >= wrongClassFrames) {
+                        resolved = PairResult(itemSlot, charSlot, false,
+                            "WrongClass: char=$charSlot itemSlot=$itemSlot — gold/inventory " +
+                                "unchanged after $unchangedTaps dismiss taps")
+                        break
+                    }
+                } else {
+                    unchangedTaps = 0
+                }
+            }
+            results += (resolved ?: PairResult(itemSlot, charSlot, false,
+                "DismissCapExhausted: $maxDismissFrames taps without confirmed gold drop"))
+        }
+
+        // Final exit: keep tapping B until phase classifier reports CLOSED or
+        // we've B-spammed 8 times.
+        for (i in 0 until 8) {
+            val phase = classify()
+            if (phase == HaikuConsult.ShopMenuPhase.CLOSED) break
+            toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12)
+            toolset.step(buttons = emptyList(), frames = 6)
+        }
+        return results
+    }
+
+    /** V5.45 (2026-05-09): vision-advisor-driven shop purchase. Replaces the
+     *  brittle deterministic state-machine with per-step Gemini advisor calls.
+     *  Each iter: screenshot → advisor reads sub-screen + cursor + context →
+     *  emits next single tap. Continues until advisor emits Done or Fail or
+     *  the iteration cap is reached.
+     *
+     *  Returns a map of charSlot → wasBought, computed by tracking the per-char
+     *  weapon-slot sum delta. The advisor decides item-to-char assignment based
+     *  on class compatibility (passed in via [charClasses]). */
+    suspend fun invokeWithAdvisor(
+        charSlotsNeedingWeapons: List<Int>,
+        charClasses: Map<Int, Int>,
+        expectedKeeperKind: String,
+        vision: HaikuConsult,
+        traceLog: ((String) -> Unit)? = null,
+        maxAdvisorCalls: Int = 40,
+    ): Map<Int, Boolean> {
+        val log = { msg: String -> traceLog?.invoke(msg) ?: Unit }
+        if (charSlotsNeedingWeapons.isEmpty()) return emptyMap()
+        if (expectedKeeperKind != "weapon") {
+            log("invokeWithAdvisor: UnsupportedKind=$expectedKeeperKind")
+            return charSlotsNeedingWeapons.associateWith { false }
+        }
+        val pre = toolset.getState().ram
+        val mapId = pre["currentMapId"] ?: 0
+        val mapflagsBit0 = ((pre["mapflags"] ?: 0) and 0x01) != 0
+        if (!mapflagsBit0 && mapId == 0) {
+            log("invokeWithAdvisor: NotInShop (mapflags.bit0=0, mapId=0)")
+            return charSlotsNeedingWeapons.associateWith { false }
+        }
+        val landmarkCandidates = landmarks.findByKind(LandmarkKind.NPC_SHOPKEEPER)
+        val landmark = if (mapId != 0) {
+            landmarkCandidates.firstOrNull { it.mapId == mapId }
+        } else {
+            landmarkCandidates.firstOrNull { parseKind(it.note) == expectedKeeperKind }
+        } ?: run {
+            log("invokeWithAdvisor: no landmark for keeper kind=$expectedKeeperKind")
+            return charSlotsNeedingWeapons.associateWith { false }
+        }
+        val items = parseItems(landmark.note)
+
+        // Track per-char "before" inventory + global gold for delta detection.
+        val preInvByChar: Map<Int, Int> = charSlotsNeedingWeapons.associateWith { c ->
+            (0..3).sumOf { StrategyContext.weaponId(StrategyContext.weaponSlot(pre, c, it)) }
+        }
+        val initialGold = StrategyContext.totalGold(pre)
+        val bought: MutableMap<Int, Boolean> = charSlotsNeedingWeapons.associateWith { false }.toMutableMap()
+        // Class names for the advisor's context.
+        val classNames = mapOf(
+            0 to "Fighter", 1 to "Thief", 2 to "BlackBelt",
+            3 to "RedMage", 4 to "WhiteMage", 5 to "BlackMage",
+        )
+
+        // Per-iter context builder. Keeps the advisor up to date on goal +
+        // remaining work + recent purchases.
+        fun buildContext(iter: Int, lastAction: String?, lastReason: String?): String = buildString {
+            appendLine("Iteration $iter of $maxAdvisorCalls.")
+            appendLine("Goal: buy one weapon for each character who currently lacks a weapon, choosing class-compatible items.")
+            appendLine()
+            appendLine("Shop's preseed item list (read screen for actual names/prices on screen):")
+            for ((idx, item) in items.withIndex()) {
+                appendLine("  row $idx: ${item.first} - ${item.second}G")
+            }
+            appendLine()
+            appendLine("Party state:")
+            for (c in 1..4) {
+                val cls = charClasses[c]
+                val clsName = classNames[cls] ?: "?"
+                val needs = c in charSlotsNeedingWeapons && bought[c] != true
+                val tag = if (needs) "NEEDS WEAPON" else "served"
+                appendLine("  char$c: class=$cls ($clsName) $tag")
+            }
+            appendLine()
+            val curRam = toolset.getState().ram
+            val curGold = StrategyContext.totalGold(curRam)
+            appendLine("Current gold: ${curGold}G (started at ${initialGold}G; spent ${initialGold - curGold}G).")
+            appendLine()
+            if (lastAction != null) {
+                appendLine("Previous action: $lastAction — $lastReason")
+            }
+            appendLine()
+            appendLine("Recommend ONE next tap. If all characters who can be served are served (or not enough gold for remaining), output Done.")
+        }
+
+        var lastAction: String? = null
+        var lastReason: String? = null
+        for (iter in 0 until maxAdvisorCalls) {
+            // Stop early if all chars done.
+            if (bought.values.all { it }) {
+                log("invokeWithAdvisor: all chars served at iter=$iter")
+                break
+            }
+            val shot = toolset.getScreen().base64
+            // V5.46.4: dump per-iter frame to /tmp/spec5-buy-advisor-iter-NN-served-XXXX.png
+            // for post-mortem when advisor mis-reads cursor across multi-char buys.
+            // The served bitmap (1=bought) lets you correlate frame to par-state at-a-glance.
+            try {
+                val servedBits = (1..4).map { if (bought[it] == true) "1" else "0" }.joinToString("")
+                val pngBytes = java.util.Base64.getDecoder().decode(shot)
+                java.io.File("/tmp/spec5-buy-advisor-iter-%02d-served-%s.png".format(iter, servedBits))
+                    .writeBytes(pngBytes)
+            } catch (_: Throwable) { /* dev-only diagnostic, never fail the run */ }
+            val ctx = buildContext(iter, lastAction, lastReason)
+            val advice = vision.adviseShopPurchase(shot, ctx)
+            log("invokeWithAdvisor[$iter]: action=${advice.action} reason=${advice.reason} costUsd=${advice.costUsd}")
+            lastAction = advice.action
+            lastReason = advice.reason
+            when (advice.action) {
+                "Up" -> toolset.tap("Up", count = 1, pressFrames = 3, gapFrames = 10)
+                "Down" -> toolset.tap("Down", count = 1, pressFrames = 3, gapFrames = 10)
+                "Left" -> toolset.tap("Left", count = 1, pressFrames = 3, gapFrames = 10)
+                "Right" -> toolset.tap("Right", count = 1, pressFrames = 3, gapFrames = 10)
+                "Tap_A" -> toolset.tap("A", count = 1, pressFrames = 5, gapFrames = 15)
+                "Tap_B" -> toolset.tap("B", count = 1, pressFrames = 5, gapFrames = 12)
+                "Done" -> {
+                    log("invokeWithAdvisor: Done at iter=$iter")
+                    break
+                }
+                "Fail" -> {
+                    log("invokeWithAdvisor: Fail at iter=$iter — ${advice.reason}")
+                    break
+                }
+                else -> {
+                    log("invokeWithAdvisor: unknown action ${advice.action}, breaking")
+                    break
+                }
+            }
+            toolset.step(buttons = emptyList(), frames = 8)
+            // Update per-char bought tracking.
+            val ram = toolset.getState().ram
+            for (c in charSlotsNeedingWeapons) {
+                if (bought[c] == true) continue
+                val nowSum = (0..3).sumOf {
+                    StrategyContext.weaponId(StrategyContext.weaponSlot(ram, c, it))
+                }
+                val preSum = preInvByChar[c] ?: 0
+                if (nowSum > preSum) {
+                    bought[c] = true
+                    log("invokeWithAdvisor[$iter]: char$c BOUGHT (weaponSum $preSum->$nowSum)")
+                }
+            }
+        }
+
+        // Final exit: B-spam to leave shop. Don't probe phase classifier here
+        // (caller will).
+        repeat(6) {
+            toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12)
+            toolset.step(buttons = emptyList(), frames = 6)
+        }
+        return bought
+    }
 }

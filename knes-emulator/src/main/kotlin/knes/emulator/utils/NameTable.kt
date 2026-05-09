@@ -64,11 +64,16 @@ class NameTable(var width: Int, var height: Int, var name: String?) {
     }
 
     fun stateSave(buf: ByteBuffer) {
+        // V5.46.3 (2026-05-09): the per-tile write was previously gated by
+        // `if (tile[i] > 255)` — a leftover debug-print guard that turned into
+        // the body of the loop, so we wrote 0 bytes per nametable for any tile
+        // index that fit in a byte (i.e., effectively all of them). stateLoad
+        // unconditionally reads `width*height` bytes, so each load consumed
+        // bytes from the NEXT field, cascading corruption through the rest of
+        // the PPU snapshot. Manifested as: RAM restores fine but PPU draws
+        // overworld tiles when the save was taken inside a town/shop overlay.
         for (i in 0 until width * height) {
-            if (tile[i] > 255)  //System.out.println(">255!!");
-            {
-                buf.putByte(tile[i].toByte().toShort())
-            }
+            buf.putByte(tile[i].toByte().toShort())
         }
         for (i in 0 until width * height) {
             buf.putByte(attrib[i].toByte().toShort())
