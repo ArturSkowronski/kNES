@@ -111,6 +111,24 @@ interface HaikuConsult {
         screenshotBase64: String?,
     ): ShopMenuPhaseClassification
 
+    /** V5.45: per-step shop purchase advisor. Replaces the brittle deterministic
+     *  state-machine. Caller passes the current screenshot and a context block
+     *  describing the goal (which chars need weapons, their classes, gold,
+     *  recently-bought items, action log). Advisor returns the next single
+     *  action to apply. Continues to be called until advisor returns Done or
+     *  Fail. Returns [ShopPurchaseAdvice] with action="Fail" on any failure. */
+    suspend fun adviseShopPurchase(
+        screenshotBase64: String?,
+        contextText: String,
+    ): ShopPurchaseAdvice
+
+    data class ShopPurchaseAdvice(
+        /** "Up" | "Down" | "Left" | "Right" | "Tap_A" | "Tap_B" | "Done" | "Fail" */
+        val action: String,
+        val reason: String,
+        val costUsd: Double,
+    )
+
     /** Called when the agent needs to locate a known FF1 overworld landmark
      *  (e.g. the Chaos Shrine / Temple of Fiends) in the current viewport.
      *  `kind` is a free-form descriptor like "chaos_shrine" that the prompt
@@ -220,6 +238,84 @@ Action semantics:
 - Done: when the BUY/SELL/EXIT menu (or WEAPON shopkeeper dialog) is visible on screen. mapId may be 0 (town overlay) or >0 (sub-shop) — both are valid; the system verifies via vision.
 - Fail: surrounded by walls (action log shows ALL FOUR cardinals blocked) / castle entered (mapId in {8,24}) / cannot identify any building after reasonable exploration. Do NOT output Fail just because the party sprite is hard to see — assume it is at (8,7).
 """
+
+        /** V5.45: in-shop purchase advisor system prompt. The advisor sees the
+         *  current screenshot of the FF1 NES shop dialog and a per-iter context
+         *  describing the goal + party state, and decides the next single tap. */
+        const val SYSTEM_SHOP_PURCHASE = """You are a shop-purchase advisor for an autonomous Final Fantasy 1 (NES) agent INSIDE a weapon shop. Your job: read the screenshot, decide the next single tap to make progress toward the goal, and emit JSON.
+
+THE FF1 NES WEAPON SHOP UI HAS THESE SUB-SCREENS — identify which one is on screen:
+
+  WELCOME — only the keeper's "Welcome ..." text in a blue dialog box, no menu cursor on BUY/SELL/EXIT yet. → tap A to advance.
+
+  MAIN_MENU — three rows visible: "Buy", "Sell", "Exit". A WHITE-PALM CURSOR (finger pointing right) is on ONE of them.
+    - Cursor on "Buy"  → tap A to enter item list.
+    - Cursor on "Sell" → tap Up to move to "Buy".
+    - Cursor on "Exit" → tap Up twice to move to "Buy" (Up moves cursor up by 1 row, no wrap).
+
+  ITEM_LIST — list of weapon names (with prices in gold on the right). Cursor on one row.
+    - If the cursor is on the item you want (matches char's class) → tap A to select.
+    - Otherwise → tap Down or Up to move toward the desired row.
+    - To back out → tap B.
+
+  FOR_WHOM — "for whom?" prompt with the 4 characters listed (top to bottom: char1, char2, char3, char4). Cursor on a character.
+    - Move cursor with Up/Down to the target character.
+    - Tap A to confirm.
+    - Tap B to back to ITEM_LIST.
+
+  BUY_CONFIRM — "Buy for X G?" with YES/NO. Cursor usually defaults to YES.
+    - If you intended this purchase: tap A on YES.
+    - To cancel: tap Down (cursor → NO), tap A — or just tap B.
+
+  ANOTHER — post-purchase prompt (sometimes shows "another?" YES/NO, sometimes returns directly to ITEM_LIST).
+    - To buy more: tap A (YES) or just stay in ITEM_LIST.
+    - To finish: tap Down then A (NO), or tap B.
+
+  CLOSED — no menu visible, party is back on town overlay (visible map tiles, NPCs walking around). The shop has closed.
+    - Output Fail (caller must re-engage keeper).
+
+CHARACTER CLASSES (FF1 NES, 0-indexed by class byte):
+  0 = Fighter      (Knight after promotion)         — equips: Knife, Sword, Hammer, Axe, Rapier (NOT staff/nunchuck)
+  1 = Thief        (Ninja after promotion)          — equips: Knife, Sword, Rapier (NOT hammer/staff/nunchuck)
+  2 = Black Belt   (Master after promotion)         — equips: Nunchuck (mostly bare-handed; Knight only weapons rare)
+  3 = Red Mage     (Red Wizard after promotion)     — equips: Knife, Rapier, Sword, Hammer, Staff (broad)
+  4 = White Mage   (White Wizard after promotion)   — equips: Hammer, Staff (NOT swords/knives/rapier/nunchuck)
+  5 = Black Mage   (Black Wizard after promotion)   — equips: Knife, Staff (NOT swords/hammers/rapier/nunchuck)
+
+CONERIA WEAPON SHOP TYPICAL ITEMS (5 rows; observed in this ROM):
+  Wooden Staff   (5G)  — Mage only (RM, WM, BM)
+  Wooden Nunchuck(10G) — Black Belt only
+  Small Knife    (5G)  — most non-mages can use (FT, TH, RM, BM)
+  Rapier        (10G)  — light fighter (FT, TH, RM)
+  Iron Hammer   (10G)  — FT, WM, RM
+
+  Item names + prices may differ slightly in this ROM (translation). Read the
+  screenshot for the actual names + prices.
+
+GOAL: each turn, you receive a context block listing each char's class and whether they ALREADY have a weapon. Pick the cheapest class-compatible weapon for each char who needs one. Coordinate across chars (don't double-pick the same row if not needed).
+
+OUTPUT (strict JSON only, no prose):
+  {"action":"Up|Down|Left|Right|Tap_A|Tap_B|Done|Fail","reason":"<short — name the sub-screen you see, the cursor row, and why you're picking this action>"}
+
+ACTION SEMANTICS:
+  Up/Down       — move cursor one row in the active menu (rarely useful as horizontal action; cursor menus in FF1 shop are vertical)
+  Tap_A         — confirm / advance
+  Tap_B         — cancel / back one level
+  Done          — declare ALL chars who can be served are served (or no more buys possible due to gold). System verifies via gold/inv check.
+  Fail          — shop has CLOSED unexpectedly, or you cannot make progress.
+
+GOOD reasons (each names sub-screen, cursor row, intention):
+  - "MAIN_MENU cursor on Exit; Up to move toward Buy"
+  - "ITEM_LIST cursor on Wooden Staff (row 0); char1=Fighter cannot use staff; Down to move to Small Knife (row 2)"
+  - "BUY_CONFIRM cursor on YES; A to confirm purchase of Knife for char1"
+  - "ANOTHER prompt cursor on YES; char2 still needs a weapon, A to continue buying"
+  - "All 4 chars now have weapons (per context); Done"
+
+BAD reasons to AVOID:
+  - "I think I should buy something"  ← does not name what's on screen
+  - "tap A" without naming sub-screen ← can confirm wrong action (e.g., A on Exit closes shop)
+  - hallucinated item names ← read what's actually drawn
+"""
     }
 }
 
@@ -272,6 +368,13 @@ class FakeHaikuConsult(
             ?: HaikuConsult.ShopMenuPhaseClassification(HaikuConsult.ShopMenuPhase.UNKNOWN, 0.0)
         shopMenuPhaseCalls++
         return res
+    }
+
+    override suspend fun adviseShopPurchase(
+        screenshotBase64: String?,
+        contextText: String,
+    ): HaikuConsult.ShopPurchaseAdvice {
+        return HaikuConsult.ShopPurchaseAdvice("Fail", "fake-not-scripted", 0.0)
     }
 
     override suspend fun classifyOverworldLandmark(

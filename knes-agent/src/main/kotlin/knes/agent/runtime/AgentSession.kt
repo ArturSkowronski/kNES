@@ -1250,13 +1250,44 @@ class AgentSession(
             .associateWith { weaponSlotByChar[it] ?: 0 }
             .toMutableMap()
 
+        // V5.45: vision-advisor drives the in-shop purchase. Read each char's
+        // class from RAM so the advisor can pick class-compatible items. Class
+        // is at $6100/$6140/$6180/$61C0 (FF1 disasm) — values 0..5 for
+        // Fighter / Thief / BlackBelt / RedMage / WhiteMage / BlackMage.
+        val classRam = toolset.getState().ram
+        val charClasses: Map<Int, Int> = (1..4).associateWith { c ->
+            classRam["char${c}_class"] ?: 0
+        }
+        val charsNeeding: List<Int> = pendingChars.keys.toList().sorted()
+        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+            note = "boot_purchase_advisor_start: chars=$charsNeeding " +
+                   "classes=${charClasses.entries.joinToString { "char${it.key}=${it.value}" }}"))
+        val advisorBought = buySkill.invokeWithAdvisor(
+            charSlotsNeedingWeapons = charsNeeding,
+            charClasses = charClasses,
+            expectedKeeperKind = "weapon",
+            vision = outfitVision!!,
+            traceLog = { msg ->
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_purchase_advisor: $msg"))
+            },
+            maxAdvisorCalls = 30,
+        )
+        for ((charSlot, wasBought) in advisorBought) {
+            if (wasBought) charsBought += charSlot
+        }
+        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+            note = "boot_purchase_advisor_done: bought=$charsBought of needs=$charsNeeding"))
+
+        // Legacy stateful-batch retry path — only used if advisor served zero
+        // chars (e.g., advisor immediately gave up). Kept as a safety net.
         var roundIdx = 0
-        var roundMenuOpen = batchMenuOpen
-        while (pendingChars.isNotEmpty() && roundIdx < MAX_BATCH_ROUNDS) {
+        var roundMenuOpen = false  // advisor exit B-spammed; menu likely closed
+        while (charsBought.isEmpty() && pendingChars.isNotEmpty() && roundIdx < MAX_BATCH_ROUNDS) {
             val pairs = pendingChars.entries.map { it.value to it.key } // (itemSlot, charSlot)
             trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                 note = "boot_purchase_batch[$roundIdx]: pairs=${pairs.joinToString { "(s${it.first},c${it.second})" }} " +
-                       "menuAlreadyOpen=$roundMenuOpen mode=stateful"))
+                       "menuAlreadyOpen=$roundMenuOpen mode=stateful_fallback"))
             val results = buySkill.invokeManyStateful(
                 pairs = pairs,
                 expectedKeeperKind = "weapon",

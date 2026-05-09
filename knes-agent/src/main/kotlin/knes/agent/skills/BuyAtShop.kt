@@ -542,4 +542,147 @@ class BuyAtShop(
         }
         return results
     }
+
+    /** V5.45 (2026-05-09): vision-advisor-driven shop purchase. Replaces the
+     *  brittle deterministic state-machine with per-step Gemini advisor calls.
+     *  Each iter: screenshot → advisor reads sub-screen + cursor + context →
+     *  emits next single tap. Continues until advisor emits Done or Fail or
+     *  the iteration cap is reached.
+     *
+     *  Returns a map of charSlot → wasBought, computed by tracking the per-char
+     *  weapon-slot sum delta. The advisor decides item-to-char assignment based
+     *  on class compatibility (passed in via [charClasses]). */
+    suspend fun invokeWithAdvisor(
+        charSlotsNeedingWeapons: List<Int>,
+        charClasses: Map<Int, Int>,
+        expectedKeeperKind: String,
+        vision: HaikuConsult,
+        traceLog: ((String) -> Unit)? = null,
+        maxAdvisorCalls: Int = 40,
+    ): Map<Int, Boolean> {
+        val log = { msg: String -> traceLog?.invoke(msg) ?: Unit }
+        if (charSlotsNeedingWeapons.isEmpty()) return emptyMap()
+        if (expectedKeeperKind != "weapon") {
+            log("invokeWithAdvisor: UnsupportedKind=$expectedKeeperKind")
+            return charSlotsNeedingWeapons.associateWith { false }
+        }
+        val pre = toolset.getState().ram
+        val mapId = pre["currentMapId"] ?: 0
+        val mapflagsBit0 = ((pre["mapflags"] ?: 0) and 0x01) != 0
+        if (!mapflagsBit0 && mapId == 0) {
+            log("invokeWithAdvisor: NotInShop (mapflags.bit0=0, mapId=0)")
+            return charSlotsNeedingWeapons.associateWith { false }
+        }
+        val landmarkCandidates = landmarks.findByKind(LandmarkKind.NPC_SHOPKEEPER)
+        val landmark = if (mapId != 0) {
+            landmarkCandidates.firstOrNull { it.mapId == mapId }
+        } else {
+            landmarkCandidates.firstOrNull { parseKind(it.note) == expectedKeeperKind }
+        } ?: run {
+            log("invokeWithAdvisor: no landmark for keeper kind=$expectedKeeperKind")
+            return charSlotsNeedingWeapons.associateWith { false }
+        }
+        val items = parseItems(landmark.note)
+
+        // Track per-char "before" inventory + global gold for delta detection.
+        val preInvByChar: Map<Int, Int> = charSlotsNeedingWeapons.associateWith { c ->
+            (0..3).sumOf { StrategyContext.weaponId(StrategyContext.weaponSlot(pre, c, it)) }
+        }
+        val initialGold = StrategyContext.totalGold(pre)
+        val bought: MutableMap<Int, Boolean> = charSlotsNeedingWeapons.associateWith { false }.toMutableMap()
+        // Class names for the advisor's context.
+        val classNames = mapOf(
+            0 to "Fighter", 1 to "Thief", 2 to "BlackBelt",
+            3 to "RedMage", 4 to "WhiteMage", 5 to "BlackMage",
+        )
+
+        // Per-iter context builder. Keeps the advisor up to date on goal +
+        // remaining work + recent purchases.
+        fun buildContext(iter: Int, lastAction: String?, lastReason: String?): String = buildString {
+            appendLine("Iteration $iter of $maxAdvisorCalls.")
+            appendLine("Goal: buy one weapon for each character who currently lacks a weapon, choosing class-compatible items.")
+            appendLine()
+            appendLine("Shop's preseed item list (read screen for actual names/prices on screen):")
+            for ((idx, item) in items.withIndex()) {
+                appendLine("  row $idx: ${item.first} - ${item.second}G")
+            }
+            appendLine()
+            appendLine("Party state:")
+            for (c in 1..4) {
+                val cls = charClasses[c]
+                val clsName = classNames[cls] ?: "?"
+                val needs = c in charSlotsNeedingWeapons && bought[c] != true
+                val tag = if (needs) "NEEDS WEAPON" else "served"
+                appendLine("  char$c: class=$cls ($clsName) $tag")
+            }
+            appendLine()
+            val curRam = toolset.getState().ram
+            val curGold = StrategyContext.totalGold(curRam)
+            appendLine("Current gold: ${curGold}G (started at ${initialGold}G; spent ${initialGold - curGold}G).")
+            appendLine()
+            if (lastAction != null) {
+                appendLine("Previous action: $lastAction — $lastReason")
+            }
+            appendLine()
+            appendLine("Recommend ONE next tap. If all characters who can be served are served (or not enough gold for remaining), output Done.")
+        }
+
+        var lastAction: String? = null
+        var lastReason: String? = null
+        for (iter in 0 until maxAdvisorCalls) {
+            // Stop early if all chars done.
+            if (bought.values.all { it }) {
+                log("invokeWithAdvisor: all chars served at iter=$iter")
+                break
+            }
+            val shot = toolset.getScreen().base64
+            val ctx = buildContext(iter, lastAction, lastReason)
+            val advice = vision.adviseShopPurchase(shot, ctx)
+            log("invokeWithAdvisor[$iter]: action=${advice.action} reason=${advice.reason} costUsd=${advice.costUsd}")
+            lastAction = advice.action
+            lastReason = advice.reason
+            when (advice.action) {
+                "Up" -> toolset.tap("Up", count = 1, pressFrames = 3, gapFrames = 10)
+                "Down" -> toolset.tap("Down", count = 1, pressFrames = 3, gapFrames = 10)
+                "Left" -> toolset.tap("Left", count = 1, pressFrames = 3, gapFrames = 10)
+                "Right" -> toolset.tap("Right", count = 1, pressFrames = 3, gapFrames = 10)
+                "Tap_A" -> toolset.tap("A", count = 1, pressFrames = 5, gapFrames = 15)
+                "Tap_B" -> toolset.tap("B", count = 1, pressFrames = 5, gapFrames = 12)
+                "Done" -> {
+                    log("invokeWithAdvisor: Done at iter=$iter")
+                    break
+                }
+                "Fail" -> {
+                    log("invokeWithAdvisor: Fail at iter=$iter — ${advice.reason}")
+                    break
+                }
+                else -> {
+                    log("invokeWithAdvisor: unknown action ${advice.action}, breaking")
+                    break
+                }
+            }
+            toolset.step(buttons = emptyList(), frames = 8)
+            // Update per-char bought tracking.
+            val ram = toolset.getState().ram
+            for (c in charSlotsNeedingWeapons) {
+                if (bought[c] == true) continue
+                val nowSum = (0..3).sumOf {
+                    StrategyContext.weaponId(StrategyContext.weaponSlot(ram, c, it))
+                }
+                val preSum = preInvByChar[c] ?: 0
+                if (nowSum > preSum) {
+                    bought[c] = true
+                    log("invokeWithAdvisor[$iter]: char$c BOUGHT (weaponSum $preSum->$nowSum)")
+                }
+            }
+        }
+
+        // Final exit: B-spam to leave shop. Don't probe phase classifier here
+        // (caller will).
+        repeat(6) {
+            toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12)
+            toolset.step(buttons = emptyList(), frames = 6)
+        }
+        return bought
+    }
 }

@@ -151,6 +151,43 @@ class GeminiVisionConsult(
         }
     }
 
+    /** V5.45: Gemini 2.5 Pro shop-purchase advisor — drives in-shop menu nav
+     *  one tap at a time based on current screenshot + context. */
+    override suspend fun adviseShopPurchase(
+        screenshotBase64: String?,
+        contextText: String,
+    ): HaikuConsult.ShopPurchaseAdvice {
+        if (screenshotBase64.isNullOrEmpty()) {
+            return HaikuConsult.ShopPurchaseAdvice("Fail", "no-screenshot", 0.0)
+        }
+        return try {
+            val body = buildBody(
+                systemPrompt = HaikuConsult.SYSTEM_SHOP_PURCHASE,
+                userText = contextText,
+                b64 = screenshotBase64,
+                maxOutputTokens = 4000,
+                thinkingBudget = 1500,
+            )
+            val raw = postOrNull(body)
+                ?: return HaikuConsult.ShopPurchaseAdvice("Fail", "api-error", 0.0)
+            val (innerText, costUsd) = parseEnvelope(raw)
+            if (innerText.isNullOrBlank()) {
+                return HaikuConsult.ShopPurchaseAdvice("Fail", "envelope-malformed", costUsd)
+            }
+            val unfenced = innerText.replace(Regex("```(?:json)?\\s*"), "").replace("```", "")
+            val match = JSON_OBJECT.find(unfenced)?.value
+                ?: return HaikuConsult.ShopPurchaseAdvice("Fail",
+                    "advice-not-json: ${innerText.take(80)}", costUsd)
+            val advice = json.parseToJsonElement(match).jsonObject
+            val action = advice["action"]?.jsonPrimitive?.contentOrNull ?: "Fail"
+            val reason = advice["reason"]?.jsonPrimitive?.contentOrNull ?: "no-reason"
+            HaikuConsult.ShopPurchaseAdvice(action, reason, costUsd)
+        } catch (e: Throwable) {
+            System.err.println("[gemini-vision] adviseShopPurchase failed: ${e.message}")
+            HaikuConsult.ShopPurchaseAdvice("Fail", "exception: ${e.message}", 0.0)
+        }
+    }
+
     /** Spec 5: Gemini 2.5 Pro thinking-mode advisor for one-step shop nav. */
     override suspend fun adviseShopApproach(
         screenshotBase64: String?,
