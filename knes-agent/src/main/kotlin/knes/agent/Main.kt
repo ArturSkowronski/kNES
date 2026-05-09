@@ -2,6 +2,9 @@ package knes.agent
 
 import knes.agent.advisor.AdvisorAgent
 import knes.agent.executor.ExecutorAgent
+import knes.agent.explorer.AnthropicHaikuConsult
+import knes.agent.explorer.GeminiVisionConsult
+import knes.agent.explorer.HaikuConsult
 import knes.agent.llm.AnthropicSession
 import knes.agent.llm.ModelRouter
 import knes.agent.perception.FogOfWar
@@ -47,11 +50,52 @@ fun main(args: Array<String>) {
             val visionOverworldNavigator = AnthropicVisionOverworldNavigator(apiKey = key)
             val observer = RamObserver(toolset, overworldMap, vision = visionClassifier)
             val toolCallLog = knes.agent.runtime.ToolCallLog()
+            val landmarkMemory = LandmarkMemory()
             val advisor = AdvisorAgent(anthropic, router, toolset, viewportSource = overworldMap, interiorSource = mapSession, fog = fog)
             val executor = ExecutorAgent(
                 anthropic, router, toolset, advisor, overworldMap, mapSession, fog,
                 toolCallLog, visionInteriorNavigator, visionOverworldNavigator,
+                landmarks = landmarkMemory,
             )
+
+            // Vision backend for shop classification (Spec 2) and overworld
+            // landmark discovery (Spec 3a). Selected via KNES_VISION env var,
+            // mirroring ExplorerMain. gemini-pro requires GEMINI_API_KEY; absent
+            // falls back to Anthropic Haiku stub which returns NotFound — Spec 2
+            // outfit boot phase + Spec 3a bridge phase silently no-op in that case.
+            val visionBackend: HaikuConsult = when (System.getenv("KNES_VISION")?.lowercase()) {
+                "gemini-pro", "gemini" -> {
+                    val gKey = System.getenv("GEMINI_API_KEY")?.takeIf { it.isNotBlank() }
+                    if (gKey == null) {
+                        System.err.println("[main] KNES_VISION=gemini but GEMINI_API_KEY unset — using Anthropic Haiku stub")
+                        AnthropicHaikuConsult(apiKey = key)
+                    } else {
+                        System.err.println("[main] vision backend: Gemini 2.5 Pro")
+                        GeminiVisionConsult(apiKey = gKey)
+                    }
+                }
+                else -> {
+                    System.err.println("[main] vision backend: Anthropic Haiku (set KNES_VISION=gemini-pro for Gemini)")
+                    AnthropicHaikuConsult(apiKey = key)
+                }
+            }
+
+            // Spec 5: dedicated advisor for shop nav. Uses Gemini 2.5 Pro thinking
+            // mode — empirically stronger NES sprite recognition than Opus 4.5
+            // (`pixele najlepiej w gemini`) and the thinking budget produces
+            // step-by-step spatial reasoning. Falls back to Anthropic Opus advisor
+            // (AnthropicHaikuConsult.adviseShopApproach) only if GEMINI_API_KEY
+            // is unset.
+            val outfitAdvisor: HaikuConsult = run {
+                val gKey = System.getenv("GEMINI_API_KEY")?.takeIf { it.isNotBlank() }
+                if (gKey != null) {
+                    System.err.println("[main] outfit advisor: Gemini 2.5 Pro (thinking mode)")
+                    GeminiVisionConsult(apiKey = gKey)
+                } else {
+                    System.err.println("[main] outfit advisor: Anthropic Opus 4.5 (GEMINI_API_KEY unset)")
+                    AnthropicHaikuConsult(apiKey = key)
+                }
+            }
 
             AgentSession(
                 toolset = toolset,
@@ -61,7 +105,14 @@ fun main(args: Array<String>) {
                 toolCallLog = toolCallLog,
                 budget = Budget(maxSkillInvocations = maxSkills, costCapUsd = costCap, wallClockCapSeconds = wallCap),
                 fog = fog,
-                landmarkMemory = LandmarkMemory(),
+                landmarkMemory = landmarkMemory,
+                outfitVision = visionBackend,
+                outfitAdvisor = outfitAdvisor,
+                outfitNavigator = visionInteriorNavigator,
+                outfitViewportSource = overworldMap,
+                outfitMapSession = mapSession,
+                bridgeVision = visionBackend,
+                bridgeViewportSource = overworldMap,
             ).run()
         }
     }

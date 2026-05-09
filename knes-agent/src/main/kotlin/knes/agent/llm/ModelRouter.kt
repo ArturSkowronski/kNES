@@ -16,7 +16,7 @@ enum class AgentRole { EXECUTOR, ADVISOR }
 class ModelRouter {
     fun modelFor(phase: FfPhase, role: AgentRole): LLModel = when (phase) {
         FfPhase.Boot, FfPhase.TitleOrMenu, FfPhase.NewGameMenu, FfPhase.NameEntry ->
-            if (role == AgentRole.EXECUTOR) AnthropicModels.Sonnet_4_5 else AnthropicModels.Opus_4
+            if (role == AgentRole.EXECUTOR) AnthropicModels.Sonnet_4_5 else AnthropicModels.Opus_4_5
         is FfPhase.Overworld, is FfPhase.Indoors, is FfPhase.Battle, FfPhase.PostBattle, FfPhase.PartyDefeated ->
             if (role == AgentRole.EXECUTOR) AnthropicModels.Haiku_4_5 else AnthropicModels.Sonnet_4_5
     }

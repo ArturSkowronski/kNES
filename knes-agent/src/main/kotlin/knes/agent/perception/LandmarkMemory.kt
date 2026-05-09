@@ -5,9 +5,10 @@ import kotlinx.serialization.json.Json
 import java.io.File
 
 enum class LandmarkKind {
-    TOWN_ENTRY, CASTLE_ENTRY, DUNGEON_ENTRY,
-    NPC_KING, NPC_SHOPKEEPER, NPC_GENERIC,
+    TOWN_ENTRY, CASTLE_ENTRY, DUNGEON_ENTRY, TEMPLE_ENTRY,
+    NPC_KING, NPC_SHOPKEEPER, NPC_INNKEEPER, NPC_GENERIC,
     STAIRS_UP, STAIRS_DOWN, EXIT_TILE,
+    CHEST, SIGN, DIALOGUE_TRIGGER,
     UNKNOWN,
 }
 
@@ -127,6 +128,10 @@ class LandmarkMemory(
     }
 
     fun all(): List<Landmark> = byId.values.toList()
+
+    fun findInnkeeper(): Landmark? = byId.values.firstOrNull { it.kind == LandmarkKind.NPC_INNKEEPER }
+
+    fun findTempleEntry(): Landmark? = byId.values.firstOrNull { it.kind == LandmarkKind.TEMPLE_ENTRY }
 
     companion object {
         fun defaultFile(): File =

@@ -22,7 +22,7 @@ import java.util.concurrent.TimeoutException
  *   - `knes-agent` (Koog ToolRegistry registers this directly)
  */
 @LLMDescription("Tools for controlling the kNES emulator: input, screenshots, RAM state, profiles, and registered game actions.")
-class EmulatorToolset(
+open class EmulatorToolset(
     private val session: EmulatorSession,
     private val controller: ApiController = session.controller,
 ) : ToolSet {
@@ -50,7 +50,7 @@ class EmulatorToolset(
 
     @Tool
     @LLMDescription("Press a button N times with configurable timing. Equivalent to repeated step(button, press_frames) + step([], gap_frames) cycles. Returns frame count, RAM, and optionally a screenshot.")
-    fun tap(
+    open fun tap(
         button: String,
         count: Int = 1,
         pressFrames: Int = 5,
@@ -103,7 +103,7 @@ class EmulatorToolset(
 
     @Tool
     @LLMDescription("Get current emulator state: frame count, watched RAM values, CPU registers, and held buttons")
-    fun getState(): StateSnapshot = StateSnapshot(
+    open fun getState(): StateSnapshot = StateSnapshot(
         frame = session.frameCount,
         ram = session.readWatchedRam(),
         cpu = session.readCpuRegs(),
@@ -112,7 +112,7 @@ class EmulatorToolset(
 
     @Tool
     @LLMDescription("Capture a screenshot of the current NES frame as a base64-encoded PNG image")
-    fun getScreen(): ScreenPng = ScreenPng(base64 = session.screenshotBase64Png())
+    open fun getScreen(): ScreenPng = ScreenPng(base64 = session.screenshotBase64Png())
 
     @Tool
     @LLMDescription("Apply a game profile (e.g. 'smb' for Super Mario Bros, 'ff1' for Final Fantasy) to enable RAM watching for game-specific variables like HP, gold, position")

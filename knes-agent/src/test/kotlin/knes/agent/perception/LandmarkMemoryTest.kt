@@ -107,6 +107,26 @@ class LandmarkMemoryTest : FunSpec({
         mem.findByKind(LandmarkKind.TOWN_ENTRY) shouldHaveSize 1
     }
 
+    test("new landmark kinds CHEST + SIGN + DIALOGUE_TRIGGER serialize and deserialize") {
+        val tmp = Files.createTempFile("landmarks", ".json").toFile().apply { deleteOnExit() }
+        val mem = LandmarkMemory(file = tmp)
+        val kinds = listOf(LandmarkKind.CHEST, LandmarkKind.SIGN, LandmarkKind.DIALOGUE_TRIGGER)
+        kinds.forEachIndexed { i, k ->
+            mem.recordIfNew(Landmark(id = "lm_$i", kind = k,
+                mapId = 8, localX = i, localY = i, note = "kind=$k")) shouldBe true
+        }
+        mem.save()
+
+        val reloaded = LandmarkMemory(file = tmp)
+        val total = reloaded.findByKind(LandmarkKind.CHEST).size +
+            reloaded.findByKind(LandmarkKind.SIGN).size +
+            reloaded.findByKind(LandmarkKind.DIALOGUE_TRIGGER).size
+        total shouldBe 3
+        reloaded.findByKind(LandmarkKind.CHEST) shouldHaveSize 1
+        reloaded.findByKind(LandmarkKind.SIGN) shouldHaveSize 1
+        reloaded.findByKind(LandmarkKind.DIALOGUE_TRIGGER) shouldHaveSize 1
+    }
+
     test("recordIfNew upgrade is monotonic — never weakens visited or unsets mapIdInterior") {
         val tmp = Files.createTempFile("landmarks", ".json").toFile().apply { deleteOnExit() }
         val mem = LandmarkMemory(file = tmp)

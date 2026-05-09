@@ -1,161 +1,130 @@
-# FF1 Koog Agent — Handoff (post-mapId-mismatch hardening, 2026-05-06 morning)
+# FF1 Koog Agent — Handoff (Spec 5 shop-architecture closed, 2026-05-09 cont.)
 
-**Master HEAD:** `ebe52a3` — PR #114 merged. **Nine PRs this session: #106 + #107 + #108 + #109 + #110 + #111 + #112 + #113 + #114** (#105 closed unmerged).
-**Required env:** `ANTHROPIC_API_KEY` (default vision backend) or `GEMINI_API_KEY` (when `KNES_VISION=gemini-pro`).
+**Branch HEAD:** `86faf9b` on `ff1-buy-and-equip-coneria` (all session work pushed).
+**Open PR:** #121 in `ArturSkowronski/kNES` targeting `master` — <https://github.com/ArturSkowronski/kNES/pull/121>.
+**Tests:** 348 unit (3 baseline failures unchanged · 7 gated skipped).
 
----
+## TL;DR — Spec 5 architectural blocker closed end-to-end
 
-## TL;DR — Phase 1.5 + 2 closed live, explorer hardened end-to-end
-
-Started session with one bug ("mapId mismatch in morning campaign") and ended with the entire explorer + agent Phase 2 pipeline verified live, plus a vision backend swap available.
-
-```
-ebe52a3  PR #114 merge: atomic JSON memory file saves — crash-safe writes
-c4baf89  PR #113 merge: bail immediately on mapId=0 + mapflags=1 (UnknownMapTrap)
-f025f1a  PR #112 merge: GeminiVisionConsult — alt vision backend (Gemini 2.5 Pro)
-5cd7c11  PR #111 merge: skip handleNewInterior when ram mapId=0
-bf00bed  PR #110 merge: filter mapId=0 in auto-detected warps (AgentSession)
-ab0b677  PR #109 merge: post-loadState warm-up — bridges V5.2 input-frame drop
-30fb464  PR #107 merge: salience priority 0 — target known warp tiles
-7be39be  PR #108 merge: priority 0 must not filter recentlyFailed
-fc25534  PR #106 merge: tag landmarks with live mapId; skip Haiku on wipe / overworld
-```
-
----
-
-## Verified live this session
-
-| Bug / feature | Live evidence |
-|---|---|
-| Fix A — live mapId tag (#106) | Overworld campaign produced 7× NPC_KING tagged `mapId=24` (Castle), entry tagged `mapIdInterior=8` (Coneria Town overlay). Pre-fix the throne was tagged `mapId=8`. |
-| Fix B — PartyWipe gate (#106) | Interior-fixture campaign run-1 stop=PartyWiped → cost=$0.0 (was $0.000578 pre-fix), zero "NEW GAME" garbage. |
-| Priority 0 warp targeting (#107/#108) | First overworld run reached (147,154) for the first time across the entire session. |
-| LoadState warm-up (#109) | Without 30 NOOP frames after loadState, every first walk fails "input not responding". With it, agent moves on iter-1. |
-| Auto-detect mapId=0 filter (#110) | Real Haiku 4.5 + Gemini 2.5 Pro empirical comparison on the void-state screen confirmed 4-vs-0 false positive ratio. |
-| Skip handleNewInterior on mapId=0 (#111) | Same evidence as #110. |
-| Gemini 2.5 Pro alt backend (#112) | A/B on real Castle throne (mapId=24): both correctly identify NPC_KING; Haiku also hallucinates a STAIRS_DOWN, Pro doesn't. Pro adds accurate detail _"flanked by two golden dragon emblems"_. |
-| Trap bail-early (#113) | Unit-tested; with #111 already in place the live impact is freeing ~80 frames per trap-hitting run. |
-| Atomic memory saves (#114) | Unit-tested via simulated mid-write crash. Operational impact: today's debugging campaigns lost state to non-atomic saves several times — won't repeat. |
-| Phase 2 LandmarkContext (#106 byproduct) | `runAgent` trace in `~/.knes/runs/2026-05-06T05-36-14.521274Z/trace.jsonl`: rendered landmark block in advisor input, advisor output references (146,152) + "castle with King/throne room" verbatim. |
-
----
-
-## Vision backend comparison (live A/B, 2 data points)
-
-| Screen | Haiku 4.5 | Gemini 2.5 Pro | Truth |
-|--------|-----------|-----------------|-------|
-| **UnknownMapTrap mapId=0 void** | 4 false: NPC_KING + NPC_GENERIC + 2× STAIRS_DOWN | `[]` (empty) | empty (no real interior) |
-| **Coneria Castle throne mapId=24** | NPC_KING ✓ + STAIRS_DOWN ✗ (false) | NPC_KING ✓ with accurate detail | NPC_KING only |
-
-**Pattern:** Haiku over-generates landmarks (especially false-positive STAIRS), Pro is conservatively accurate. Cost ratio ~6x ($0.005-0.007 vs $0.001 per call). For a 50-run campaign: $0.30 (Pro) vs $0.05 (Haiku) — absolute differential trivial; precision gain matters more.
-
-Switch via env var: `KNES_VISION=gemini-pro` (default `haiku`).
-
----
-
-## Open work
-
-### High-value
-- **F. Full A/B campaign** — 20 runs each backend, empirical campaign-level metrics. Marginal value vs the 2 data points already collected, but cleanest dataset for "should we default to Pro?".
-- **E. Coverage metric** — `terrainTilesKnown delta=0` every run because savestate has full overworld scan. Replace with `visited-landmarks` delta in plateau heuristic.
-
-### Smaller / opportunistic
-- **Discover more warps** — current `~/.knes/ff1-overworld-warps.json` has only the manually-annotated `(145,152)`. AgentSession's auto-detect (now mapId-correct via #110) needs runs to populate. Without trap recovery — wait, that's already done via #111+#113. So just need actual runs producing data.
-- **Explorer doesn't accumulate warps cross-run** (only AgentSession does). Harmonise so explorer can grow `warpMemory` from its own discoveries.
-- **`isDialogBoxOpen` is a `false` stub** — `Trigger.DialogBoxVisible` never fires. Need a real RAM signature.
-- **Anthropic prompt caching is no-op** — Koog 0.6.x lacks `cache_control`. The HaikuConsult HTTP path is direct; could add it.
-
----
-
-## Code architecture (post-#114)
+The previous handoff documented the FF1 NPC-overlay shop architecture mismatch as the sole remaining blocker. **That blocker is now closed empirically.** Run #5 (2026-05-09) made the first successful weapon purchase in project history:
 
 ```
-knes-agent/src/main/kotlin/knes/agent/
-  explorer/
-    ExplorerSession.kt — V5.2 warmup post-loadState (#109)
-    ExplorerMain.kt — KNES_VISION env router (haiku | gemini-pro)
-    SingleRun.kt
-      handleNewInterior(): live mapId tag, skip on mapId=0 (#106 + #111)
-      Companion: decideClassification(triggerMapId, ramAfter): null on
-                 wipe / overworld / mapId=0 (#106 + #111)
-      checkRestart: mapId=0+mapflags=1 → immediate UnknownMapTrap (#113)
-    SalienceStrategy.kt
-      Priority 0: closest known warp not yet entered this run (#107),
-                  no recentlyFailed filter (#108)
-      Priorities 1A/1B/2-5 unchanged
-    AnthropicHaikuConsult.kt — Haiku 4.5 backend
-    GeminiVisionConsult.kt — Gemini 2.5 Pro backend (#112)
-  perception/
-    AtomicJsonWriter.kt — write-temp-then-rename (#114)
-    {Landmark,Blockage,OverworldWarp,Interior,OverworldTerrain,Overworld}Memory.kt
-      — all save() now via AtomicJsonWriter
-  runtime/
-    AgentSession.kt
-      Companion: FAILED_WARP_REGEX captures (worldX, worldY, mapId)
-      Auto-detect skips mapId=0 transitions (#110)
-      LandmarkContext.render(landmarkMemory) injected into both advisor +
-      executor observations on every phase change (Phase 2)
-    LandmarkContext.kt — unchanged; renders LandmarkMemory grouped by kind.
+boot_advisor_done_verify[23]: open=true source=vision_kind=weapon kind=weapon
+boot_post_enter_detect: open=true kind=weapon
+boot_keeper_approach: skipped — weapon shop UI already open; menuAlreadyOpen=true
+boot_purchase: char1 slot=0 result=Bought: cost=5 char=1 slot=0 weaponSum 0->3
+boot_outfit_summary: weaponsBought=1 weaponsEquipped=0 totalGoldSpent=5
 ```
 
----
+Two new bugs surfaced behind the architectural fix:
+1. Per-character slot mapping is class-naive (char1 happened to fit slot 0; char2/3/4 fail WrongClass on every retry).
+2. `EquipWeapon` skill: `MenuStuck: 60 taps without equipped-flag transition`.
 
-## Test status
+Neither is a regression — both were latent and only became reachable now that BUY actually executes. They are listed in §"Remaining work" below.
+
+## What changed this continuation session
+
+Three commits on top of `6ff4914`:
+
+1. **`18e58cd` — `ShopUiDetector` (vision-primary, RAM negative gate).** New `knes/agent/perception/ShopUiDetector.kt`. RAM rules out impossible regimes (overworld with `mapflags.bit0=0`, castle `mapId in {8,24}`, battle `screenState != 0`); vision (`HaikuConsult.classifyShopMenu`) is the definitive positive signal. Replaces the structurally wrong `inSubShop = curMapId != 0 && curMapId != initialMapId` heuristic in `runOutfitBootPhase`. `BuyAtShop` precondition relaxed to accept `mapId=0 + mapflags.bit0=1` (town overlay) or `mapId>0` (legacy sub-shop). Landmark lookup falls back to kind-from-note when `mapId=0`. `SYSTEM_ADVISOR` prompt rewritten: shops are NPC dialog overlays, mapId stays 0, Done is valid whenever BUY/SELL/EXIT is visible. +11 ShopUiDetector tests, +2 BuyAtShop tests.
+
+2. **`7bd2a91` — `BuyAtShop.menuAlreadyOpen` flag.** Run #3 reached BUY/SELL/EXIT but all 12 purchase attempts failed because the post-enter B-spam ×4 left the dialog stack misaligned and BuyAtShop's two opening A-taps collapsed into one — every Down/A nav was off-by-one, silently buying wrong-class items. Fix: when `ShopUiDetector` reports the shop UI is already open at post-enter, `BuyAtShop` is invoked with `menuAlreadyOpen=true`; it skips the dialog-opening A-tap and forces cursor back to BUY via Up×2 before item selection. The B-spam was removed. +1 BuyAtShop test.
+
+3. **`86faf9b` — kind-aware Done acceptance.** Run #4 walked into the ARMOR shop (sign visually similar). The detector said `open=true kind=armor` and the runtime accepted Done because any shop kind passed the open check; BuyAtShop tried to buy weapons from an armor shop, all 12 failed WrongClass. Fix: at Done acceptance and at post-enter, also require `detection.kind == "weapon"`. When a different shop kind opens, B-spam exits the dialog stack, the wrong-shop event lands in the action log as `Done(rejected-wrong-shop=armor)` so Gemini learns to pick a different building, and the existing 3-strike `enteredWrongBuildingCount` give-up bounds the loop.
+
+Total session API spend ~$2 (5 runs).
+
+## Architecture (post-session)
 
 ```
-./gradlew :knes-agent:test
+session.run()
+├── pre-boot (deterministic, no LLM)
+│   └── PressStartUntilOverworld if RAM shows title screen
+├── main turn loop
+│   ├── observe phase + RAM
+│   ├── BOOT TRIGGER (RAM-based, fires once):
+│   │   └── if !done && mapId==0 && char1_str>0:
+│   │       └── runOutfitBootPhase()
+│   │           ├── walk to TOWN_ENTRY landmark waypoint (preseed)
+│   │           ├── settle 120 frames
+│   │           ├── advisor loop (max 80 iters), per iter:
+│   │           │   ├── readPos honours mapflags bit 0 (3 regimes)
+│   │           │   ├── render minimap, 30-entry action log, advisor consult
+│   │           │   ├── castle short-circuit if mapId in {8,24}
+│   │           │   ├── execute action with retry-on-no-movement
+│   │           │   └── on Done: ShopUiDetector.detect(ram, screenshot, vision)
+│   │           │       ├── kind="weapon"  → entered=true, break
+│   │           │       ├── kind="armor"…  → wrong-shop, B-spam exit, continue
+│   │           │       └── open=false     → action log entry, continue
+│   │           ├── post-enter ShopUiDetector check:
+│   │           │   ├── open && kind=weapon → menuAlreadyOpen=true (skip walk)
+│   │           │   └── otherwise           → vision-based keeper approach walk
+│   │           ├── BuyAtShop × 4 chars (first call: menuAlreadyOpen=true)
+│   │           └── ExitInterior + EquipWeapon × 4 chars
+│   └── strategic LLM loop (Garland goal, etc.)
 ```
 
-**233 pass / 2 pre-existing fail / 7 skipped** (master HEAD `ebe52a3`).
+## Empirical trajectory (5 runs this continuation)
 
-Pre-existing failures: `Coneria8VisualDiffTest`, `ConeriaTownEmpiricalDiscoveryTest` (unchanged from master baseline at session start).
+| Run | What it tested | Outcome |
+|-----|----------------|---------|
+| #1 | First arch fix (`ShopUiDetector` only) | DNS hiccup before boot reached advisor; inconclusive |
+| #2 | Same code, network retry | Ktor EOFException — Gemini and Anthropic flaked at the same time |
+| #3 | Same code, third try | **entered=true via vision_kind=weapon** (first ever); 12/12 BuyAtShop fail with `WrongClass` because B-spam misaligned menu |
+| #4 | `menuAlreadyOpen=true` flag | Walked into ARMOR shop instead of WEAPON. detector accepted, 12/12 fail (wrong kind) |
+| #5 | kind=="weapon" filter | **char1 bought Wooden Staff (5G)**; char2/3/4 WrongClass (class-naive slot mapping); EquipWeapon MenuStuck |
 
----
+## Remaining work (non-architectural; surfaced by the unblock)
 
-## Useful CLI
+1. **Class-aware slot mapping in `runOutfitBootPhase` per-char buy loop.** The current `weaponSlotByChar = mapOf(1 to 0, 2 to 1, 3 to 2, 4 to 3)` plus `(slot+1) % 4` retry cycle is a uniform default that ignores each char's class. Fighter/Knight, BlackBelt/Master, Thief/Ninja, Red/White/Black Mage have disjoint usable-weapon sets; the BUY list mixes class-restricted items, so a fixed mapping coincidentally fits at most one class per shop. Sketch fix: read `char{N}_class` from RAM (need to add register to `profiles/ff1.json`), maintain a per-class compatible-slot list, and try only those slots for that char. Without this, only one of four chars can succeed per run. Estimated 1–2 hours including test.
+
+2. **`EquipWeapon` MenuStuck.** Run #5: `boot_equip: char1 slot=0 result=MenuStuck: 60 taps without equipped-flag transition for char=1 slot=0`. The skill drives the in-menu equip flow but the equipped-flag (high bit of `char{N}_weapon{slot}`) never flips. Most likely a navigation issue (cursor on wrong row when A is pressed, or one of the menu screens has changed slightly under the fanslated ROM). Needs a screenshot dump in EquipWeapon similar to `/tmp/spec5-boot-iter-*.png` to localise where the loop stalls. Estimated 1–3 hours.
+
+3. **Strategic-loop budget pressure.** Run #5 hit `OutOfBudget` 4:18 in (maxSkillInvocations=120 cap). Boot phase finished cleanly at turn 43; the cap was burned by the post-boot strategic loop. Either raise the cap when running buy-then-equip integration tests, or have the boot phase return earlier when the orchestrated sequence is structurally complete (even if some chars failed) so the strategic loop can run longer.
+
+4. **Fanslated-ROM dialog noise.** The current `roms/ff.nes` has fan-translated NPC dialog ("No Shit." text observed in run #4 iter 29 at smPlayer (10,11)). Not a code issue, but Gemini occasionally misreads such dialogs as shop UI when the actual menu hasn't opened. The kind-aware Done filter neutralises this — `classifyShopMenu` returns "unknown" for non-shop dialogs, so the open=false branch fires.
+
+## What's uncommitted
+
+Just `.claude/scheduled_tasks.lock` (local Claude scheduler). All session work landed in `18e58cd`, `7bd2a91`, `86faf9b`.
+
+## Run command (next-session diagnostic re-run)
 
 ```bash
-# Cheap explorer with default Haiku backend.
-./gradlew :knes-agent:runExplorer
+rm -f ~/.knes/ff1-*.json
+cat > ~/.knes/ff1-landmarks.json <<'JSON'
+{"version":1,"landmarks":[
+  {"id":"interior_entry_147_155","kind":"TOWN_ENTRY","worldX":147,"worldY":155,
+   "visited":true,"note":"coneria-town overworld waypoint","discoveredRunId":"preseed"},
+  {"id":"weapon_shopkeeper_preseed","kind":"NPC_SHOPKEEPER","visited":false,
+   "note":"kind=weapon; preseed; items=staff:5,dagger:5,nunchuck:10,rapier:10,hammer:10","discoveredRunId":"preseed"}
+]}
+JSON
 
-# Same campaign with Gemini 2.5 Pro vision backend.
-KNES_VISION=gemini-pro ./gradlew :knes-agent:runExplorer
-
-# Override savestate to interior fixture.
-FF1_SAVESTATE=knes-agent/src/test/resources/fixtures/ff1-coneria-interior-discovery.savestate \
-  ./gradlew :knes-agent:runExplorer
-
-# Phase 2 agent (uses LandmarkContext).
-./gradlew :knes-agent:run --args="--rom=/Users/askowronski/Priv/kNES/roms/ff.nes \
-  --max-skill-invocations=8 --cost-cap-usd=0.5 --wall-clock-cap-seconds=120"
-
-# Inspect memory
-jq '.landmarks | length' ~/.knes/ff1-landmarks.json
-jq '[.landmarks | group_by(.kind)[] | {k: .[0].kind, n: length, mapIds: ([.[].mapId, .[].mapIdInterior] | map(select(. != null)) | unique)}]' ~/.knes/ff1-landmarks.json
-jq '.tiles' ~/.knes/ff1-overworld-warps.json
-jq -r 'select(.role == "advisor") | .input' ~/.knes/runs/<latest>/trace.jsonl | head -100
+KNES_VISION=gemini-pro ANTHROPIC_API_KEY=... GEMINI_API_KEY=... \
+  ./gradlew :knes-agent:run --args="--rom=$PWD/roms/ff.nes \
+    --wall-clock-cap-seconds=900 --cost-cap-usd=2.0 --max-skill-invocations=120"
 ```
 
----
+Watch trace:
+```bash
+LATEST=$(ls -td ~/.knes/runs/*/ | head -1)
+grep -E 'boot_walk_settle|boot_advisor\[|boot_advisor_done_verify|boot_advisor_wrong_shop|boot_advisor_summary|boot_post_enter|boot_keeper_approach|boot_purchase|boot_equip|boot_outfit_summary' "$LATEST/trace.jsonl"
+```
 
-## Repo paths
+Diagnostic screenshots accumulate in `/tmp/spec5-boot-iter-NN-midM-mfF-posPX_PY-smSX_SY-wWX_WY.png` plus `/tmp/spec5-postenter.png`.
 
-- Main: `/Users/askowronski/Priv/kNES`
-- Worktree: `/Users/askowronski/Priv/kNES-ff1-agent-v2`
-- ROM (gitignored): `/Users/askowronski/Priv/kNES/roms/ff.nes`
-- Persistent memory: `~/.knes/ff1-{overworld-terrain,landmarks,blockages,overworld-warps,interior-memory}.json`
-- Run traces: `~/.knes/runs/<ISO-timestamp>/trace.jsonl`
-- Archives:
-  - `~/.knes/archive-2026-05-05-pre-mapid-fix/`
-  - `~/.knes/archive-2026-05-05-pre-warp-targeting/`
-  - `~/.knes/archive-2026-05-05-pre-warmup/`
+## Lessons (carried forward — also in `~/.claude/projects/.../memory/`)
 
-## Test fixtures
-- `ff1-post-boot.savestate` — overworld at (146, 158)
-- `ff1-coneria-interior-discovery.savestate` — inside mapId=8 at party=(11, 32) (warning: PPU vblank desync per V5.16; Coneria8VisualDiffTest uses live boot instead)
+1. **Vision-primary detection beats RAM heuristics for FF1 UI overlays.** Run #4 confirmed: `classifyShopMenu` was the sufficient positive signal that worked in production; RAM gates only ruled out impossible regimes cheaply. Saved as `feedback_vision_primary.md`.
+2. **FF1 NES shops are NPC dialog overlays in town overlay, not sub-maps.** `mapflags.bit0=1`, `mapId=0` is the canonical in-shop regime. Saved as `reference_ff1_shop_architecture.md` — now empirically end-to-end validated.
+3. **Don't reset state you can consume.** Original instinct after `entered=true` was "B-spam to clean menu, then BuyAtShop from clean state". Better: read the menu state with vision, set `menuAlreadyOpen=true`, and consume the existing dialog. B-spam introduced its own off-by-one bug because FF1's B-button semantics differ across menu layers.
+4. **Filter on the specific kind your skill needs.** `ShopUiDetector` accepts any shop kind by design (cheap); the caller must filter (`kind == "weapon"`). Run #4's armor-shop trap is the canonical example.
+5. **Architectural fixes unblock pre-existing latent bugs.** Class-naive slot mapping and `EquipWeapon` MenuStuck were always wrong; they only became visible once BUY actually executed. Plan for the next layer of bugs before celebrating the fix.
 
----
+## Carried-over principles
 
-## First message to send to next session (suggestion)
-
-> Master at `ebe52a3`. Nine PRs merged this session (#106 + #107 + #108 + #109 + #110 + #111 + #112 + #113 + #114; #105 closed unmerged). Phase 1.5 + Phase 2 verified live. Vision backend swappable (Haiku default; `KNES_VISION=gemini-pro` for Gemini 2.5 Pro — better on edge cases per 2-point A/B). Memory writes are now crash-safe. UnknownMapTrap recovery in place. 233 / 2 pre-existing fail / 7 skipped. Open: full A/B campaign (20 runs each backend) for empirical metrics, coverage metric improvement (terrainTilesKnown delta is always 0 — needs replacement with visited-landmarks delta). Conversation in Polish; PR-flow + tests-first + commit per closed phase.
+- **Autonomy:** agent gra grę; dev nie. Per `autonomy_principle.md`.
+- **No-savestate persistence:** new specs nie używają savestate-hash-keyed flags ani FF1_SAVESTATE-gated e2e tests; persistence flows through `landmarkMemory`. Per `feedback_no_savestate.md`.
+- **Locate-party-first vision prompts:** still in effect. Per `feedback_locate_party_first.md`.
+- **Vision-primary UI detection:** new lesson, see #1 above. Per `feedback_vision_primary.md`.

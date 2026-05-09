@@ -28,13 +28,28 @@ class WalkOverworldTo(
             "16x16 viewport. Marks non-moving steps as blocked. Aborts on random encounter."
 
     private val FRAMES_PER_TILE = 24
+    /** V5.33: post-battle/post-anything input-dead warmup. The FF1 engine
+     *  ignores button presses for ~30 frames after exiting Battle/PostBattle
+     *  back to the overworld — same root cause as ExplorerSession V5.2
+     *  post-loadState quirk. Without this, the very first step after a
+     *  random encounter routinely fails, fog-marks the destination tile,
+     *  and BFS self-poisons within 3 iterations. */
+    private val WARMUP_FRAMES = 30
 
     override suspend fun invoke(args: Map<String, String>): SkillResult {
         val tx = args["targetX"]?.toIntOrNull() ?: return SkillResult(false, "missing targetX")
         val ty = args["targetY"]?.toIntOrNull() ?: return SkillResult(false, "missing targetY")
-        val maxSteps = args["maxSteps"]?.toIntOrNull() ?: 32
+        // V5.34.1: bumped default 32→64. attempt6 evidence: BFS path from
+        // (152,150) to bridge (157,141) was 22 steps but required routing
+        // around peninsula water — single skill call exhausted maxSteps=32
+        // mid-route, ITERATION_CAP at executor level fired. 64 covers the
+        // longest realistic single-leg overworld walk (Coneria → Pravoka).
+        val maxSteps = args["maxSteps"]?.toIntOrNull() ?: 64
 
-        var totalFrames = 0
+        // V5.33: NOOP warmup before first step. See WARMUP_FRAMES doc.
+        toolset.step(buttons = emptyList(), frames = WARMUP_FRAMES)
+
+        var totalFrames = WARMUP_FRAMES
         var stepsTaken = 0
         // V5.15: detect "input dead" (e.g. fixture loadState quirk) — if the
         // party doesn't move for several consecutive iterations, abort with a
@@ -129,8 +144,18 @@ class WalkOverworldTo(
             val transitioned = ((ram1["mapflags"] ?: 0) and 0x01) != ((ram0["mapflags"] ?: 0) and 0x01) ||
                 (ram1["screenState"] ?: 0) != (ram0["screenState"] ?: 0)
             if (nx == cx && ny == cy && !transitioned) {
-                fog.markBlocked(cx + nextDir.dx, cy + nextDir.dy)
                 consecutiveNoMove++
+                // V5.33: defer fog.markBlocked until SECOND consecutive failure
+                // on this attempt. First failure is often a transient input-
+                // dead frame (post-battle, post-loadState, or sub-second engine
+                // animation). Fog-marking on first fail self-poisons BFS until
+                // 3-of-4 cardinal neighbours look "impassable" and the agent
+                // declares a false deadlock — see attempt4 evidence at (152,151)
+                // where (151,151) was fog-marked after a single failed W step
+                // post-battle, then BFS reported "no path" on next iteration.
+                if (consecutiveNoMove >= 2) {
+                    fog.markBlocked(cx + nextDir.dx, cy + nextDir.dy)
+                }
                 if (consecutiveNoMove >= INPUT_DEAD_THRESHOLD) {
                     val ram = toolset.getState().ram
                     return SkillResult(false,

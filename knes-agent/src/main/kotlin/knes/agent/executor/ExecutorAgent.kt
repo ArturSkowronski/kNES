@@ -10,6 +10,7 @@ import knes.agent.llm.AnthropicSession
 import knes.agent.llm.ModelRouter
 import knes.agent.perception.FfPhase
 import knes.agent.perception.FogOfWar
+import knes.agent.perception.LandmarkMemory
 import knes.agent.perception.MapSession
 import knes.agent.perception.OverworldMap
 import knes.agent.perception.VisionInteriorNavigator
@@ -18,7 +19,7 @@ import knes.agent.runtime.ToolCallLog
 import knes.agent.skills.SkillRegistry
 import knes.agent.tools.EmulatorToolset
 
-class ExecutorAgent(
+open class ExecutorAgent(
     private val anthropic: AnthropicSession,
     private val modelRouter: ModelRouter,
     private val toolset: EmulatorToolset,
@@ -36,6 +37,12 @@ class ExecutorAgent(
      * narrower task. When null, the production prompt with Garland goal is used.
      */
     private val goalOverride: String? = null,
+    /**
+     * Shared landmark memory. Injected so DiscoverInn / RestAtInn registered
+     * in SkillRegistry use the same instance as AgentSession (same JSON file on
+     * disk as fallback, but injected instance avoids re-reads mid-run).
+     */
+    private val landmarks: LandmarkMemory = LandmarkMemory(),
 ) {
     private val systemPrompt: String =
         if (goalOverride == null) ff1ExecutorSystemPrompt
@@ -43,7 +50,8 @@ class ExecutorAgent(
     private val skillRegistry = SkillRegistry(toolset, overworldMap, mapSession, fog,
         toolCallLog = toolCallLog,
         visionInteriorNavigator = visionInteriorNavigator,
-        visionOverworldNavigator = visionOverworldNavigator)
+        visionOverworldNavigator = visionOverworldNavigator,
+        landmarks = landmarks)
     private val advisorTool = AdvisorToolset(advisor)
     private val registry = ToolRegistry {
         tools(skillRegistry)
@@ -56,10 +64,10 @@ class ExecutorAgent(
         toolRegistry = registry,
         strategy = singleRunStrategy(),
         systemPrompt = systemPrompt,
-        maxIterations = 16,   // V5.23.2: 10 still hit ITERATION_CAP (iter6). Even single-tool calls in Koog 0.6.1 singleRunStrategy can take 8-10 nodes when tool result triggers extra LLM reasoning. Bumped to 16 — empirically below the 20-cap chain risk seen in V2-V5, while leaving room for legitimate single-tool flows. Tracking ITERATION_CAP rate across iterations.
+        maxIterations = 24,   // V5.23.2: 10 still hit ITERATION_CAP (iter6). Even single-tool calls in Koog 0.6.1 singleRunStrategy can take 8-10 nodes when tool result triggers extra LLM reasoning. 2026-05-06 Garland attempt: 16 hit ITERATION_CAP repeatedly when executor chained walkOverworldTo retries + battleFightAll + askAdvisor in same turn. Bumped to 24 — small step above 20-cap risk but within range that V2-V5 occasionally tolerated. Tracking ITERATION_CAP rate across iterations.
     )
 
-    suspend fun run(phase: FfPhase, input: String): String = try {
+    open suspend fun run(phase: FfPhase, input: String): String = try {
         newAgent(phase).run(input)
     } catch (e: Exception) {
         // singleRunStrategy + maxIterations=2 should rarely cap, but if the model keeps
