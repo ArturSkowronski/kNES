@@ -1298,7 +1298,10 @@ class AgentSession(
                 trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                     note = "boot_purchase_advisor: $msg"))
             },
-            maxAdvisorCalls = 30,
+            // Run #21 evidence: char1+2 bought in 19 iter, char3 in progress
+            // at iter 30 cap. 50 covers all 4 chars with headroom for the
+            // advisor's occasional state-recovery taps.
+            maxAdvisorCalls = 50,
         )
         for ((charSlot, wasBought) in advisorBought) {
             if (wasBought) charsBought += charSlot
