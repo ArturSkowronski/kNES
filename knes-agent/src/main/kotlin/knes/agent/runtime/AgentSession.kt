@@ -1149,8 +1149,18 @@ class AgentSession(
         // to wherever the keeper is now. Returns true if keeper found and walk
         // attempted (caller should then probe shop UI). Returns false if no
         // keeper visible (next BuyAtShop will fail; caller should bail).
+        // Diagnostic: write a base64-png to /tmp under a stable name so any
+        // failure stage can be inspected after the fact. Best-effort; never
+        // throws.
+        fun dumpShot(name: String, base64: String) {
+            try {
+                val bytes = java.util.Base64.getDecoder().decode(base64)
+                java.io.File("/tmp/spec5-$name.png").writeBytes(bytes)
+            } catch (_: Throwable) {}
+        }
         suspend fun reEngageKeeper(tag: String): Boolean {
             val shot = toolset.getScreen().base64
+            dumpShot("buy-$tag-reengage-pre", shot)
             val scan = outfitVision!!.scanInteriorCandidates(shot)
             val keeper = scan.candidates
                 .filter { it.kind == "shopkeeper" }
@@ -1158,7 +1168,8 @@ class AgentSession(
             if (keeper == null) {
                 trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                     note = "boot_keeper_reengage[$tag]: NO_SHOPKEEPER_IN_VIEW " +
-                           "candidates=${scan.candidates.size} costUsd=${scan.costUsd}"))
+                           "candidates=${scan.candidates.size} costUsd=${scan.costUsd} " +
+                           "(screenshot: /tmp/spec5-buy-$tag-reengage-pre.png)"))
                 return false
             }
             val dx = keeper.screenX - 8
@@ -1177,9 +1188,11 @@ class AgentSession(
             // automatically in FF1 town overlay (no Tap_A needed).
             toolset.tap(button = "Up", count = 1, pressFrames = 12, gapFrames = 8)
             toolset.step(buttons = emptyList(), frames = 12)
+            dumpShot("buy-$tag-reengage-post", toolset.getScreen().base64)
             trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                 note = "boot_keeper_reengage[$tag]: keeper_screenXY=(${keeper.screenX},${keeper.screenY}) " +
-                       "walked dx=$dx dy=$dyTarget costUsd=${scan.costUsd}"))
+                       "walked dx=$dx dy=$dyTarget costUsd=${scan.costUsd} " +
+                       "(screenshots: /tmp/spec5-buy-$tag-reengage-{pre,post}.png)"))
             return true
         }
         for (charSlot in 1..4) {
@@ -1215,17 +1228,22 @@ class AgentSession(
                     }
                 }
                 val callMenuOpen = probe.open && probe.kind == "weapon"
+                val tag = "char$charSlot-r$retries-s$slot"
+                dumpShot("buy-$tag-pre", probeShot)
                 trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                     note = "boot_purchase_probe: char$charSlot slot=$slot retry=$retries " +
-                           "menuOpen=$callMenuOpen detectKind=${probe.kind}"))
+                           "menuOpen=$callMenuOpen detectKind=${probe.kind} " +
+                           "(screenshot: /tmp/spec5-buy-$tag-pre.png)"))
                 val r = buySkill.invoke(mapOf(
                     "itemSlot" to slot.toString(),
                     "forCharSlot" to charSlot.toString(),
                     "expectedKeeperKind" to "weapon",
                     "menuAlreadyOpen" to callMenuOpen.toString(),
                 ))
+                dumpShot("buy-$tag-post", toolset.getScreen().base64)
                 trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                    note = "boot_purchase: char$charSlot slot=$slot result=${r.message}"))
+                    note = "boot_purchase: char$charSlot slot=$slot result=${r.message} " +
+                           "(screenshot: /tmp/spec5-buy-$tag-post.png)"))
                 if (r.ok) { charsBought += charSlot; break }
                 if (r.message.contains("WrongClass")) {
                     slot = (slot + 1) % 4
