@@ -1211,30 +1211,26 @@ class AgentSession(
                        "(screenshots: /tmp/spec5-buy-$tag-reengage-{pre,post}.png)"))
             return true
         }
-        // V5.43.3: avoid double-walk corruption. Run #12 (2026-05-09) showed
-        // when post_enter saw open=false (Gemini stochastic) but shop dialog
-        // was actually open, the run{} block's keeper_approach walk navigated
-        // the menu cursor (not party — cardinals in an open menu move cursor).
-        // Then a second batch-pre reengage walked more, scrambling state.
-        //
-        // Strategy: after run{} block, do a fresh probe ONCE to see actual
-        // menu state. If open → trust and skip reengage. If closed → reengage
-        // once and probe again. Hard cap at 1 reengage attempt.
-        val freshShot = toolset.getScreen().base64
-        val freshProbe = ShopUiDetector.detect(toolset.getState().ram, freshShot, outfitVision)
-        var batchMenuOpen = freshProbe.open && freshProbe.kind == "weapon"
+        // V5.44.3: trust menuAlreadyOpen from run{} block. It used the dual
+        // classifier (kind + phase) check. Re-probing here just adds another
+        // chance for stochastic flip → unwanted reengage walk → scrambled
+        // menu cursor. Only reengage if menuAlreadyOpen is false.
+        var batchMenuOpen = menuAlreadyOpen
         trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-            note = "boot_purchase_batch_freshprobe: menuOpen=$batchMenuOpen kind=${freshProbe.kind} " +
-                   "(post-run{}-block, before any batch-side reengage)"))
+            note = "boot_purchase_batch_initial: menuOpen=$batchMenuOpen " +
+                   "(trusting run{} block's dual-classifier decision)"))
         if (!batchMenuOpen) {
             val reEngaged = reEngageKeeper(tag = "batch-pre")
             if (reEngaged) {
                 val rs = toolset.getScreen().base64
                 val probe2 = ShopUiDetector.detect(toolset.getState().ram, rs, outfitVision)
-                batchMenuOpen = probe2.open && probe2.kind == "weapon"
+                val phase2 = outfitVision!!.classifyShopMenuPhase(rs)
+                val phase2SaysOpen = phase2.phase != HaikuConsult.ShopMenuPhase.CLOSED &&
+                    phase2.phase != HaikuConsult.ShopMenuPhase.UNKNOWN
+                batchMenuOpen = (probe2.open && probe2.kind == "weapon") || phase2SaysOpen
                 trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                     note = "boot_purchase_batch_reengage_probe: menuOpen=$batchMenuOpen " +
-                           "kind=${probe2.kind}"))
+                           "kind=${probe2.kind} phase=${phase2.phase}"))
             }
         }
         dumpShot("buy-batch-pre", toolset.getScreen().base64)

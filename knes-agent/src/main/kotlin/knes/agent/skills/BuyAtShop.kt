@@ -414,13 +414,26 @@ class BuyAtShop(
                     }
                     HaikuConsult.ShopMenuPhase.UNKNOWN -> {
                         unknownCount++
-                        if (unknownCount >= 3) {
-                            // Tap B only after 3 consecutive UNKNOWN — assume
-                            // we're really in some unrecognized sub-menu.
-                            toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12)
-                            unknownCount = 0
+                        // Run #16 evidence: Welcome→BUY/SELL/EXIT transition
+                        // produces a frame with WEAPON banner + empty dialog
+                        // box that classifier reports as UNKNOWN. Tapping A
+                        // advances the dialog (or selects BUY if we're at
+                        // MAIN_MENU misclassified). Try A on first UNKNOWN.
+                        // If still UNKNOWN after A, step+retry. Tap B only
+                        // after multiple persistent UNKNOWNs (last resort).
+                        when (unknownCount) {
+                            1 -> {
+                                toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 15)
+                            }
+                            2 -> {
+                                // Just step+retry; classifier may have caught
+                                // an animation frame.
+                            }
+                            else -> {
+                                toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12)
+                                unknownCount = 0
+                            }
                         }
-                        // Otherwise: just step frames and re-classify.
                     }
                     HaikuConsult.ShopMenuPhase.CLOSED -> return false
                 }
