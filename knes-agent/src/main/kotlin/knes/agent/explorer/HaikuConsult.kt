@@ -167,10 +167,12 @@ ENTRY MECHANICS (IMPORTANT — FF1 NES shops are NPC dialog overlays, NOT sub-ma
 CASTLE GUARDRAIL:
   - The Coneria CASTLE has sub-mapId=8 (front courtyard, large open hall with a king on a throne at the back) and mapId=24 (throne hall). NEITHER is a weapon shop. If `currentMapId` becomes 8 or 24, output {"action":"Fail","reason":"entered castle, not a shop"} so the system can exit and resume scanning.
 
-ANTI-REPEAT FROM ACTION LOG:
+ANTI-REPEAT FROM ACTION LOG (TOWN_OVERLAY caveat: NPCs MOVE):
   - The context lists up to 30 recent actions and whether the party moved.
-  - BEFORE picking your action, COUNT in the action log: from the current party tile, how many times have you tried each cardinal? If a cardinal has 2+ NO-MOVEMENT entries from this exact tile, treat it as a PERMANENT WALL — never try it again from here.
-  - If you notice the party has been oscillating between 2-3 tiles for 5+ entries, the immediate region is sealed by walls. STOP trying cardinals toward your visible target. Instead: walk AWAY from the target (the opposite direction of your visible goal) for 3-4 tiles to break out of the pocket, then re-route from a different angle. The shop won't move; reaching it from a different approach is fine.
+  - In TOWN_OVERLAY regime, NPC sprites (shopkeepers, generic townspeople) WALK BETWEEN TILES each frame. A "no movement" entry in the action log might mean a real wall OR a transient NPC standing in that adjacent tile that has since walked away. DO NOT treat town-overlay no-movement entries as permanent walls on the first try.
+  - In TOWN_OVERLAY: a direction needs 2+ no-movement entries from the SAME tile WITHIN THE LAST 5 ENTRIES (i.e. recently confirmed) before treating as permanent wall. If the last no-movement attempt is older than 5 entries, RE-TRY the direction — the NPC has likely moved.
+  - In OVERWORLD or SUB_MAP: tiles are static; one no-movement attempt is enough to mark blocked.
+  - If the party has been oscillating between 2-3 tiles for 5+ entries with no progress, the immediate region is sealed by walls (or stuck NPCs). STOP trying cardinals toward your visible target. Instead: walk AWAY from the target (the opposite direction of your visible goal) for 3-4 tiles to break out of the pocket, then re-route from a different angle.
   - Counter-intuitive but important: when you can SEE the goal but every direct path is blocked, the answer is to walk AWAY first, then around. Trust the screenshot for orientation but plan a detour.
 
 Output JSON only, no prose:
