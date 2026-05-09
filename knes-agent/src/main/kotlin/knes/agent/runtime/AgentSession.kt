@@ -1201,28 +1201,35 @@ class AgentSession(
                        "(screenshots: /tmp/spec5-buy-$tag-reengage-{pre,post}.png)"))
             return true
         }
-        // V5.43.1: trust the post-enter detection that already set
-        // `menuAlreadyOpen`. Run #10 (2026-05-09) showed re-probing + re-engage
-        // when the post-enter run{} block had ALREADY confirmed the shop UI
-        // was open caused a Gemini stochastic flip (post-enter saw kind=weapon,
-        // batch-probe saw kind=null) → reengage cardinals scrambled the menu
-        // cursor (cardinals in an open menu navigate the cursor, not party).
-        // If post-enter said menu was open, skip the redundant probe and
-        // reengage entirely. Otherwise (post-enter said closed and walked the
-        // party adjacent), one keeper-walk to trigger auto-dialog is fine.
-        var batchMenuOpen = menuAlreadyOpen
+        // V5.43.3: avoid double-walk corruption. Run #12 (2026-05-09) showed
+        // when post_enter saw open=false (Gemini stochastic) but shop dialog
+        // was actually open, the run{} block's keeper_approach walk navigated
+        // the menu cursor (not party — cardinals in an open menu move cursor).
+        // Then a second batch-pre reengage walked more, scrambling state.
+        //
+        // Strategy: after run{} block, do a fresh probe ONCE to see actual
+        // menu state. If open → trust and skip reengage. If closed → reengage
+        // once and probe again. Hard cap at 1 reengage attempt.
+        val freshShot = toolset.getScreen().base64
+        val freshProbe = ShopUiDetector.detect(toolset.getState().ram, freshShot, outfitVision)
+        var batchMenuOpen = freshProbe.open && freshProbe.kind == "weapon"
+        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+            note = "boot_purchase_batch_freshprobe: menuOpen=$batchMenuOpen kind=${freshProbe.kind} " +
+                   "(post-run{}-block, before any batch-side reengage)"))
         if (!batchMenuOpen) {
             val reEngaged = reEngageKeeper(tag = "batch-pre")
             if (reEngaged) {
                 val rs = toolset.getScreen().base64
-                val probe = ShopUiDetector.detect(toolset.getState().ram, rs, outfitVision)
-                batchMenuOpen = probe.open && probe.kind == "weapon"
+                val probe2 = ShopUiDetector.detect(toolset.getState().ram, rs, outfitVision)
+                batchMenuOpen = probe2.open && probe2.kind == "weapon"
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_purchase_batch_reengage_probe: menuOpen=$batchMenuOpen " +
+                           "kind=${probe2.kind}"))
             }
         }
         dumpShot("buy-batch-pre", toolset.getScreen().base64)
         trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
             note = "boot_purchase_batch_probe: menuAlreadyOpen=$batchMenuOpen " +
-                   "(skipped redundant probe; trusting post-enter detection) " +
                    "(screenshot: /tmp/spec5-buy-batch-pre.png)"))
 
         // Build initial pair list (one per char missing a weapon). We do up to
