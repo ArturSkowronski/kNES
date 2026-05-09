@@ -1142,6 +1142,46 @@ class AgentSession(
         val initialGold = StrategyContext.totalGold(toolset.getState().ram)
         // Default mapping: each char gets one of the 4 first inventory slots.
         val weaponSlotByChar = mapOf(1 to 0, 2 to 1, 3 to 2, 4 to 3)
+        // V5.42 (2026-05-09): keeper re-approach helper. NPCs in FF1 NES towns
+        // walk between tiles each frame; during BuyAtShop's 30+ A/Down/B taps
+        // the shopkeeper has typically moved away from the previously-engaged
+        // tile. This helper re-runs the vision scan and walks party adjacent
+        // to wherever the keeper is now. Returns true if keeper found and walk
+        // attempted (caller should then probe shop UI). Returns false if no
+        // keeper visible (next BuyAtShop will fail; caller should bail).
+        suspend fun reEngageKeeper(tag: String): Boolean {
+            val shot = toolset.getScreen().base64
+            val scan = outfitVision!!.scanInteriorCandidates(shot)
+            val keeper = scan.candidates
+                .filter { it.kind == "shopkeeper" }
+                .maxByOrNull { it.confidence }
+            if (keeper == null) {
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_keeper_reengage[$tag]: NO_SHOPKEEPER_IN_VIEW " +
+                           "candidates=${scan.candidates.size} costUsd=${scan.costUsd}"))
+                return false
+            }
+            val dx = keeper.screenX - 8
+            val dyTarget = (keeper.screenY + 1) - 7
+            val xDir = if (dx < 0) "Left" else "Right"
+            val yDir = if (dyTarget < 0) "Up" else "Down"
+            repeat(kotlin.math.abs(dx)) {
+                toolset.tap(button = xDir, count = 1, pressFrames = 12, gapFrames = 8)
+                toolset.step(buttons = emptyList(), frames = 8)
+            }
+            repeat(kotlin.math.abs(dyTarget)) {
+                toolset.tap(button = yDir, count = 1, pressFrames = 12, gapFrames = 8)
+                toolset.step(buttons = emptyList(), frames = 8)
+            }
+            // Final Up — walking INTO the keeper tile triggers the dialog
+            // automatically in FF1 town overlay (no Tap_A needed).
+            toolset.tap(button = "Up", count = 1, pressFrames = 12, gapFrames = 8)
+            toolset.step(buttons = emptyList(), frames = 12)
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_keeper_reengage[$tag]: keeper_screenXY=(${keeper.screenX},${keeper.screenY}) " +
+                       "walked dx=$dx dy=$dyTarget costUsd=${scan.costUsd}"))
+            return true
+        }
         for (charSlot in 1..4) {
             if (StrategyContext.anyWeaponEquipped(toolset.getState().ram, charSlot)) continue
             var slot = weaponSlotByChar[charSlot] ?: continue
@@ -1156,9 +1196,24 @@ class AgentSession(
                 // SHOULD land at "facing keeper, no menu" but FF1 menu state
                 // can drift across iterations; the probe keeps menuAlreadyOpen
                 // honest. Cost: ~$0.005 per char (one classifyShopMenu call).
-                val probeRam = toolset.getState().ram
-                val probeShot = toolset.getScreen().base64
-                val probe = ShopUiDetector.detect(probeRam, probeShot, outfitVision)
+                var probeRam = toolset.getState().ram
+                var probeShot = toolset.getScreen().base64
+                var probe = ShopUiDetector.detect(probeRam, probeShot, outfitVision)
+                // V5.42: if menu closed, re-engage the keeper. Run #8 (2026-05-09)
+                // showed char1 succeeded but char2/3/4 all WrongClass — root cause:
+                // shopkeeper NPC moves during BuyAtShop's tap sequence; after exit
+                // the party is no longer adjacent to keeper, so next A-tap on
+                // empty tile yields nothing. Vision re-finds keeper + walks party
+                // adjacent. Cost: 1 extra scanInteriorCandidates call (~$0.005).
+                if (!probe.open || probe.kind != "weapon") {
+                    val reEngaged = reEngageKeeper(tag = "char$charSlot.$retries")
+                    if (reEngaged) {
+                        // Re-probe after walking into keeper — auto-dialog should fire.
+                        probeRam = toolset.getState().ram
+                        probeShot = toolset.getScreen().base64
+                        probe = ShopUiDetector.detect(probeRam, probeShot, outfitVision)
+                    }
+                }
                 val callMenuOpen = probe.open && probe.kind == "weapon"
                 trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                     note = "boot_purchase_probe: char$charSlot slot=$slot retry=$retries " +
