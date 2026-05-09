@@ -34,12 +34,33 @@ fun main(args: Array<String>) {
     val key = System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() }
         ?: error("ANTHROPIC_API_KEY not set")
 
+    // V5.46 (2026-05-09): savestate-based fast iteration. When
+    // KNES_FF1_LOAD_SAVESTATE points to a readable file, the emulator state is
+    // restored after ROM load — typically used to skip pre-boot pressStart +
+    // navigation loop and go directly into the in-shop purchase advisor for
+    // dev iteration on shop-side bugs without burning nav budget.
+    val loadStatePath = System.getenv("KNES_FF1_LOAD_SAVESTATE")?.takeIf { it.isNotBlank() }
+
     val outcome: Outcome = runBlocking {
         AnthropicSession(key).use { anthropic ->
             val session = EmulatorSession()
             val toolset = EmulatorToolset(session)
             require(toolset.loadRom(rom).ok) { "Failed to load ROM: $rom" }
             require(toolset.applyProfile(profile).ok) { "Failed to apply profile: $profile" }
+            if (loadStatePath != null) {
+                val f = File(loadStatePath)
+                if (f.exists() && f.canRead()) {
+                    val bytes = f.readBytes()
+                    val ok = session.loadState(bytes)
+                    if (ok) {
+                        System.err.println("[main] loaded savestate from $loadStatePath (${bytes.size} bytes)")
+                    } else {
+                        System.err.println("[main] FAILED to load savestate from $loadStatePath — continuing fresh")
+                    }
+                } else {
+                    System.err.println("[main] KNES_FF1_LOAD_SAVESTATE=$loadStatePath does not exist; continuing fresh")
+                }
+            }
 
             val router = ModelRouter()
             val overworldMap = OverworldMap.fromRom(File(rom))

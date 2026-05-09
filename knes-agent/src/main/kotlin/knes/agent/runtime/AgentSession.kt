@@ -971,6 +971,21 @@ class AgentSession(
                                    "costUsd=${detection.costUsd + phaseClass.costUsd}"))
                         if (kindMatches || phaseSaysOpen) {
                             entered = true
+                            // V5.46: dump savestate so subsequent dev runs can
+                            // load it via KNES_FF1_LOAD_SAVESTATE and skip the
+                            // pre-boot pressStart + advisor navigation. Saves
+                            // ~$1+ per dev iteration on shop-side bugs.
+                            try {
+                                val bytes = toolset.session.saveState()
+                                java.io.File("/tmp/spec5-shop-entered.savestate").writeBytes(bytes)
+                                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                                    note = "boot_savestate_dumped: bytes=${bytes.size} " +
+                                           "path=/tmp/spec5-shop-entered.savestate " +
+                                           "(set KNES_FF1_LOAD_SAVESTATE to load)"))
+                            } catch (e: Throwable) {
+                                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                                    note = "boot_savestate_dump_failed: ${e.message}"))
+                            }
                             break
                         }
                         if (detection.open && detection.kind != null &&

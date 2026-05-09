@@ -23,7 +23,7 @@ import java.util.concurrent.TimeoutException
  */
 @LLMDescription("Tools for controlling the kNES emulator: input, screenshots, RAM state, profiles, and registered game actions.")
 open class EmulatorToolset(
-    private val session: EmulatorSession,
+    val session: EmulatorSession,
     private val controller: ApiController = session.controller,
 ) : ToolSet {
     @Tool
