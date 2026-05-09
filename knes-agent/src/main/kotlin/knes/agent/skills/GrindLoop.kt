@@ -40,6 +40,8 @@ class GrindLoop(private val toolset: EmulatorToolset) : Skill {
         val startFrame = toolset.getState().frame
         var steps = 0
         var goingNorth = true
+        var prevEncCounter: Int? = null
+        var nonZeroDeltaSeen = false
 
         // Per-step screenshot evidence for grind walk — confirms the agent is
         // actually traversing GREEN grass tiles where encounters fire (per
@@ -73,8 +75,12 @@ class GrindLoop(private val toolset: EmulatorToolset) : Skill {
                         .writeBytes(java.util.Base64.getDecoder().decode(shotN))
                 } catch (_: Throwable) {}
             }
+            val encNow = ramStep["encounterCounter"] ?: 0
+            val encDelta = prevEncCounter?.let { encNow - it } ?: 0
+            if (prevEncCounter != null && encDelta != 0) nonZeroDeltaSeen = true
+            prevEncCounter = encNow
             println("[grind] step=$steps world=(${ramStep["worldX"]},${ramStep["worldY"]}) " +
-                "mapflags=${ramStep["mapflags"]} encounterCounter=${ramStep["encounterCounter"]} " +
+                "mapflags=${ramStep["mapflags"]} encounterCounter=$encNow delta=$encDelta " +
                 "screenState=0x${(ramStep["screenState"] ?: 0).toString(16)}")
 
             val stateAfter = toolset.getState()
@@ -111,6 +117,10 @@ class GrindLoop(private val toolset: EmulatorToolset) : Skill {
             }
         }
 
+        if (prevEncCounter != null && !nonZeroDeltaSeen) {
+            println("[grind] WARN grind_encounter_byte_dead: encounterCounter=$prevEncCounter " +
+                "stayed flat across $steps steps — wrong RAM byte or true dead-zone")
+        }
         val stateAfter = toolset.getState()
         val ram = stateAfter.ram
         return SkillResult(
