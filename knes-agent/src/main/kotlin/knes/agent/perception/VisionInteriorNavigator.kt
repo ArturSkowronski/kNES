@@ -257,6 +257,14 @@ class AnthropicVisionInteriorNavigator(
                 "unvisited, treat covering the map as your TOP priority — even above seeking the exit. " +
                 "Pick the suggested explore direction (or any direction toward unvisited area) and " +
                 "return EXIT only when no unvisited tiles remain or the party is genuinely on the overworld. " +
+                "POST-SHOP TOWN EXIT (when the screen shows a town interior with shops/houses): " +
+                "after buying weapons your goal is to leave the town to the overworld. " +
+                "Walk SOUTH out of the shop building first (counter is north, door is south); " +
+                "then keep walking SOUTH along the dirt path between buildings until the camera " +
+                "scrolls off the town onto the overworld (terrain map: grass, trees, mountains, water). " +
+                "Building doorways on LEFT/RIGHT lead INTO other shops and trap you in a dialog — " +
+                "avoid them unless SOUTH is genuinely blocked. Trees in the town overlay block " +
+                "movement; trees on the overworld do NOT — they're walkable encounter terrain. " +
                 "Output ONLY JSON: {\"direction\":\"N|S|E|W|EXIT|STUCK\",\"reason\":\"<<=80 chars\"}."
     }
 }
