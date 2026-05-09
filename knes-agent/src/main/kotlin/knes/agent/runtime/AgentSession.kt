@@ -943,11 +943,12 @@ class AgentSession(
                     "Tap_A" -> toolset.tap("A", count = 1, pressFrames = 5, gapFrames = 12)
                     "Done" -> {
                         // V5.40: accept Done iff ShopUiDetector confirms a shop
-                        // dialog overlay. RAM gate rules out genuine overworld /
-                        // castle / battle cheaply; vision then confirms the
-                        // BUY/SELL/EXIT menu is actually drawn. mapId is no
-                        // longer required to be non-zero — Coneria shops keep
-                        // mapId=0 with mapflags.bit0=1 the entire time.
+                        // dialog overlay AND the kind matches expected. Run #4
+                        // (2026-05-09) entered the ARMOR shop and accepted Done
+                        // because kind=armor is a valid shop kind — but boot
+                        // phase wants weapons, so all 12 BuyAtShop attempts
+                        // failed with WrongClass. Now require kind=="weapon".
+                        val expectedShopKind = "weapon"
                         val nowRam = toolset.getState().ram
                         val verifyShot = toolset.getScreen().base64
                         val detection = ShopUiDetector.detect(nowRam, verifyShot, outfitVision)
@@ -956,9 +957,34 @@ class AgentSession(
                             note = "boot_advisor_done_verify[$iter]: open=${detection.open} " +
                                    "source=${detection.source} kind=${detection.kind} " +
                                    "costUsd=${detection.costUsd}"))
-                        if (detection.open) {
+                        if (detection.open && detection.kind == expectedShopKind) {
                             entered = true
                             break
+                        }
+                        if (detection.open && detection.kind != null &&
+                            detection.kind != expectedShopKind) {
+                            // Wrong shop type — exit dialog via B-spam and let
+                            // the advisor see the action log entry to learn it
+                            // was the WRONG shop. Increment counter so we don't
+                            // bounce between wrong shops forever.
+                            enteredWrongBuildingCount++
+                            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                                note = "boot_advisor_wrong_shop[$iter]: kind=${detection.kind} " +
+                                       "(expected=$expectedShopKind); count=$enteredWrongBuildingCount"))
+                            if (enteredWrongBuildingCount > 3) {
+                                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                                    note = "boot_advisor_give_up: 3+ wrong shops entered"))
+                                break
+                            }
+                            // B-spam to fully exit the wrong-shop dialog stack.
+                            repeat(4) {
+                                toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12)
+                                toolset.step(buttons = emptyList(), frames = 6)
+                            }
+                            actionLog.addLast(ActionLogEntry(iter,
+                                "Done(rejected-wrong-shop=${detection.kind})", beforeXY, px to py))
+                            while (actionLog.size > actionLogMaxSize) actionLog.removeFirst()
+                            continue
                         }
                         actionLog.addLast(ActionLogEntry(iter,
                             "Done(rejected-${detection.source})", beforeXY, px to py))
@@ -1054,16 +1080,16 @@ class AgentSession(
             trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                 note = "boot_post_enter_detect: open=${postEnterDetect.open} " +
                        "source=${postEnterDetect.source} kind=${postEnterDetect.kind}"))
-            if (postEnterDetect.open) {
-                // Shop dialog already on screen (advisor opened BUY/SELL/EXIT
-                // before emitting Done). Don't B-spam — instead pass
-                // menuAlreadyOpen=true to BuyAtShop so it skips the dialog-
-                // opening A-tap. Run #3 (2026-05-09) showed B-spam left the
-                // menu in a misaligned state and all 12 purchase attempts
-                // failed with WrongClass.
+            if (postEnterDetect.open && postEnterDetect.kind == "weapon") {
+                // Weapon shop dialog already on screen (advisor opened
+                // BUY/SELL/EXIT before emitting Done). Don't B-spam — instead
+                // pass menuAlreadyOpen=true to BuyAtShop so it skips the
+                // dialog-opening A-tap. Run #3 (2026-05-09) showed B-spam
+                // left the menu in a misaligned state and all 12 purchase
+                // attempts failed with WrongClass.
                 menuAlreadyOpen = true
                 trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                    note = "boot_keeper_approach: skipped — shop UI already open; " +
+                    note = "boot_keeper_approach: skipped — weapon shop UI already open; " +
                            "BuyAtShop will run with menuAlreadyOpen=true"))
                 return@run
             }

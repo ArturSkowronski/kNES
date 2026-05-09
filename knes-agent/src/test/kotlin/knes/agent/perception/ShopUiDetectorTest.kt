@@ -83,7 +83,12 @@ class ShopUiDetectorTest : FunSpec({
         vision.shopCalls shouldBe 0
     }
 
-    test("detect: armor shop also accepted") {
+    test("detect: armor shop also accepted (caller checks kind for filtering)") {
+        // ShopUiDetector accepts ANY shop kind; the caller (runOutfitBootPhase)
+        // is responsible for filtering by expected kind. Run #4 (2026-05-09)
+        // empirically caught this — agent entered armor shop, detector said
+        // open=true kind=armor, but boot phase wants weapon → caller now
+        // rejects when kind != "weapon".
         val ram = mapOf("mapflags" to 1, "currentMapId" to 0, "screenState" to 0)
         val vision = FakeHaikuConsult(shopClassifications = listOf(
             HaikuConsult.ShopClassification(kind = "armor", items = emptyList(), costUsd = 0.004)
