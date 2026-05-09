@@ -104,6 +104,56 @@ class BuyAtShopTest : FunSpec({
         toolset.tapsIssued shouldBe 0
     }
 
+    test("Bought in town overlay (mapId=0, mapflags.bit0=1) — FF1 NES NPC dialog overlay shop") {
+        val tmp = Files.createTempFile("buy-", ".json").toFile().apply { deleteOnExit() }
+        val landmarks = LandmarkMemory(file = tmp).also {
+            // Preseed landmark in town-overlay style: no mapId (null), kind in note.
+            it.record(Landmark(
+                id = "weapon_shopkeeper_preseed", kind = LandmarkKind.NPC_SHOPKEEPER,
+                mapId = null, localX = null, localY = null,
+                note = "kind=weapon; preseed; items=Rapier:10,Hammer:10",
+                discoveredRunId = "preseed",
+            ))
+        }
+        val pre = mapOf(
+            "currentMapId" to 0, "mapflags" to 1,  // town overlay regime
+            "smPlayerX" to 11, "smPlayerY" to 10, "screenState" to 0,
+            "goldLow" to 0x90, "goldMid" to 0x01, "goldHigh" to 0,  // 400G
+            "char1_weapon0" to 0,
+        )
+        val post = pre.toMutableMap().apply {
+            put("goldLow", 0x86); put("goldMid", 0x01)  // 390G
+            put("char1_weapon0", 0x10)
+        }
+        val toolset = ScriptedBuyToolset(listOf(pre, pre, pre, pre, post, post, post, post, post, post))
+        val skill = BuyAtShop(toolset, landmarks)
+
+        val r = skill.invoke(mapOf(
+            "itemSlot" to "0", "forCharSlot" to "1", "expectedKeeperKind" to "weapon"
+        ))
+        r.ok shouldBe true
+        r.message shouldContain "Bought"
+    }
+
+    test("NotInShop in genuine overworld (mapflags.bit0=0, mapId=0)") {
+        val tmp = Files.createTempFile("buy-", ".json").toFile().apply { deleteOnExit() }
+        val landmarks = LandmarkMemory(file = tmp).also { seedShopLandmark(it) }
+        val pre = mapOf(
+            "currentMapId" to 0, "mapflags" to 0,  // overworld regime
+            "screenState" to 0,
+            "goldLow" to 0x90, "goldMid" to 0x01, "char1_weapon0" to 0,
+        )
+        val toolset = ScriptedBuyToolset(listOf(pre))
+        val skill = BuyAtShop(toolset, landmarks)
+
+        val r = skill.invoke(mapOf(
+            "itemSlot" to "0", "forCharSlot" to "1", "expectedKeeperKind" to "weapon"
+        ))
+        r.ok shouldBe false
+        r.message shouldContain "NotInShop"
+        toolset.tapsIssued shouldBe 0
+    }
+
     test("UnsupportedKind when expectedKeeperKind is not weapon") {
         val tmp = Files.createTempFile("buy-", ".json").toFile().apply { deleteOnExit() }
         val landmarks = LandmarkMemory(file = tmp).also {

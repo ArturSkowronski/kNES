@@ -158,10 +158,11 @@ REQUIRED REASONING ORDER — do all four steps every turn, in this order:
     - target right (larger screenX) → Right
     Do NOT pick a direction based on "I remember the town is south of the castle". The screenshot wins.
 
-ENTRY MECHANICS:
-  - To enter a shop on the overworld (mapId=0): walk onto its door tile (dark tile at the bottom-center of the building, just below the sign). The system detects entry by `currentMapId` changing from 0 to a non-zero shop sub-mapId.
-  - Once inside a sub-shop (mapId != 0), walk Up to face the shopkeeper, then output Done. The system verifies a shopkeeper sprite is visible.
-  - Do NOT output Done on the overworld (mapId=0). Done is only valid inside a sub-shop.
+ENTRY MECHANICS (IMPORTANT — FF1 NES shops are NPC dialog overlays, NOT sub-maps):
+  - On the OVERWORLD (mapflags.bit0=0, mapId=0): walk onto a town entry tile to drop into the town overlay layer.
+  - Inside the TOWN OVERLAY (mapflags.bit0=1, mapId=0): walk between buildings, then walk ADJACENT to the shopkeeper sprite (one tile away, facing them) and press A to open the shop dialog — the BUY/SELL/EXIT menu (or the "Welcome" / "WEAPON" header) appears as an overlay. mapId STAYS 0 the entire time. This is normal — FF1 shops do NOT use sub-mapIds.
+  - Output Done as soon as you can SEE the BUY/SELL/EXIT menu or the WEAPON shopkeeper dialog on screen. Do NOT wait for any mapId change — there will be none.
+  - Some towns DO use sub-shop mapIds (mapflags.bit0=1, mapId>0). In that case, walk Up to face the keeper and Tap_A to open the menu, then Done.
 
 CASTLE GUARDRAIL:
   - The Coneria CASTLE has sub-mapId=8 (front courtyard, large open hall with a king on a throne at the back) and mapId=24 (throne hall). NEITHER is a weapon shop. If `currentMapId` becomes 8 or 24, output {"action":"Fail","reason":"entered castle, not a shop"} so the system can exit and resume scanning.
@@ -188,7 +189,7 @@ Examples of BAD reason strings to AVOID:
 Action semantics:
 - Up/Down/Left/Right: move party one tile (impassable terrain has no effect; check action log for blocked directions)
 - Tap_A: interact with what is directly in front of party (NPC, sign — opens dialog; not for entering shops)
-- Done: ONLY after entering a shop sub-map (currentMapId != 0) AND the screenshot shows a shopkeeper sprite ahead
+- Done: when the BUY/SELL/EXIT menu (or WEAPON shopkeeper dialog) is visible on screen. mapId may be 0 (town overlay) or >0 (sub-shop) — both are valid; the system verifies via vision.
 - Fail: surrounded by walls (action log shows ALL FOUR cardinals blocked) / castle entered (mapId in {8,24}) / cannot identify any building after reasonable exploration. Do NOT output Fail just because the party sprite is hard to see — assume it is at (8,7).
 """
     }

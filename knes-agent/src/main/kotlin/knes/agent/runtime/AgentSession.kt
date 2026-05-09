@@ -18,6 +18,7 @@ import knes.agent.perception.MapSession
 import knes.agent.perception.OverworldWarpMemory
 import knes.agent.perception.RamObserver
 import knes.agent.perception.ScreenshotPolicy
+import knes.agent.perception.ShopUiDetector
 import knes.agent.perception.VisionInteriorNavigator
 import knes.agent.perception.ViewportSource
 import knes.agent.tools.EmulatorToolset
@@ -794,63 +795,35 @@ class AgentSession(
                     (ram["smPlayerX"] ?: 0) to (ram["smPlayerY"] ?: 0)
                 }
             }
-            // Detect the moment the agent enters a sub-shop from overworld.
-            // initialMapId records what we started at. Any change to a different
-            // non-zero map means we're inside a sub-shop and should verify.
+            // V5.40 (2026-05-09): shop detection switched from mapId-based to
+            // ShopUiDetector. FF1 NES shops are NPC dialog overlays inside the
+            // town overlay layer (mapflags.bit0=1, mapId=0), NOT sub-maps. The
+            // old check `inSubShop = curMapId != 0 && curMapId != initialMapId`
+            // never fired for Coneria shops — run #7 iter 23 confirmed BUY menu
+            // open with mapId=0. We now treat regime-only signals (castle ID,
+            // mapflags) as cheap rejection gates and let the advisor's Done
+            // verdict drive vision-confirmed acceptance below.
             for (iter in 0 until maxAdvisorIters) {
                 val ram = toolset.getState().ram
                 val curMapId = ram["currentMapId"] ?: 0
-                // We've entered a sub-shop if curMapId is non-zero AND different
-                // from the starting overworld (0). For backwards-compat with
-                // old castle-mapId=8 paths, we also treat mapId=8 as "outside
-                // the shop" — a sub-shop mapId would be something else.
-                val inSubShop = curMapId != 0 && curMapId != initialMapId
-                if (inSubShop) {
-                    // V5.37 castle short-circuit: mapId 8/24 are Coneria Castle —
-                    // never a weapon shop. Skip the vision scan (saves ~$0.005)
-                    // and immediately treat as wrong building. The advisor system
-                    // prompt is told to output Fail in this state, but it can't
-                    // act until the next iteration; this guard catches BFS-walked
-                    // entry into the castle where no advisor turn intervened.
-                    val isCastle = curMapId == 8 || curMapId == 24
-                    val keeperPresent = if (isCastle) {
-                        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                            note = "boot_advisor_castle_shortcircuit[$iter]: mapId=$curMapId — " +
-                                   "Coneria Castle, not a shop; skipping vision scan"))
-                        false
-                    } else {
-                        val verifyShot = toolset.getScreen().base64
-                        val verifyScan = outfitVision!!.scanInteriorCandidates(verifyShot)
-                        val present = verifyScan.candidates.any { it.kind == "shopkeeper" }
-                        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                            note = "boot_advisor_verify[$iter]: mapId=$curMapId " +
-                                   "candidates=${verifyScan.candidates.size} " +
-                                   "kinds=[${verifyScan.candidates.joinToString(",") { it.kind }}] " +
-                                   "keeperPresent=$present"))
-                        present
-                    }
-                    if (keeperPresent) {
-                        entered = true
-                        break
-                    }
-                    // Wrong building — exit and continue scanning the overworld.
+                // Castle short-circuit (cheap gate): mapId 8/24 are Coneria
+                // Castle, never a shop. Backtrack via Down spam to escape.
+                val isCastle = curMapId == 8 || curMapId == 24
+                if (isCastle) {
                     enteredWrongBuildingCount++
                     trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                        note = "boot_advisor_wrong_building[$iter]: mapId=$curMapId, " +
-                               "exiting via Down spam (count=$enteredWrongBuildingCount)"))
+                        note = "boot_advisor_castle_shortcircuit[$iter]: mapId=$curMapId — " +
+                               "Coneria Castle, not a shop (count=$enteredWrongBuildingCount)"))
                     if (enteredWrongBuildingCount > 3) {
                         trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                             note = "boot_advisor_give_up: 3+ wrong buildings entered"))
                         break
                     }
-                    // Tap S many times to exit back to the previous map (typically
-                    // mapId=0 overworld; or mapId=8 if we somehow ended up in
-                    // castle and are exiting back to town overworld).
                     repeat(15) {
                         toolset.tap("Down", count = 1, pressFrames = 12, gapFrames = 8)
                         toolset.step(buttons = emptyList(), frames = 6)
                         val nowMid = toolset.getState().ram["currentMapId"] ?: 0
-                        if (nowMid == initialMapId) return@repeat
+                        if (nowMid == initialMapId || nowMid == 0) return@repeat
                     }
                     actionLog.clear()
                     continue
@@ -901,9 +874,10 @@ class AgentSession(
                         "TOWN_OVERLAY" -> {
                             append("Party is INSIDE Coneria TOWN OVERLAY at smPlayer($px, $py). ")
                             append("This is the town interior layer — walk between buildings to find the WEAPON SHOP. ")
-                            append("Each shop is a small building; the weapon shop has weapon icons (sword/dagger/hammer) on its sign. ")
-                            append("Walk onto a shop's door tile to enter — currentMapId will change to the shop's sub-mapId. ")
-                            append("DO NOT output Done while still in the town overlay (mapId=0); only after entering a sub-shop.\n\n")
+                            append("FF1 NES shops are NPC dialog overlays: walk adjacent to the shopkeeper and ")
+                            append("press A to open the BUY/SELL/EXIT menu. Output Done when you can SEE the ")
+                            append("BUY/SELL/EXIT menu (or the WEAPON shopkeeper Welcome dialog) on screen — ")
+                            append("currentMapId will stay 0 the whole time, that is normal.\n\n")
                             if (minimapBlock.isNotEmpty()) {
                                 append(minimapBlock)
                                 append("\n")
@@ -911,7 +885,8 @@ class AgentSession(
                         }
                         else -> {
                             append("Party is INSIDE a sub-map (mapId=$curMapId) at smPlayer($px, $py). ")
-                            append("Walk Up to face the shopkeeper sprite, then output Done.\n\n")
+                            append("Walk Up to face the shopkeeper sprite, press A to open BUY/SELL/EXIT, ")
+                            append("then output Done.\n\n")
                         }
                     }
                     append("Recent advisor actions (oldest first):\n")
@@ -967,36 +942,26 @@ class AgentSession(
                         toolset.tap(advice.action, count = 1, pressFrames = 12, gapFrames = 8)
                     "Tap_A" -> toolset.tap("A", count = 1, pressFrames = 5, gapFrames = 12)
                     "Done" -> {
-                        // Done is only meaningful inside a sub-shop. On overworld
-                        // (mapId=0) reject Done — the agent must enter a sub-map first.
-                        val nowMid = toolset.getState().ram["currentMapId"] ?: 0
-                        if (nowMid == 0 || nowMid == initialMapId) {
-                            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                                note = "boot_advisor_done_rejected[$iter]: still on starting map " +
-                                       "(mapId=$nowMid) — Done only valid after entering a sub-shop"))
-                            actionLog.addLast(ActionLogEntry(iter,
-                                "Done(rejected-overworld)", beforeXY, px to py))
-                            while (actionLog.size > actionLogMaxSize) actionLog.removeFirst()
-                            continue
-                        }
-                        // Inside sub-map. Verify an NPC sprite is visible. Liberal:
-                        // any NPC-like candidate counts; if BuyAtShop opens the wrong-
-                        // class menu downstream, it returns WrongClass and the agent
-                        // moves on — cheaper than looping more advisor turns here.
+                        // V5.40: accept Done iff ShopUiDetector confirms a shop
+                        // dialog overlay. RAM gate rules out genuine overworld /
+                        // castle / battle cheaply; vision then confirms the
+                        // BUY/SELL/EXIT menu is actually drawn. mapId is no
+                        // longer required to be non-zero — Coneria shops keep
+                        // mapId=0 with mapflags.bit0=1 the entire time.
+                        val nowRam = toolset.getState().ram
                         val verifyShot = toolset.getScreen().base64
-                        val verifyScan = outfitVision!!.scanInteriorCandidates(verifyShot)
-                        advisorTotalCost += verifyScan.costUsd
-                        val npcKinds = setOf("shopkeeper", "king", "innkeeper", "generic_npc")
-                        val npcPresent = verifyScan.candidates.any { it.kind in npcKinds }
+                        val detection = ShopUiDetector.detect(nowRam, verifyShot, outfitVision)
+                        advisorTotalCost += detection.costUsd
                         trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                            note = "boot_advisor_done_verify[$iter]: npcPresent=$npcPresent " +
-                                   "candidates=${verifyScan.candidates.size} " +
-                                   "kinds=[${verifyScan.candidates.joinToString(",") { it.kind }}]"))
-                        if (npcPresent) {
+                            note = "boot_advisor_done_verify[$iter]: open=${detection.open} " +
+                                   "source=${detection.source} kind=${detection.kind} " +
+                                   "costUsd=${detection.costUsd}"))
+                        if (detection.open) {
                             entered = true
                             break
                         }
-                        actionLog.addLast(ActionLogEntry(iter, "Done(rejected-no-npc)", beforeXY, px to py))
+                        actionLog.addLast(ActionLogEntry(iter,
+                            "Done(rejected-${detection.source})", beforeXY, px to py))
                         while (actionLog.size > actionLogMaxSize) actionLog.removeFirst()
                         continue
                     }
@@ -1074,11 +1039,36 @@ class AgentSession(
         run {
             val screenshot = toolset.getScreen().base64
             // Always dump post-enter screenshot for diagnostic — gives visual
-            // evidence of which sub-shop we entered.
+            // evidence of which shop we are in.
             try {
                 val bytes = java.util.Base64.getDecoder().decode(screenshot)
                 java.io.File("/tmp/spec5-postenter.png").writeBytes(bytes)
             } catch (_: Throwable) {}
+            // V5.40: if shop UI is ALREADY open (advisor accepted Done because
+            // BUY/SELL/EXIT was visible), skip the keeper-approach walk —
+            // cardinals in an open shop menu move the menu cursor, not the
+            // party. Detector reuses RAM gate + classifyShopMenu.
+            val postEnterRam = toolset.getState().ram
+            val postEnterDetect = ShopUiDetector.detect(postEnterRam, screenshot, outfitVision)
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_post_enter_detect: open=${postEnterDetect.open} " +
+                       "source=${postEnterDetect.source} kind=${postEnterDetect.kind}"))
+            if (postEnterDetect.open) {
+                // Shop dialog already on screen (advisor opened BUY/SELL/EXIT
+                // before emitting Done). BuyAtShop assumes starting state
+                // "adjacent to keeper, no menu open" and taps A to open the
+                // menu. If we left the menu open, A's get consumed wrong:
+                // first A would select BUY (instead of opening BUY/SELL/EXIT)
+                // and the per-item Down/A nav would be off-by-one. B-spam
+                // unwinds the dialog stack back to "facing keeper".
+                repeat(4) {
+                    toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12)
+                    toolset.step(buttons = emptyList(), frames = 6)
+                }
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_keeper_approach: skipped — shop UI already open; B-spam closed menu"))
+                return@run
+            }
             val scan = outfitVision!!.scanInteriorCandidates(screenshot)
             trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                 note = "boot_post_enter_scan: count=${scan.candidates.size} " +

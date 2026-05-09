@@ -53,12 +53,31 @@ class BuyAtShop(
 
         val pre = toolset.getState().ram
         val mapId = pre["currentMapId"] ?: 0
-        if (mapId == 0) {
-            return failResult("NotInShop: currentMapId=0", pre)
+        val mapflagsBit0 = ((pre["mapflags"] ?: 0) and 0x01) != 0
+        // FF1 NES shop architecture: shops are NPC dialog overlays. Two valid
+        // in-shop regimes:
+        //   (a) town overlay   — mapId=0, mapflags.bit0=1 (most Coneria shops)
+        //   (b) sub-shop interior — mapId>0 (some towns; mapflags.bit0=1 in
+        //       real RAM but tests omit the field, so mapId>0 implies it).
+        // The legacy `mapId == 0 → NotInShop` rejection blocked (a) entirely.
+        val inStandardMap = mapflagsBit0 || mapId > 0
+        if (!inStandardMap) {
+            return failResult("NotInShop: not in standard map (mapflags.bit0=0, mapId=0)", pre)
         }
-        val landmark = landmarks.findByKind(LandmarkKind.NPC_SHOPKEEPER)
-            .firstOrNull { it.mapId == mapId }
-            ?: return failResult("NotInShop: no NPC_SHOPKEEPER landmark for mapId=$mapId", pre)
+        // Landmark lookup: in regime (b) match by mapId; in regime (a) the
+        // shopkeeper landmark is keyed only by kind in note (no per-shop mapId
+        // because they all share mapId=0). Fall through kind-by-note.
+        val candidates = landmarks.findByKind(LandmarkKind.NPC_SHOPKEEPER)
+        val landmark = if (mapId != 0) {
+            candidates.firstOrNull { it.mapId == mapId }
+                ?: return failResult("NotInShop: no NPC_SHOPKEEPER landmark for mapId=$mapId", pre)
+        } else {
+            candidates.firstOrNull { parseKind(it.note) == expectedKind }
+                ?: return failResult(
+                    "NotInShop: no NPC_SHOPKEEPER landmark with kind=$expectedKind in town overlay",
+                    pre,
+                )
+        }
         val landmarkKind = parseKind(landmark.note)
         if (landmarkKind != expectedKind) {
             return failResult(
