@@ -43,6 +43,13 @@ class BuyAtShop(
             ?: return failResult("Bad args: forCharSlot missing/invalid", emptyMap())
         val expectedKind = args["expectedKeeperKind"]
             ?: return failResult("Bad args: expectedKeeperKind missing", emptyMap())
+        // V5.40: when the boot advisor's Done was accepted because the shop UI
+        // overlay was already drawn (BUY/SELL/EXIT visible via vision), the
+        // first "tap A on keeper to open dialog" A-tap is unnecessary — the
+        // dialog is already open. Skipping it keeps the cursor-stride aligned
+        // with itemSlot/charSlot indexing. Default false (legacy "facing
+        // keeper, no menu" callers).
+        val menuAlreadyOpen = args["menuAlreadyOpen"]?.toBooleanStrictOrNull() ?: false
 
         if (expectedKind != "weapon") {
             return failResult(
@@ -97,8 +104,16 @@ class BuyAtShop(
         }
         val preInvSum = (0..3).sumOf { StrategyContext.weaponId(StrategyContext.weaponSlot(pre, forCharSlot, it)) }
 
-        // Open BUY menu: 1 tap A on keeper, 1 tap A on BUY
-        toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
+        // Open BUY menu: 1 tap A on keeper, 1 tap A on BUY.
+        // When the menu is already open (advisor reached BUY/SELL/EXIT and we
+        // accepted Done without exiting), skip the first A and force cursor
+        // back to the BUY row via Up taps before selecting.
+        if (!menuAlreadyOpen) {
+            toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
+        } else {
+            // BUY/SELL/EXIT has 3 rows; Up×2 from anywhere parks cursor on BUY.
+            repeat(2) { toolset.tap(button = "Up", count = 1, pressFrames = 3, gapFrames = 10) }
+        }
         toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
         // Cursor down itemSlot times
         repeat(itemSlot) { toolset.tap(button = "Down", count = 1, pressFrames = 3, gapFrames = 10) }

@@ -1036,6 +1036,7 @@ class AgentSession(
         //     BUY menu. Use Pass 1 vision to spot the shopkeeper in the
         //     screen and walk party to (sx, sy+1) facing N — same Spec 4
         //     pipeline already proven in §empirical run 8.
+        var menuAlreadyOpen = false
         run {
             val screenshot = toolset.getScreen().base64
             // Always dump post-enter screenshot for diagnostic — gives visual
@@ -1055,18 +1056,15 @@ class AgentSession(
                        "source=${postEnterDetect.source} kind=${postEnterDetect.kind}"))
             if (postEnterDetect.open) {
                 // Shop dialog already on screen (advisor opened BUY/SELL/EXIT
-                // before emitting Done). BuyAtShop assumes starting state
-                // "adjacent to keeper, no menu open" and taps A to open the
-                // menu. If we left the menu open, A's get consumed wrong:
-                // first A would select BUY (instead of opening BUY/SELL/EXIT)
-                // and the per-item Down/A nav would be off-by-one. B-spam
-                // unwinds the dialog stack back to "facing keeper".
-                repeat(4) {
-                    toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12)
-                    toolset.step(buttons = emptyList(), frames = 6)
-                }
+                // before emitting Done). Don't B-spam — instead pass
+                // menuAlreadyOpen=true to BuyAtShop so it skips the dialog-
+                // opening A-tap. Run #3 (2026-05-09) showed B-spam left the
+                // menu in a misaligned state and all 12 purchase attempts
+                // failed with WrongClass.
+                menuAlreadyOpen = true
                 trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                    note = "boot_keeper_approach: skipped — shop UI already open; B-spam closed menu"))
+                    note = "boot_keeper_approach: skipped — shop UI already open; " +
+                           "BuyAtShop will run with menuAlreadyOpen=true"))
                 return@run
             }
             val scan = outfitVision!!.scanInteriorCandidates(screenshot)
@@ -1127,6 +1125,11 @@ class AgentSession(
                     "itemSlot" to slot.toString(),
                     "forCharSlot" to charSlot.toString(),
                     "expectedKeeperKind" to "weapon",
+                    // Only the FIRST call benefits from skipping the dialog-
+                    // open A-tap; once the first purchase completes, BuyAtShop
+                    // exits via 2 B-taps which lands at "facing keeper, no
+                    // menu" — subsequent calls re-open via the standard A-tap.
+                    "menuAlreadyOpen" to (menuAlreadyOpen && charsBought.isEmpty()).toString(),
                 ))
                 trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                     note = "boot_purchase: char$charSlot slot=$slot result=${r.message}"))

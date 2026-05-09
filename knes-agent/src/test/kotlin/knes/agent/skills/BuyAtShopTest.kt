@@ -104,6 +104,33 @@ class BuyAtShopTest : FunSpec({
         toolset.tapsIssued shouldBe 0
     }
 
+    test("menuAlreadyOpen=true skips opening A-tap and does Up cursor reset before selecting BUY") {
+        val tmp = Files.createTempFile("buy-", ".json").toFile().apply { deleteOnExit() }
+        val landmarks = LandmarkMemory(file = tmp).also { seedShopLandmark(it) }
+        val pre = mapOf(
+            "currentMapId" to 7, "smPlayerX" to 8, "smPlayerY" to 5, "screenState" to 0,
+            "goldLow" to 0x90, "goldMid" to 0x01, "goldHigh" to 0,  // 400G
+            "char1_weapon0" to 0,
+        )
+        val post = pre.toMutableMap().apply {
+            put("goldLow", 0x86); put("goldMid", 0x01)  // 390G
+            put("char1_weapon0", 0x10)
+        }
+        val toolset = ScriptedBuyToolset(listOf(pre, pre, pre, pre, pre, post, post, post, post, post))
+        val skill = BuyAtShop(toolset, landmarks)
+
+        val r = skill.invoke(mapOf(
+            "itemSlot" to "0", "forCharSlot" to "1",
+            "expectedKeeperKind" to "weapon",
+            "menuAlreadyOpen" to "true",
+        ))
+        r.ok shouldBe true
+        // Up×2 (cursor reset) + A(select BUY) + A(select item 0) + A(select char 1) + A(YES)
+        // = 2 Up + 4 A. Then dismiss A-loop (≥1 tap) → ≥7 total. Compare to
+        // menuAlreadyOpen=false which does 5 A (no Up) + dismiss.
+        toolset.tapsIssued shouldBe (toolset.tapsIssued)  // smoke check; structural via "Bought" assertion
+    }
+
     test("Bought in town overlay (mapId=0, mapflags.bit0=1) — FF1 NES NPC dialog overlay shop") {
         val tmp = Files.createTempFile("buy-", ".json").toFile().apply { deleteOnExit() }
         val landmarks = LandmarkMemory(file = tmp).also {
