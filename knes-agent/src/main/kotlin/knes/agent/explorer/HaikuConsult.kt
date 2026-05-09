@@ -85,6 +85,32 @@ interface HaikuConsult {
         screenshotBase64: String?,
     ): ShopClassification
 
+    /** V5.44: which sub-screen of the FF1 NES shop dialog the screenshot shows.
+     *  Used by [knes.agent.skills.BuyAtShop] state-machine purchase to dispatch
+     *  the next tap based on observed UI rather than guessed tap counts. */
+    enum class ShopMenuPhase {
+        MAIN_MENU,    // BUY / SELL / EXIT (cursor on one of them)
+        ITEM_LIST,    // list of items with prices (cursor on one row)
+        FOR_WHOM,     // "for whom?" 4-character pick (cursor on a char)
+        BUY_CONFIRM,  // "Buy for X gold? YES / NO"
+        ANOTHER,      // post-purchase "another?" prompt (or returns to ITEM_LIST in some FF1 builds)
+        WELCOME,      // initial Welcome dialog overlay (no menu cursor visible)
+        CLOSED,       // no shop dialog at all — town overlay walking
+        UNKNOWN,      // vision did not match any known phase
+    }
+
+    data class ShopMenuPhaseClassification(
+        val phase: ShopMenuPhase,
+        val costUsd: Double,
+    )
+
+    /** Returns which sub-screen of the FF1 NES shop dialog is currently drawn.
+     *  Distinct from [classifyShopMenu] (which reports the shop kind / item list).
+     *  Returns [ShopMenuPhase.UNKNOWN] on any infrastructure failure. */
+    suspend fun classifyShopMenuPhase(
+        screenshotBase64: String?,
+    ): ShopMenuPhaseClassification
+
     /** Called when the agent needs to locate a known FF1 overworld landmark
      *  (e.g. the Chaos Shrine / Temple of Fiends) in the current viewport.
      *  `kind` is a free-form descriptor like "chaos_shrine" that the prompt
@@ -205,6 +231,7 @@ class FakeHaikuConsult(
     private val overworldClassifications: List<HaikuConsult.OverworldClassification> = emptyList(),
     private val candidatesScans: List<HaikuConsult.CandidatesScan> = emptyList(),
     private val verifyResults: List<HaikuConsult.VerifyResult> = emptyList(),
+    private val shopMenuPhases: List<HaikuConsult.ShopMenuPhaseClassification> = emptyList(),
 ) : HaikuConsult {
     var interiorCalls: Int = 0; private set
     var dialogCalls: Int = 0; private set
@@ -212,6 +239,7 @@ class FakeHaikuConsult(
     var overworldCalls: Int = 0; private set
     var scanCalls: Int = 0; private set
     var verifyCalls: Int = 0; private set
+    var shopMenuPhaseCalls: Int = 0; private set
     val verifyArgs: MutableList<Triple<String, Int, Int>> = mutableListOf()
 
     override suspend fun classifyInterior(
@@ -234,6 +262,15 @@ class FakeHaikuConsult(
         val res = shopClassifications.getOrNull(shopCalls)
             ?: HaikuConsult.ShopClassification("unknown", emptyList(), 0.0)
         shopCalls++
+        return res
+    }
+
+    override suspend fun classifyShopMenuPhase(
+        screenshotBase64: String?,
+    ): HaikuConsult.ShopMenuPhaseClassification {
+        val res = shopMenuPhases.getOrNull(shopMenuPhaseCalls)
+            ?: HaikuConsult.ShopMenuPhaseClassification(HaikuConsult.ShopMenuPhase.UNKNOWN, 0.0)
+        shopMenuPhaseCalls++
         return res
     }
 

@@ -66,6 +66,24 @@ class GeminiVisionConsult(
         return parseShopResponse(raw)
     }
 
+    override suspend fun classifyShopMenuPhase(
+        screenshotBase64: String?,
+    ): HaikuConsult.ShopMenuPhaseClassification {
+        if (screenshotBase64.isNullOrEmpty()) {
+            return HaikuConsult.ShopMenuPhaseClassification(HaikuConsult.ShopMenuPhase.UNKNOWN, 0.0)
+        }
+        return try {
+            val body = buildBody(SYSTEM_SHOP_PHASE, SHOP_PHASE_USER_TEXT, screenshotBase64,
+                maxOutputTokens = 800)
+            val raw = postOrNull(body)
+                ?: return HaikuConsult.ShopMenuPhaseClassification(HaikuConsult.ShopMenuPhase.UNKNOWN, 0.0)
+            parseShopMenuPhaseResponse(raw)
+        } catch (e: Throwable) {
+            System.err.println("[gemini-vision] classifyShopMenuPhase failed: ${e.message}")
+            HaikuConsult.ShopMenuPhaseClassification(HaikuConsult.ShopMenuPhase.UNKNOWN, 0.0)
+        }
+    }
+
     override suspend fun classifyOverworldLandmark(
         screenshotBase64: String?,
         kind: String,
@@ -296,6 +314,40 @@ class GeminiVisionConsult(
                 "Return ONLY JSON, no prose."
 
         private const val SHOP_USER_TEXT = "Classify this shop BUY menu."
+
+        private const val SYSTEM_SHOP_PHASE =
+            "You are reading the current sub-screen of a Final Fantasy 1 (NES) shop dialog. " +
+                "Distinguish between these phases:\n" +
+                "  MAIN_MENU — three rows BUY / SELL / EXIT visible (cursor finger on one row).\n" +
+                "  ITEM_LIST — a list of item names with prices on the right (cursor on one row).\n" +
+                "  FOR_WHOM  — character portraits / names on the right with cursor finger; the prompt asks 'for whom?' or shows the 4-character party list to pick a recipient.\n" +
+                "  BUY_CONFIRM — small YES/NO box with text like 'Buy for X G?' or 'Are you sure?'.\n" +
+                "  ANOTHER   — post-purchase prompt asking if you want to buy another (YES/NO box, no item list visible).\n" +
+                "  WELCOME   — only the 'Welcome' greeting box from the keeper, no menu cursor on BUY/SELL/EXIT yet.\n" +
+                "  CLOSED    — no shop dialog at all; party is on the town overlay walking layer.\n" +
+                "  UNKNOWN   — cannot determine.\n" +
+                "Output strict JSON only: {\"phase\":\"MAIN_MENU|ITEM_LIST|FOR_WHOM|BUY_CONFIRM|ANOTHER|WELCOME|CLOSED|UNKNOWN\"}."
+
+        private const val SHOP_PHASE_USER_TEXT = "Which sub-screen is this FF1 shop dialog showing?"
+
+        fun parseShopMenuPhaseResponse(rawJson: String): HaikuConsult.ShopMenuPhaseClassification {
+            val (innerText, costUsd) = parseEnvelope(rawJson)
+            if (innerText == null) {
+                return HaikuConsult.ShopMenuPhaseClassification(HaikuConsult.ShopMenuPhase.UNKNOWN, costUsd)
+            }
+            return try {
+                val match = JSON_OBJECT.find(innerText)
+                    ?: return HaikuConsult.ShopMenuPhaseClassification(HaikuConsult.ShopMenuPhase.UNKNOWN, costUsd)
+                val obj = json.parseToJsonElement(match.value).jsonObject
+                val phaseStr = obj["phase"]?.jsonPrimitive?.content?.uppercase()
+                val phase = runCatching { HaikuConsult.ShopMenuPhase.valueOf(phaseStr ?: "UNKNOWN") }
+                    .getOrDefault(HaikuConsult.ShopMenuPhase.UNKNOWN)
+                HaikuConsult.ShopMenuPhaseClassification(phase, costUsd)
+            } catch (e: Exception) {
+                System.err.println("[gemini-vision] parseShopMenuPhase failed: ${e.message}")
+                HaikuConsult.ShopMenuPhaseClassification(HaikuConsult.ShopMenuPhase.UNKNOWN, costUsd)
+            }
+        }
 
         /** Pass 2 system prompt (Spec 4 §3.2). Verbatim — public for unit test only. */
         const val SYSTEM_VERIFY_LANDMARK: String = """You are verifying a Final Fantasy 1 (NES) interior landmark candidate.

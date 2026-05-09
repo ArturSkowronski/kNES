@@ -1250,11 +1250,15 @@ class AgentSession(
             val pairs = pendingChars.entries.map { it.value to it.key } // (itemSlot, charSlot)
             trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                 note = "boot_purchase_batch[$roundIdx]: pairs=${pairs.joinToString { "(s${it.first},c${it.second})" }} " +
-                       "menuAlreadyOpen=$roundMenuOpen"))
-            val results = buySkill.invokeMany(
+                       "menuAlreadyOpen=$roundMenuOpen mode=stateful"))
+            val results = buySkill.invokeManyStateful(
                 pairs = pairs,
                 expectedKeeperKind = "weapon",
-                menuAlreadyOpen = roundMenuOpen,
+                vision = outfitVision!!,
+                traceLog = { msg ->
+                    trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                        note = "boot_purchase_state[$roundIdx]: $msg"))
+                },
             )
             dumpShot("buy-batch-r$roundIdx-post", toolset.getScreen().base64)
             for (res in results) {

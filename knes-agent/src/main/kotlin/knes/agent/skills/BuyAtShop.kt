@@ -1,5 +1,6 @@
 package knes.agent.skills
 
+import knes.agent.explorer.HaikuConsult
 import knes.agent.perception.LandmarkKind
 import knes.agent.perception.LandmarkMemory
 import knes.agent.runtime.StrategyContext
@@ -323,6 +324,193 @@ class BuyAtShop(
         // Final exit: 5 × B fully closes any remaining dialog layer back to
         // "facing keeper, no menu".
         repeat(5) { toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12) }
+        return results
+    }
+
+    /**
+     * V5.44 (2026-05-09): vision-classified state-machine purchase. Uses
+     * [vision.classifyShopMenuPhase] to observe which sub-screen of the FF1
+     * shop dialog is currently drawn after each tap, and dispatches the next
+     * action accordingly. Replaces the brittle "guess by tap count" approach.
+     *
+     * Trade-off: ~5-8 vision calls per pair (~$0.025-0.04 per pair) vs
+     * empirically reliable per-pair correctness. Acceptable when previous
+     * deterministic approach was buying only 1/4 chars per run.
+     *
+     * Flow per pair:
+     *   1. Classify phase. Drive into MAIN_MENU regardless of starting state
+     *      (B-tap to back out of nested screens; A-tap to advance Welcome).
+     *   2. From MAIN_MENU: Up×2 + A → ITEM_LIST.
+     *   3. Down × itemSlot + A → FOR_WHOM.
+     *   4. Down × (charSlot - 1) + A → BUY_CONFIRM.
+     *   5. A on YES (default cursor position) → dismiss loop until gold
+     *      drops + inv increases (Bought) or 5 unchanged (WrongClass).
+     *   6. After result: B × 1 to back toward MAIN_MENU for next pair.
+     *
+     * On CLOSED phase mid-batch: aborts remaining pairs (caller must
+     * re-engage keeper).
+     */
+    suspend fun invokeManyStateful(
+        pairs: List<Pair<Int, Int>>,
+        expectedKeeperKind: String,
+        vision: HaikuConsult,
+        traceLog: ((String) -> Unit)? = null,
+    ): List<PairResult> {
+        val log = { msg: String -> traceLog?.invoke(msg) ?: Unit }
+        if (pairs.isEmpty()) return emptyList()
+        if (expectedKeeperKind != "weapon") {
+            return pairs.map { PairResult(it.first, it.second, false,
+                "UnsupportedKind: BuyAtShop currently supports kind=weapon only (got $expectedKeeperKind)") }
+        }
+        val pre0 = toolset.getState().ram
+        val mapId0 = pre0["currentMapId"] ?: 0
+        val mapflagsBit0 = ((pre0["mapflags"] ?: 0) and 0x01) != 0
+        if (!mapflagsBit0 && mapId0 == 0) {
+            return pairs.map { PairResult(it.first, it.second, false,
+                "NotInShop: not in standard map (mapflags.bit0=0, mapId=0)") }
+        }
+        val candidates = landmarks.findByKind(LandmarkKind.NPC_SHOPKEEPER)
+        val landmark = if (mapId0 != 0) {
+            candidates.firstOrNull { it.mapId == mapId0 }
+        } else {
+            candidates.firstOrNull { parseKind(it.note) == expectedKeeperKind }
+        } ?: return pairs.map { PairResult(it.first, it.second, false,
+            "NotInShop: no NPC_SHOPKEEPER landmark for ${if (mapId0 != 0) "mapId=$mapId0" else "kind=$expectedKeeperKind"}") }
+        val landmarkKind = parseKind(landmark.note)
+        if (landmarkKind != expectedKeeperKind) {
+            return pairs.map { PairResult(it.first, it.second, false,
+                "LandmarkKindMismatch: expected=$expectedKeeperKind landmark=$landmarkKind") }
+        }
+        val items = parseItems(landmark.note)
+
+        suspend fun classify(): HaikuConsult.ShopMenuPhase {
+            val shot = toolset.getScreen().base64
+            val res = vision.classifyShopMenuPhase(shot)
+            return res.phase
+        }
+
+        // Drive into MAIN_MENU. Returns true if reached, false if shop closed.
+        suspend fun driveToMainMenu(maxSteps: Int = 8): Boolean {
+            for (step in 0 until maxSteps) {
+                val phase = classify()
+                log("invokeManyStateful.driveToMainMenu[$step]: phase=$phase")
+                when (phase) {
+                    HaikuConsult.ShopMenuPhase.MAIN_MENU -> return true
+                    HaikuConsult.ShopMenuPhase.WELCOME -> {
+                        toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 15)
+                    }
+                    HaikuConsult.ShopMenuPhase.ITEM_LIST,
+                    HaikuConsult.ShopMenuPhase.FOR_WHOM,
+                    HaikuConsult.ShopMenuPhase.BUY_CONFIRM,
+                    HaikuConsult.ShopMenuPhase.ANOTHER,
+                    HaikuConsult.ShopMenuPhase.UNKNOWN -> {
+                        toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12)
+                    }
+                    HaikuConsult.ShopMenuPhase.CLOSED -> return false
+                }
+                toolset.step(buttons = emptyList(), frames = 6)
+            }
+            return false
+        }
+
+        val results = mutableListOf<PairResult>()
+        for ((itemSlot, charSlot) in pairs) {
+            val priceCheck = items.getOrNull(itemSlot)?.second
+            if (priceCheck == null) {
+                results += PairResult(itemSlot, charSlot, false,
+                    "Bad args: itemSlot $itemSlot out of range (have ${items.size})")
+                continue
+            }
+
+            // Step 1: drive into MAIN_MENU.
+            if (!driveToMainMenu()) {
+                results += PairResult(itemSlot, charSlot, false,
+                    "ShopClosed: phase classifier returned CLOSED before pair (itemSlot=$itemSlot, charSlot=$charSlot)")
+                // Remaining pairs likely also fail; mark them with synthetic result.
+                continue
+            }
+
+            val ramSnap = toolset.getState().ram
+            val preGold = StrategyContext.totalGold(ramSnap)
+            if (preGold < priceCheck) {
+                results += PairResult(itemSlot, charSlot, false,
+                    "InsufficientGold: preGold=$preGold expectedPrice=$priceCheck")
+                continue
+            }
+            val preInvSum = (0..3).sumOf {
+                StrategyContext.weaponId(StrategyContext.weaponSlot(ramSnap, charSlot, it))
+            }
+
+            // Step 2: at MAIN_MENU, force cursor to BUY (Up×2 in 3-row no-wrap menu).
+            repeat(2) { toolset.tap(button = "Up", count = 1, pressFrames = 3, gapFrames = 10) }
+            toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
+            toolset.step(buttons = emptyList(), frames = 6)
+
+            // Verify we landed on ITEM_LIST.
+            val afterBuyPhase = classify()
+            log("invokeManyStateful.afterBuySelect: phase=$afterBuyPhase")
+            if (afterBuyPhase != HaikuConsult.ShopMenuPhase.ITEM_LIST) {
+                results += PairResult(itemSlot, charSlot, false,
+                    "PhaseMismatch: expected ITEM_LIST after BUY-A, got $afterBuyPhase")
+                // Try to recover by B-spamming to MAIN_MENU and continuing next pair.
+                continue
+            }
+
+            // Step 3: navigate to itemSlot and confirm.
+            repeat(itemSlot) { toolset.tap(button = "Down", count = 1, pressFrames = 3, gapFrames = 10) }
+            toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
+            toolset.step(buttons = emptyList(), frames = 6)
+
+            // Step 4: navigate to charSlot.
+            repeat(charSlot - 1) { toolset.tap(button = "Down", count = 1, pressFrames = 3, gapFrames = 10) }
+            toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
+            toolset.step(buttons = emptyList(), frames = 6)
+
+            // Step 5: confirm YES (cursor on YES by default in BUY_CONFIRM).
+            toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
+
+            // Step 6: dismiss loop watching for gold drop.
+            var dismissTaps = 0
+            var unchangedTaps = 0
+            var resolved: PairResult? = null
+            while (dismissTaps < maxDismissFrames) {
+                toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 15)
+                dismissTaps++
+                val r = toolset.getState().ram
+                val curGold = StrategyContext.totalGold(r)
+                val curInvSum = (0..3).sumOf {
+                    StrategyContext.weaponId(StrategyContext.weaponSlot(r, charSlot, it))
+                }
+                if (curGold < preGold && curInvSum > preInvSum) {
+                    resolved = PairResult(itemSlot, charSlot, true,
+                        "Bought: cost=${preGold - curGold} char=$charSlot slot=$itemSlot " +
+                            "weaponSum $preInvSum->$curInvSum")
+                    break
+                }
+                if (curGold == preGold && curInvSum == preInvSum) {
+                    unchangedTaps++
+                    if (unchangedTaps >= wrongClassFrames) {
+                        resolved = PairResult(itemSlot, charSlot, false,
+                            "WrongClass: char=$charSlot itemSlot=$itemSlot — gold/inventory " +
+                                "unchanged after $unchangedTaps dismiss taps")
+                        break
+                    }
+                } else {
+                    unchangedTaps = 0
+                }
+            }
+            results += (resolved ?: PairResult(itemSlot, charSlot, false,
+                "DismissCapExhausted: $maxDismissFrames taps without confirmed gold drop"))
+        }
+
+        // Final exit: keep tapping B until phase classifier reports CLOSED or
+        // we've B-spammed 8 times.
+        for (i in 0 until 8) {
+            val phase = classify()
+            if (phase == HaikuConsult.ShopMenuPhase.CLOSED) break
+            toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12)
+            toolset.step(buttons = emptyList(), frames = 6)
+        }
         return results
     }
 }
