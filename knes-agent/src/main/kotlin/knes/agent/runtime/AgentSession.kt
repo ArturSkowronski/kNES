@@ -1201,22 +1201,28 @@ class AgentSession(
                        "(screenshots: /tmp/spec5-buy-$tag-reengage-{pre,post}.png)"))
             return true
         }
-        // Probe shop UI state once before the batch — controls menuAlreadyOpen
-        // for invokeMany's opening A-tap. Re-engage keeper if menu closed.
-        val initialRam = toolset.getState().ram
-        val initialShot = toolset.getScreen().base64
-        var initialProbe = ShopUiDetector.detect(initialRam, initialShot, outfitVision)
-        if (!initialProbe.open || initialProbe.kind != "weapon") {
+        // V5.43.1: trust the post-enter detection that already set
+        // `menuAlreadyOpen`. Run #10 (2026-05-09) showed re-probing + re-engage
+        // when the post-enter run{} block had ALREADY confirmed the shop UI
+        // was open caused a Gemini stochastic flip (post-enter saw kind=weapon,
+        // batch-probe saw kind=null) → reengage cardinals scrambled the menu
+        // cursor (cardinals in an open menu navigate the cursor, not party).
+        // If post-enter said menu was open, skip the redundant probe and
+        // reengage entirely. Otherwise (post-enter said closed and walked the
+        // party adjacent), one keeper-walk to trigger auto-dialog is fine.
+        var batchMenuOpen = menuAlreadyOpen
+        if (!batchMenuOpen) {
             val reEngaged = reEngageKeeper(tag = "batch-pre")
             if (reEngaged) {
                 val rs = toolset.getScreen().base64
-                initialProbe = ShopUiDetector.detect(toolset.getState().ram, rs, outfitVision)
+                val probe = ShopUiDetector.detect(toolset.getState().ram, rs, outfitVision)
+                batchMenuOpen = probe.open && probe.kind == "weapon"
             }
         }
-        val batchMenuOpen = initialProbe.open && initialProbe.kind == "weapon"
         dumpShot("buy-batch-pre", toolset.getScreen().base64)
         trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-            note = "boot_purchase_batch_probe: menuOpen=$batchMenuOpen kind=${initialProbe.kind} " +
+            note = "boot_purchase_batch_probe: menuAlreadyOpen=$batchMenuOpen " +
+                   "(skipped redundant probe; trusting post-enter detection) " +
                    "(screenshot: /tmp/spec5-buy-batch-pre.png)"))
 
         // Build initial pair list (one per char missing a weapon). We do up to
