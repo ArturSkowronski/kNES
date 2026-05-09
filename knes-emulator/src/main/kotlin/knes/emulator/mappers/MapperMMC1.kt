@@ -193,4 +193,44 @@ class MapperMMC1(nes: NES) : MapperDefault(nes) {
         regCHR1 = 0
         regPRG = 0
     }
+
+    // V5.46.2 (2026-05-09): MMC1 had no stateSave/stateLoad override, so the
+    // mapper's internal registers (which bank is at $8000 and $C000, mirroring,
+    // CHR bank, shift register progress) defaulted to power-on values after
+    // load. cpuMemory itself was restored — including the bytes loaded into
+    // $8000-$FFFF at save time — so static frames LOOKED correct, but ANY
+    // subsequent ROM bank switch (a register write) computed against the
+    // wrong baseline and corrupted execution. This caused savestate loads
+    // for MMC1 games (Final Fantasy, Zelda, Metroid, Mega Man 2…) to drift
+    // back to title screen / reset state once a few CPU cycles ran.
+    override fun stateSave(buf: knes.emulator.ByteBuffer?) {
+        super.stateSave(buf)  // base joypad state + version byte
+        buf!!.putInt(shiftRegister)
+        buf.putInt(shiftCount)
+        buf.putInt(regControl)
+        buf.putInt(regCHR0)
+        buf.putInt(regCHR1)
+        buf.putInt(regPRG)
+    }
+
+    override fun stateLoad(buf: knes.emulator.ByteBuffer?) {
+        super.stateLoad(buf)
+        // Outer caller guards against malformed-version blobs by aborting if
+        // the version byte was wrong; if we got here the base loaded OK, so
+        // the MMC1-specific tail follows in known order.
+        shiftRegister = buf!!.readInt()
+        shiftCount = buf.readInt()
+        regControl = buf.readInt()
+        regCHR0 = buf.readInt()
+        regCHR1 = buf.readInt()
+        regPRG = buf.readInt()
+        // After restoring registers, re-trigger PRG/CHR/mirroring updates so
+        // bank pointers, CHR ROM/RAM windows, and PPU mirror table all match
+        // the loaded register values. cpuMemory restoration above provides the
+        // current contents of $8000-$FFFF, but updatePRGBanks aligns the
+        // mapper's bookkeeping (active bank IDs) with that content.
+        updateMirroring()
+        updatePRGBanks()
+        updateCHRBanks()
+    }
 }
