@@ -181,6 +181,55 @@ class BuyAtShopTest : FunSpec({
         toolset.tapsIssued shouldBe 0
     }
 
+    test("invokeMany: single pair Bought matches invoke() semantics") {
+        val tmp = Files.createTempFile("buy-", ".json").toFile().apply { deleteOnExit() }
+        val landmarks = LandmarkMemory(file = tmp).also { seedShopLandmark(it) }
+        val pre = mapOf(
+            "currentMapId" to 7, "smPlayerX" to 8, "smPlayerY" to 5, "screenState" to 0,
+            "goldLow" to 0x90, "goldMid" to 0x01, "goldHigh" to 0,  // 400
+            "char1_weapon0" to 0,
+        )
+        val post = pre.toMutableMap().apply {
+            put("goldLow", 0x86); put("goldMid", 0x01)  // 390 (cost 10)
+            put("char1_weapon0", 0x10)
+        }
+        // Same fixture style as the single-call Bought test — first frame is
+        // pre-state for landmark/gold checks, then post-state covers the
+        // dismiss loop in invokeMany.
+        val toolset = ScriptedBuyToolset(listOf(pre, pre, pre, pre, pre, pre, pre, pre,
+            post, post, post, post, post, post, post, post, post, post))
+        val skill = BuyAtShop(toolset, landmarks)
+
+        val results = kotlinx.coroutines.runBlocking {
+            skill.invokeMany(listOf(0 to 1), expectedKeeperKind = "weapon", menuAlreadyOpen = false)
+        }
+        results.size shouldBe 1
+        results[0].ok shouldBe true
+        results[0].message shouldContain "Bought"
+        results[0].itemSlot shouldBe 0
+        results[0].charSlot shouldBe 1
+    }
+
+    test("invokeMany: NotInShop fast-fail returns failure for every pair") {
+        val tmp = Files.createTempFile("buy-", ".json").toFile().apply { deleteOnExit() }
+        val landmarks = LandmarkMemory(file = tmp).also { seedShopLandmark(it) }
+        val pre = mapOf(
+            "currentMapId" to 0, "mapflags" to 0,  // genuine overworld
+            "screenState" to 0,
+            "goldLow" to 0x90, "goldMid" to 0x01, "char1_weapon0" to 0,
+        )
+        val toolset = ScriptedBuyToolset(listOf(pre))
+        val skill = BuyAtShop(toolset, landmarks)
+
+        val results = kotlinx.coroutines.runBlocking {
+            skill.invokeMany(listOf(0 to 1, 1 to 2), expectedKeeperKind = "weapon", menuAlreadyOpen = false)
+        }
+        results.size shouldBe 2
+        results.all { !it.ok } shouldBe true
+        results.forEach { it.message shouldContain "NotInShop" }
+        toolset.tapsIssued shouldBe 0
+    }
+
     test("UnsupportedKind when expectedKeeperKind is not weapon") {
         val tmp = Files.createTempFile("buy-", ".json").toFile().apply { deleteOnExit() }
         val landmarks = LandmarkMemory(file = tmp).also {

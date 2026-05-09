@@ -182,4 +182,145 @@ class BuyAtShop(
     }
     private fun failResult(message: String, ram: Map<String, Int>) =
         SkillResult(ok = false, message = message, ramAfter = ram)
+
+    data class PairResult(
+        val itemSlot: Int,
+        val charSlot: Int,
+        val ok: Boolean,
+        val message: String,
+    )
+
+    /**
+     * V5.43 (2026-05-09): list-mode purchase. Stays in the shop dialog for ALL
+     * pairs in a single keeper engagement, eliminating the NPC-drift problem
+     * where the shopkeeper wanders away between separate BuyAtShop calls.
+     *
+     * Per-pair flow (executed in a continuous BUY/SELL/EXIT session):
+     *   1. Reset cursor to BUY: Up × 2 (idempotent — at top of 3-row menu).
+     *   2. A → item list (cursor on item 0).
+     *   3. Down × itemSlot, A → "for whom?" (cursor on char 1).
+     *   4. Down × (charSlot - 1), A → "Buy for X? YES/NO".
+     *   5. A → YES → dismiss A-taps until gold drop + inv increase OR 5 unchanged.
+     *   6. B × 3 to reset to BUY/SELL/EXIT for next pair.
+     *
+     * Single open A-tap fires only when [menuAlreadyOpen]=false (caller knows
+     * dialog state via vision / probe). Closing 5 × B at the end fully exits.
+     *
+     * Returns one PairResult per input pair, in input order. Pairs that error
+     * out structurally (NotInShop, LandmarkKindMismatch) abort the rest with
+     * a synthetic failure for each remaining pair.
+     */
+    suspend fun invokeMany(
+        pairs: List<Pair<Int, Int>>,
+        expectedKeeperKind: String,
+        menuAlreadyOpen: Boolean,
+    ): List<PairResult> {
+        if (pairs.isEmpty()) return emptyList()
+        if (expectedKeeperKind != "weapon") {
+            return pairs.map { PairResult(it.first, it.second, false,
+                "UnsupportedKind: BuyAtShop currently supports kind=weapon only (got $expectedKeeperKind)") }
+        }
+        val pre = toolset.getState().ram
+        val mapId = pre["currentMapId"] ?: 0
+        val mapflagsBit0 = ((pre["mapflags"] ?: 0) and 0x01) != 0
+        val inStandardMap = mapflagsBit0 || mapId > 0
+        if (!inStandardMap) {
+            return pairs.map { PairResult(it.first, it.second, false,
+                "NotInShop: not in standard map (mapflags.bit0=0, mapId=0)") }
+        }
+        val candidates = landmarks.findByKind(LandmarkKind.NPC_SHOPKEEPER)
+        val landmark = if (mapId != 0) {
+            candidates.firstOrNull { it.mapId == mapId }
+        } else {
+            candidates.firstOrNull { parseKind(it.note) == expectedKeeperKind }
+        } ?: return pairs.map { PairResult(it.first, it.second, false,
+            "NotInShop: no NPC_SHOPKEEPER landmark for ${if (mapId != 0) "mapId=$mapId" else "kind=$expectedKeeperKind"}") }
+        val landmarkKind = parseKind(landmark.note)
+        if (landmarkKind != expectedKeeperKind) {
+            return pairs.map { PairResult(it.first, it.second, false,
+                "LandmarkKindMismatch: expected=$expectedKeeperKind landmark=$landmarkKind") }
+        }
+        val items = parseItems(landmark.note)
+
+        // Open dialog if not already open. After this point we are at
+        // "Welcome + BUY/SELL/EXIT" with cursor on Buy (or somewhere on the
+        // 3-row menu — the per-pair Up×2 reset normalises it).
+        if (!menuAlreadyOpen) {
+            toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
+        }
+
+        val results = mutableListOf<PairResult>()
+        for ((itemSlot, charSlot) in pairs) {
+            val priceCheck = items.getOrNull(itemSlot)?.second
+            if (priceCheck == null) {
+                results += PairResult(itemSlot, charSlot, false,
+                    "Bad args: itemSlot $itemSlot out of range (have ${items.size})")
+                continue
+            }
+            val ramSnap = toolset.getState().ram
+            val preGold = StrategyContext.totalGold(ramSnap)
+            if (preGold < priceCheck) {
+                results += PairResult(itemSlot, charSlot, false,
+                    "InsufficientGold: preGold=$preGold expectedPrice=$priceCheck")
+                continue
+            }
+            val preInvSum = (0..3).sumOf {
+                StrategyContext.weaponId(StrategyContext.weaponSlot(ramSnap, charSlot, it))
+            }
+
+            // Reset cursor to BUY (idempotent) and select.
+            repeat(2) { toolset.tap(button = "Up", count = 1, pressFrames = 3, gapFrames = 10) }
+            toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
+            // Item nav.
+            repeat(itemSlot) { toolset.tap(button = "Down", count = 1, pressFrames = 3, gapFrames = 10) }
+            toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
+            // For-whom nav.
+            repeat(charSlot - 1) { toolset.tap(button = "Down", count = 1, pressFrames = 3, gapFrames = 10) }
+            toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
+            // YES on confirm.
+            toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 20)
+
+            var dismissTaps = 0
+            var unchangedTaps = 0
+            var resolved: PairResult? = null
+            while (dismissTaps < maxDismissFrames) {
+                toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 15)
+                dismissTaps++
+                val r = toolset.getState().ram
+                val curGold = StrategyContext.totalGold(r)
+                val curInvSum = (0..3).sumOf {
+                    StrategyContext.weaponId(StrategyContext.weaponSlot(r, charSlot, it))
+                }
+                if (curGold < preGold && curInvSum > preInvSum) {
+                    resolved = PairResult(itemSlot, charSlot, true,
+                        "Bought: cost=${preGold - curGold} char=$charSlot slot=$itemSlot " +
+                            "weaponSum $preInvSum->$curInvSum")
+                    break
+                }
+                if (curGold == preGold && curInvSum == preInvSum) {
+                    unchangedTaps++
+                    if (unchangedTaps >= wrongClassFrames) {
+                        resolved = PairResult(itemSlot, charSlot, false,
+                            "WrongClass: char=$charSlot itemSlot=$itemSlot — gold/inventory " +
+                                "unchanged after $unchangedTaps dismiss taps")
+                        break
+                    }
+                } else {
+                    unchangedTaps = 0
+                }
+            }
+            results += (resolved ?: PairResult(itemSlot, charSlot, false,
+                "DismissCapExhausted: $maxDismissFrames taps without confirmed gold drop"))
+
+            // B × 3 unwinds to BUY/SELL/EXIT for next pair regardless of which
+            // sub-menu we landed on (item list, for-whom, confirm). The next
+            // iter's Up × 2 + A normalises cursor to Buy.
+            repeat(3) { toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12) }
+        }
+
+        // Final exit: 5 × B fully closes any remaining dialog layer back to
+        // "facing keeper, no menu".
+        repeat(5) { toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12) }
+        return results
+    }
 }

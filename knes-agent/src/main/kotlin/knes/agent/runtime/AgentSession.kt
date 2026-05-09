@@ -1136,7 +1136,13 @@ class AgentSession(
             }
         }
 
-        // 4. Per-char buy loop.
+        // 4. Per-char buy loop — V5.43: single invokeMany call drives ALL 4
+        // chars in one continuous shop dialog so NPC drift between chars no
+        // longer breaks re-engagement (run #9 evidence: char1 succeeded then
+        // shopkeeper wandered off-screen, char2/3/4 reengage hit
+        // NO_SHOPKEEPER_IN_VIEW). Pairs are constructed with the same
+        // class-naive mapping as before (char N → slot N-1); the next escalation
+        // is class-aware mapping (see HANDOFF §"Remaining work").
         val buySkill = BuyAtShop(toolset, landmarkMemory)
         val charsBought = mutableListOf<Int>()
         val initialGold = StrategyContext.totalGold(toolset.getState().ram)
@@ -1195,63 +1201,78 @@ class AgentSession(
                        "(screenshots: /tmp/spec5-buy-$tag-reengage-{pre,post}.png)"))
             return true
         }
-        for (charSlot in 1..4) {
-            if (StrategyContext.anyWeaponEquipped(toolset.getState().ram, charSlot)) continue
-            var slot = weaponSlotByChar[charSlot] ?: continue
-            var retries = 0
-            // V5.41 (2026-05-09): bumped 3→4 to try ALL 4 slot positions in
-            // the rotation. With 4 chars × 4 retries = 16 attempts, every
-            // class-compatible weapon in a 4-slot Coneria shop becomes
-            // reachable for at least one char.
-            while (retries < 4) {
-                // Per-call menu state probe: vision-confirms whether the shop
-                // dialog overlay is currently drawn. BuyAtShop's 5-B exit
-                // SHOULD land at "facing keeper, no menu" but FF1 menu state
-                // can drift across iterations; the probe keeps menuAlreadyOpen
-                // honest. Cost: ~$0.005 per char (one classifyShopMenu call).
-                var probeRam = toolset.getState().ram
-                var probeShot = toolset.getScreen().base64
-                var probe = ShopUiDetector.detect(probeRam, probeShot, outfitVision)
-                // V5.42: if menu closed, re-engage the keeper. Run #8 (2026-05-09)
-                // showed char1 succeeded but char2/3/4 all WrongClass — root cause:
-                // shopkeeper NPC moves during BuyAtShop's tap sequence; after exit
-                // the party is no longer adjacent to keeper, so next A-tap on
-                // empty tile yields nothing. Vision re-finds keeper + walks party
-                // adjacent. Cost: 1 extra scanInteriorCandidates call (~$0.005).
-                if (!probe.open || probe.kind != "weapon") {
-                    val reEngaged = reEngageKeeper(tag = "char$charSlot.$retries")
-                    if (reEngaged) {
-                        // Re-probe after walking into keeper — auto-dialog should fire.
-                        probeRam = toolset.getState().ram
-                        probeShot = toolset.getScreen().base64
-                        probe = ShopUiDetector.detect(probeRam, probeShot, outfitVision)
-                    }
-                }
-                val callMenuOpen = probe.open && probe.kind == "weapon"
-                val tag = "char$charSlot-r$retries-s$slot"
-                dumpShot("buy-$tag-pre", probeShot)
-                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                    note = "boot_purchase_probe: char$charSlot slot=$slot retry=$retries " +
-                           "menuOpen=$callMenuOpen detectKind=${probe.kind} " +
-                           "(screenshot: /tmp/spec5-buy-$tag-pre.png)"))
-                val r = buySkill.invoke(mapOf(
-                    "itemSlot" to slot.toString(),
-                    "forCharSlot" to charSlot.toString(),
-                    "expectedKeeperKind" to "weapon",
-                    "menuAlreadyOpen" to callMenuOpen.toString(),
-                ))
-                dumpShot("buy-$tag-post", toolset.getScreen().base64)
-                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                    note = "boot_purchase: char$charSlot slot=$slot result=${r.message} " +
-                           "(screenshot: /tmp/spec5-buy-$tag-post.png)"))
-                if (r.ok) { charsBought += charSlot; break }
-                if (r.message.contains("WrongClass")) {
-                    slot = (slot + 1) % 4
-                    retries++
-                    continue
-                }
-                break
+        // Probe shop UI state once before the batch — controls menuAlreadyOpen
+        // for invokeMany's opening A-tap. Re-engage keeper if menu closed.
+        val initialRam = toolset.getState().ram
+        val initialShot = toolset.getScreen().base64
+        var initialProbe = ShopUiDetector.detect(initialRam, initialShot, outfitVision)
+        if (!initialProbe.open || initialProbe.kind != "weapon") {
+            val reEngaged = reEngageKeeper(tag = "batch-pre")
+            if (reEngaged) {
+                val rs = toolset.getScreen().base64
+                initialProbe = ShopUiDetector.detect(toolset.getState().ram, rs, outfitVision)
             }
+        }
+        val batchMenuOpen = initialProbe.open && initialProbe.kind == "weapon"
+        dumpShot("buy-batch-pre", toolset.getScreen().base64)
+        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+            note = "boot_purchase_batch_probe: menuOpen=$batchMenuOpen kind=${initialProbe.kind} " +
+                   "(screenshot: /tmp/spec5-buy-batch-pre.png)"))
+
+        // Build initial pair list (one per char missing a weapon). We do up to
+        // 4 invokeMany rounds: round 0 uses default mapping, subsequent rounds
+        // shift slot by +1 mod 4 for any char still without a weapon. Each
+        // invokeMany round runs in a single shop dialog so NPC drift between
+        // pairs no longer matters.
+        val MAX_BATCH_ROUNDS = 4
+        // charSlot -> attempted slot for the current round.
+        val pendingChars: MutableMap<Int, Int> = (1..4)
+            .filter { !StrategyContext.anyWeaponEquipped(toolset.getState().ram, it) }
+            .associateWith { weaponSlotByChar[it] ?: 0 }
+            .toMutableMap()
+
+        var roundIdx = 0
+        var roundMenuOpen = batchMenuOpen
+        while (pendingChars.isNotEmpty() && roundIdx < MAX_BATCH_ROUNDS) {
+            val pairs = pendingChars.entries.map { it.value to it.key } // (itemSlot, charSlot)
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_purchase_batch[$roundIdx]: pairs=${pairs.joinToString { "(s${it.first},c${it.second})" }} " +
+                       "menuAlreadyOpen=$roundMenuOpen"))
+            val results = buySkill.invokeMany(
+                pairs = pairs,
+                expectedKeeperKind = "weapon",
+                menuAlreadyOpen = roundMenuOpen,
+            )
+            dumpShot("buy-batch-r$roundIdx-post", toolset.getScreen().base64)
+            for (res in results) {
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_purchase: char${res.charSlot} slot=${res.itemSlot} round=$roundIdx " +
+                           "result=${res.message}"))
+                if (res.ok) {
+                    charsBought += res.charSlot
+                    pendingChars.remove(res.charSlot)
+                } else if (res.message.contains("WrongClass")) {
+                    // Cycle to next slot for retry next round.
+                    pendingChars[res.charSlot] = ((pendingChars[res.charSlot] ?: 0) + 1) % 4
+                } else {
+                    // Structural failure (NotInShop, etc) — abort the rest.
+                    pendingChars.remove(res.charSlot)
+                }
+            }
+            // After invokeMany's final 5-B exit, shop dialog is closed. For
+            // the next round we must re-engage the keeper.
+            if (pendingChars.isNotEmpty()) {
+                val reEngaged = reEngageKeeper(tag = "batch-r${roundIdx + 1}-pre")
+                if (!reEngaged) {
+                    trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                        note = "boot_purchase_batch[$roundIdx]: re-engage failed, aborting"))
+                    break
+                }
+                val nextProbeShot = toolset.getScreen().base64
+                val nextProbe = ShopUiDetector.detect(toolset.getState().ram, nextProbeShot, outfitVision)
+                roundMenuOpen = nextProbe.open && nextProbe.kind == "weapon"
+            }
+            roundIdx++
         }
 
         // 5. Exit shop interior; equip on overworld.
