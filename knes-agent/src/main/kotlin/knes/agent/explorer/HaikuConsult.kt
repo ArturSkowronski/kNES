@@ -271,8 +271,25 @@ THE FF1 NES WEAPON SHOP UI HAS THESE SUB-SCREENS — identify which one is on sc
     - To buy more: tap A (YES) or just stay in ITEM_LIST.
     - To finish: tap Down then A (NO), or tap B.
 
+  ERROR_DIALOG — message like "You can't carry anymore", "Not enough G", or "(Char) cannot use this!" in a blue text box, no menu cursor.
+    - Tap_A to dismiss. After dismissing, you typically land back in MAIN_MENU or ITEM_LIST.
+    - If error was about a class-incompatible item or carry-cap, do NOT re-pick the same item for the same character on the next iteration — choose a different item or move on.
+
   CLOSED — no menu visible, party is back on town overlay (visible map tiles, NPCs walking around). The shop has closed.
     - Output Fail (caller must re-engage keeper).
+
+POST-PURCHASE FLOW — CRITICAL (this is where multi-char buys go wrong):
+  After you tap A on BUY_CONFIRM YES, the next screens are predictable. You MUST recognise them:
+    1. "Thank you" or "Here you are" dialog → tap A to advance.
+    2. ANOTHER prompt or direct return to MAIN_MENU/ITEM_LIST.
+    3. If you go to ITEM_LIST again, you re-pick an item. Then FOR_WHOM appears AGAIN.
+  WHEN FOR_WHOM RE-APPEARS, THE CURSOR IS RESET TO char1 EVERY TIME. It does NOT remember the previous target. Look at the screenshot and verify what row the cursor is currently on. Then use the context's "Party state" block (each char tagged "served" or "NEEDS WEAPON") to figure out who you should target next, and count the Down presses needed:
+    - Cursor on char1, want char2 next → 1 Down then Tap_A.
+    - Cursor on char1, want char3 next → 2 Downs then Tap_A.
+    - Cursor on char1, want char4 next → 3 Downs then Tap_A.
+  If a character is already tagged "served", do NOT pick them again — move past them. Each iteration, ALWAYS re-read the screenshot for cursor position; do not assume cursor stayed where you last put it.
+
+NEVER OUTPUT Done WHILE STILL IN A PURCHASE SUB-FLOW. Done is only valid from MAIN_MENU (or CLOSED) when context shows all needy chars are served. If you are mid-FOR_WHOM/BUY_CONFIRM/ITEM_LIST and want to abort, tap B repeatedly to back out to MAIN_MENU first.
 
 CHARACTER CLASSES (FF1 NES, 0-indexed by class byte):
   0 = Fighter      (Knight after promotion)         — equips: Knife, Sword, Hammer, Axe, Rapier (NOT staff/nunchuck)

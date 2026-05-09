@@ -667,15 +667,30 @@ class AgentSession(
                 return
             }
 
+        // V5.46.4 (2026-05-09): when KNES_FF1_LOAD_SAVESTATE was honoured
+        // pre-boot, the savestate restored party + map state directly inside
+        // the shop UI. Walking the overworld + running the nav-advisor would
+        // press Up/Down/Left/Right on the active shop dialog, which (a) closes
+        // the dialog and (b) eventually lands us on the title screen via FF1's
+        // dialog menus. Skip walk + nav-advisor in that case and fall through
+        // to the post-enter detect, which already does ShopUiDetector and sets
+        // menuAlreadyOpen for BuyAtShop.
+        val savestateLoaded = !System.getenv("KNES_FF1_LOAD_SAVESTATE").isNullOrBlank()
+
         // 2. Walk to Coneria
-        val walkResult = WalkOverworldTo(toolset, outfitViewportSource, fog).invoke(mapOf(
-            "targetX" to (coneriaEntry.worldX ?: 0).toString(),
-            "targetY" to (coneriaEntry.worldY ?: 0).toString(),
-        ))
-        if (!walkResult.ok) {
+        if (!savestateLoaded) {
+            val walkResult = WalkOverworldTo(toolset, outfitViewportSource, fog).invoke(mapOf(
+                "targetX" to (coneriaEntry.worldX ?: 0).toString(),
+                "targetY" to (coneriaEntry.worldY ?: 0).toString(),
+            ))
+            if (!walkResult.ok) {
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_outfit_summary: walk_to_coneria_failed: ${walkResult.message}"))
+                return
+            }
+        } else {
             trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                note = "boot_outfit_summary: walk_to_coneria_failed: ${walkResult.message}"))
-            return
+                note = "boot_savestate_skip_walk_nav: KNES_FF1_LOAD_SAVESTATE set, skipping walk-to-coneria + nav advisor"))
         }
 
         // 2b. Settle: give the emulator enough frames for any in-flight warp
@@ -706,7 +721,7 @@ class AgentSession(
         //    (mapId=0); each shop is its own sub-mapId entered via its door
         //    tile. mapId=8 is Coneria CASTLE — strictly avoid.
         val initialMapId = postWalkMapId
-        if (initialMapId == 0 || initialMapId == 8) {
+        if (!savestateLoaded && (initialMapId == 0 || initialMapId == 8)) {
             val maxAdvisorIters = 80
             var entered = false
             var advisorTotalCost = 0.0
@@ -1298,10 +1313,11 @@ class AgentSession(
                 trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                     note = "boot_purchase_advisor: $msg"))
             },
-            // Run #21 evidence: char1+2 bought in 19 iter, char3 in progress
-            // at iter 30 cap. 50 covers all 4 chars with headroom for the
-            // advisor's occasional state-recovery taps.
-            maxAdvisorCalls = 50,
+            // Run A2 (post-NameTable-fix): 3/4 chars BOUGHT in 80 iter with the
+            // POST-PURCHASE-FLOW prompt update. char3 finished at iter 75 leaving
+            // no headroom for char4. 120 gives all 4 chars room plus recovery
+            // budget for occasional cursor mis-reads on FOR_WHOM/BUY_CONFIRM.
+            maxAdvisorCalls = 120,
         )
         for ((charSlot, wasBought) in advisorBought) {
             if (wasBought) charsBought += charSlot

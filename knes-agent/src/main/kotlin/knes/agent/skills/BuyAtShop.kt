@@ -636,6 +636,15 @@ class BuyAtShop(
                 break
             }
             val shot = toolset.getScreen().base64
+            // V5.46.4: dump per-iter frame to /tmp/spec5-buy-advisor-iter-NN-served-XXXX.png
+            // for post-mortem when advisor mis-reads cursor across multi-char buys.
+            // The served bitmap (1=bought) lets you correlate frame to par-state at-a-glance.
+            try {
+                val servedBits = (1..4).map { if (bought[it] == true) "1" else "0" }.joinToString("")
+                val pngBytes = java.util.Base64.getDecoder().decode(shot)
+                java.io.File("/tmp/spec5-buy-advisor-iter-%02d-served-%s.png".format(iter, servedBits))
+                    .writeBytes(pngBytes)
+            } catch (_: Throwable) { /* dev-only diagnostic, never fail the run */ }
             val ctx = buildContext(iter, lastAction, lastReason)
             val advice = vision.adviseShopPurchase(shot, ctx)
             log("invokeWithAdvisor[$iter]: action=${advice.action} reason=${advice.reason} costUsd=${advice.costUsd}")
