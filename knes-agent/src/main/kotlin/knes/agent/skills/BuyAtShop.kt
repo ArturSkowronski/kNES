@@ -312,10 +312,12 @@ class BuyAtShop(
             results += (resolved ?: PairResult(itemSlot, charSlot, false,
                 "DismissCapExhausted: $maxDismissFrames taps without confirmed gold drop"))
 
-            // B × 3 unwinds to BUY/SELL/EXIT for next pair regardless of which
-            // sub-menu we landed on (item list, for-whom, confirm). The next
-            // iter's Up × 2 + A normalises cursor to Buy.
-            repeat(3) { toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12) }
+            // V5.43.2: B × 1 only (run #11 evidence: B × 3 over-exits the
+            // shop entirely. From the dismiss-loop end state — item list or
+            // "another?" prompt — one B reliably backs to BUY/SELL/EXIT.
+            // Two B's would close the shop dialog from item list. The next
+            // iter's Up × 2 + A normalises cursor to Buy regardless.)
+            toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12)
         }
 
         // Final exit: 5 × B fully closes any remaining dialog layer back to
