@@ -1,8 +1,72 @@
-# FF1 Koog Agent — Handoff (Spec 5 — exit-from-Coneria BLOCKED, 2026-05-09 cont 3)
+# FF1 Koog Agent — Handoff (Spec 5 — Coneria pipeline rework, 2026-05-09 cont 4)
 
-**Master HEAD:** `361e88e` (merge of PR #122).
-**Branch:** `ff1-buy-and-equip-coneria` (still active for follow-up work; this cont session adds 4 working pieces + 1 known-broken fallback, **uncommitted** at handoff time).
-**Tests:** 348 unit + 3 in `SavestateRoundtripDebug`. Compiles clean.
+**Master HEAD:** `598df2d` (model-ID hotfix on top of plan Tasks 1–4).
+**Branch:** `ff1-buy-and-equip-coneria`.
+**Tests:** 353 unit (348 baseline + 5 new in `GrindAnchorSelectorTest`) + 3 in `SavestateRoundtripDebug`. Compiles clean. 3 pre-existing failures (`Coneria8VisualDiffTest`, `ConeriaTownEmpiricalDiscoveryTest`, `ExploreOverworldFrontierTest`) unchanged from `41b01df` baseline — out of scope for this rework.
+
+## TL;DR — 2026-05-09 cont 4 progress
+
+**Goal:** post-buy → exit Coneria → walk to grass → first random encounter (per `docs/superpowers/specs/2026-05-09-coneria-pipeline-design.md`).
+**Result:** **Phase 3 (exit) still fails empirically** — vision-LLM with new POST-SHOP TOWN EXIT prompt + scratchpad historyHint walked 60 steps without exiting Coneria town overlay. This is the documented Risk #1 in the spec; mitigation (longer step budget + new prompt + history hint) was insufficient. Tasks 1–4 of the plan landed cleanly with all unit tests green and the regression baseline preserved.
+
+**What landed (committable, all green tests):**
+
+1. `12f4e10 feat(grind): GrindAnchorSelector` — pure helper picks nearest GRASS/FOREST anchor from `OverworldMap` with south-then-east tie-break + `fellBack` flag. 5 unit tests.
+2. `1e04d3a feat(nav): post-shop town-exit hints` — appends POST-SHOP TOWN EXIT paragraph to `VisionInteriorNavigator.SYSTEM_PROMPT` encoding user gameplay hints (DOWN-from-shop, overworld-trees-walkable, avoid LEFT/RIGHT building doorways).
+3. `62f118f feat(grind): encounterCounter delta` — per-step delta log + one-shot `grind_encounter_byte_dead` WARN when all 12 deltas are zero across the loop. Pure diagnostic, zero behaviour change.
+4. `b4d7fb5 feat(boot): vision-only Phase 3 exit + Phase 4 grind` — `runOutfitBootPhase` post-buy block reworked. Drops `ExitTownEmpirical`/tree-detour from hot path (kept as offline fallback when `outfitNavigator==null`). Vision-LLM (`WalkInteriorVision(maxSteps=60, historyHint=scratchpad)`) is the sole hot-path exit. Phase 4 picks a `GrindAnchorSelector` anchor, runs `GrindLoop` (corridorRadius=3, maxSteps=12) with up to 2 re-anchors on `NoEncounter`. 5 new trace markers: `boot_phase3_exit_result`, `boot_phase4_grind_anchor`, `boot_phase4_grind_result`, `boot_phase4_grind_reanchor`, `boot_pipeline_end`.
+5. `598df2d fix(nav): refresh stale model ID` — `VisionInteriorNavigator.kt:87` defaulted to `claude-opus-4-5-20251101` which is not a current Anthropic model ID; every API call 404'd → parser returned `UNCLEAR` → exit bailed after 2 in a row. HANDOFF cont-3 had flagged this. Switched to `claude-sonnet-4-6` matching the surrounding KDoc intent ("Uses Sonnet 4.6").
+
+Plus checkpoint commit `41b01df chore(cont-3): checkpoint scaffolding for cont-4 rework` capturing the previously-uncommitted cont-3 work (`AgentScratchpad`, `ExitTownEmpirical`, vision historyHint, GrindLoop screenshots, `boot_exit_interior_result` trace) as a clean base for cont-4.
+
+**Spec + plan committed:** `d286184` + `c7d0b44` (spec design + regression-protection section), `b5597ed` (7-task implementation plan).
+
+## Smoke #1 — savestate-load (executed)
+
+Run command:
+```bash
+KNES_VISION=gemini-pro KNES_FF1_LOAD_SAVESTATE=/tmp/spec5-post-buy.savestate \
+  ./gradlew :knes-agent:run --args="--rom=$PWD/roms/ff.nes \
+    --wall-clock-cap-seconds=300 --cost-cap-usd=2.0 --max-skill-invocations=120"
+```
+
+Run 1 (HEAD `b4d7fb5`, pre-model-ID-fix): `boot_phase3_exit_result: ok=false msg=vision returned UNCLEAR 2x in a row after 3 steps world=(147,155) mapflags=1 via=vision`. Cause: stale Anthropic model ID. Fixed in `598df2d`.
+
+Run 2 (HEAD `598df2d`, post-fix): `boot_phase3_exit_result: ok=false msg=walked 60 steps without exit world=(147,155) mapflags=1 via=vision`. Vision was responding cleanly (no UNCLEAR), but 60 cardinal steps did not transition the party out of the Coneria town overlay; final position is the same warp-entry tile `(147,155)` we started near.
+
+`boot_pipeline_end: victory=false lastPhase=phase3_exit_failed` on both runs. No Phase 4 grind data (skipped on exit failure).
+
+**Smoke #2 (fresh-run) NOT executed** per user gate (option "Tylko Smoke #1, Smoke #2 do osobnej sesji").
+
+## Honest assessment
+
+The cont-4 plan delivered the architectural rework cleanly: 4 well-bounded commits, all unit tests green (`OutfitBootPhaseTest` regression baseline preserved), spec + code-quality reviews passed for every task. **But the empirical Coneria-exit problem is unsolved.** The spec's Risk #1 was: "Vision-LLM still fails to exit Coneria reliably even with hint paragraph — mitigation: scratchpad historyHint + 60 steps. If this still fails, fallback escalation is documented as Approach B (PPU nametable) — separate spec." We hit exactly that risk path.
+
+`weaponsBought=4` regression baseline NOT empirically validated this session — Smoke #2 (fresh-run) was deferred. Compile-time pinning + `OutfitBootPhaseTest` greenness give some confidence but not full empirical proof. Worth running before next merge to master.
+
+## Recommended next-session direction
+
+Per plan self-review + spec § Risks:
+
+1. **DO NOT re-enable `ExitTownEmpirical` / tree-detour in the hot path.** The cont-4 plan explicitly drops it; reverting that breaks the architectural intent. The fallback path is reachable when `outfitNavigator==null` (offline tests) — keep it there.
+
+2. **Open a new spec for Approach B — PPU nametable read.** The town overlay's tile data lives in PPU `$2000-$23FF`; `mapId=0` decodes to overworld tiles which is why the standard BFS finds bogus exits. A new `TownOverlayTileSource` reading PPU and classifying tiles by tile-ID would give the agent a real walkable graph for `mapId=0+mapflags.bit0=1`. Once available, normal BFS works deterministically — no LLM cost on exit.
+
+3. **Investigate why vision walked 60 steps in place.** The trace shows party never left `(147,155)`. Possible causes: (a) walking into NPCs (transient blockers per `reference_ff1_npcs_move`); (b) walking into building doorways triggering dialog (mapflags bit1); (c) cardinal returns valid but party doesn't move because vision misjudges where the south-edge is. A per-step `[walkInteriorVision.dir]` + `[walkInteriorVision.step]` dump in `toolCallLog` already exists — surface it to a per-iter screenshot dir like `/tmp/spec5-vision-exit-iter-NN.png` to diagnose offline before any new code goes in.
+
+4. **Run Smoke #2 (fresh-run, ~$2-3) to validate Phase 1+2 baseline before merging this branch.** The plan's revert-instruction stands: if `weaponsBought < 4` on a fresh run, revert the rework commits.
+
+5. **EquipWeapon advisor revisit** — separate follow-up; not on the critical path. Bare-handed grinding works.
+
+## Files changed this session
+
+- New: `knes-agent/src/main/kotlin/knes/agent/runtime/GrindAnchorSelector.kt` (+test).
+- Modified: `knes-agent/src/main/kotlin/knes/agent/perception/VisionInteriorNavigator.kt` (prompt + model ID).
+- Modified: `knes-agent/src/main/kotlin/knes/agent/runtime/AgentSession.kt` (Phase 3+4 rework).
+- Modified: `knes-agent/src/main/kotlin/knes/agent/skills/GrindLoop.kt` (delta log).
+- New docs: `docs/superpowers/specs/2026-05-09-coneria-pipeline-design.md`, `docs/superpowers/plans/2026-05-09-coneria-pipeline.md`.
+
+## Carried over (kept below for context)
 
 ## TL;DR — 2026-05-09 cont 3 progress
 
