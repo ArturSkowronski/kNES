@@ -66,6 +66,7 @@ interface VisionInteriorNavigator {
         entryDirection: InteriorMove? = null,
         frontierHint: InteriorMove? = null,
         unvisitedReachable: Int = 0,
+        historyHint: String? = null,
     ): InteriorMove
 }
 
@@ -101,14 +102,15 @@ class AnthropicVisionInteriorNavigator(
         entryDirection: InteriorMove?,
         frontierHint: InteriorMove?,
         unvisitedReachable: Int,
+        historyHint: String?,
     ): InteriorMove {
         val key = "$frame|${hintLastBlocked?.name}|${entryDirection?.name}" +
-            "|${frontierHint?.name}|$unvisitedReachable"
+            "|${frontierHint?.name}|$unvisitedReachable|${historyHint?.hashCode()}"
         if (frame == cachedFrame && key == cachedKey && cachedMove != InteriorMove.UNCLEAR) {
             return cachedMove
         }
         val body = buildRequestBody(screenshotBase64, hintLastBlocked, entryDirection,
-            frontierHint, unvisitedReachable)
+            frontierHint, unvisitedReachable, historyHint)
         val resp = try {
             client.post(API_URL) {
                 header("x-api-key", apiKey)
@@ -137,9 +139,24 @@ class AnthropicVisionInteriorNavigator(
         entryDirection: InteriorMove?,
         frontierHint: InteriorMove?,
         unvisitedReachable: Int,
+        historyHint: String?,
     ): String {
         val userText = buildString {
             append("Pick the next direction for the party. Return JSON only.")
+            if (!historyHint.isNullOrBlank()) {
+                // 2026-05-09 cont 3: free-form context from agent scratchpad —
+                // typically a render of the walk-in trajectory ("you walked
+                // UP×9 LEFT×1 ... from town entry to the shop"). Use this to
+                // reason about the exit path; it's a HINT, not a deterministic
+                // replay — current screen + NPC positions take precedence.
+                append("\nCONTEXT (your own action history, use as reasoning hint, not literal replay):\n")
+                append(historyHint.trim())
+                append("\nThe REVERSE of the walk-in trajectory points toward the exit. ")
+                append("Use this to bias direction choice when the screen is ambiguous. ")
+                append("\nGRIND/ENCOUNTER zone after exit = solid GREEN grass tiles on the overworld ")
+                append("(NOT the gray stone Coneria walls, NOT the trees). Random battles only fire ")
+                append("on green grass tiles. After exit, the party should walk on green tiles to find encounters.")
+            }
             if (entryDirection != null) {
                 val opposite = when (entryDirection) {
                     InteriorMove.NORTH -> "S"

@@ -66,6 +66,33 @@ class ExitInterior(
             if (mapId < 0) {
                 return SkillResult(false, "currentMapId unknown — RAM byte not configured", totalFrames, ram)
             }
+            // 2026-05-09: town-overlay fallback. Coneria town renders as
+            // mapId=0 + mapflags.bit0=1 — the overworld submap is loaded but
+            // the engine draws the town overlay on top. The standard BFS
+            // operates on mapId=0's tile data (overworld), which doesn't
+            // represent the town's actual walls / NPCs / south exit, so it
+            // emits bogus "exits" and the party walks in circles
+            // (validated: 64 iters @ Coneria, world=(147,155), never crossed
+            // mapflags=0). Bypass BFS for this case: blind-press Down with
+            // settle frames, rotate cardinals when no world-coord progress.
+            // Per memory `reference_ff1_npcs_move`, NPCs wander each frame so
+            // a tile blocked one tap may be free the next.
+            if (mapId == 0) {
+                val (cardinalFrames, exited) = walkOutOfTownOverlay(maxTaps = maxSteps - stepsTaken)
+                totalFrames += cardinalFrames
+                val ramAfter = toolset.getState().ram
+                return if (exited) {
+                    SkillResult(true,
+                        "town-overlay exit: reached overworld at (worldX=${ramAfter["worldX"] ?: 0}, " +
+                            "worldY=${ramAfter["worldY"] ?: 0})",
+                        totalFrames, ramAfter)
+                } else {
+                    SkillResult(false,
+                        "town-overlay exit: did not clear mapflags after ${maxSteps - stepsTaken} cardinal taps " +
+                            "(world=(${ramAfter["worldX"] ?: 0},${ramAfter["worldY"] ?: 0}))",
+                        totalFrames, ramAfter)
+                }
+            }
             mapSession.ensureCurrent(mapId)
             // V5.6: party tile = ($0068, $0069) = sm_player_x/y per Disch disassembly.
             // Replaces V2.6.4's static (+8, +7) offset hack on $0029/$002A scroll, which
@@ -141,5 +168,132 @@ class ExitInterior(
         } finally {
             interiorMemory?.save()
         }
+    }
+
+    /**
+     * Town-overlay blind walker: prefer DOWN (towns are entered from the south,
+     * so the south edge is the universal exit). On stuck (no world-coord change
+     * for stuckThreshold consecutive taps), rotate to next cardinal.
+     *
+     * Returns (totalFrames, exited). exited=true iff mapflags bit 0 cleared.
+     */
+    private suspend fun walkOutOfTownOverlay(maxTaps: Int): Pair<Int, Boolean> {
+        // 2026-05-09 cont 3 user-confirmed: "to exit the city you need to go down
+        // from shop". DOWN is the universal Coneria-town exit direction. Earlier
+        // runs (cont 3 #1-#3) tried rotating to LEFT/RIGHT after 3-6 stuck DOWN
+        // taps; both LEFT (10,14) and RIGHT (12,14) at the deadlock point are
+        // building doorways that open dialogs (mapflags.bit1=1) — exactly what
+        // we don't want. Stay on DOWN. When stuck (NPC blocking per
+        // `reference_ff1_npcs_move`), step idle frames to let the NPC wander
+        // off, then retry DOWN. UP only as final fallback after exhausting
+        // DOWN+wait cycles.
+        val cardinals = listOf("DOWN", "UP")  // No LEFT/RIGHT — those are doorways in Coneria.
+        var dirIdx = 0
+        var stuckCount = 0
+        val stuckThreshold = 3       // 3 stuck DOWN taps before idle-wait
+        val maxIdleWaitsAt = 5       // up to 5 wait-and-retry cycles per stuck position
+        var idleWaitsAt = 0
+        val idleFrames = 30          // ~half a second wall clock for NPC drift
+        var totalFrames = 0
+        var taps = 0
+
+        fun dump(tag: String) {
+            try {
+                val ram = toolset.getState().ram
+                val shot = toolset.getScreen().base64
+                val bytes = java.util.Base64.getDecoder().decode(shot)
+                java.io.File("/tmp/spec5-town-exit-$tag.png").writeBytes(bytes)
+                // Full watched-byte dump for dialog-signal hunt. The mid screenshot
+                // (cont-3 #5) showed shop "Welcome" dialog open while mapflags=1,
+                // so neither mapflags nor screenState toggled — need to find which
+                // byte does. Dump ALL watched values; diff entry vs stuck offline.
+                val allRam = ram.toSortedMap().entries.joinToString(" ") { "${it.key}=${it.value}" }
+                println("[exit-town] $tag: $allRam")
+            } catch (_: Throwable) { /* dev noise */ }
+        }
+
+        // Pre-flight: B-spam 8 taps to dismiss any lingering dialog (BuyAtShop's
+        // 6 B-taps may not be enough if there's a "Welcome!" header above
+        // BUY/SELL/EXIT). Then dump entry screenshot.
+        // Run-3 evidence: post-buy mapflags=1, but after cardinal taps mapflags=3.
+        // mapflags bit 1 likely = "dialog/menu active" — pressing DOWN walked
+        // into the shopkeeper sprite and re-opened the dialog.
+        repeat(8) {
+            val t = toolset.tap(button = "B", count = 1, pressFrames = 4, gapFrames = 8)
+            val s = toolset.step(buttons = emptyList(), frames = 4)
+            totalFrames += t.frame + s.frame
+        }
+        dump("entry")
+
+        while (taps < maxTaps) {
+            val ramPre = toolset.getState().ram
+            val mapflagsPre = ramPre["mapflags"] ?: 0
+            if ((mapflagsPre and 0x01) == 0) return totalFrames to true
+            // If a dialog/menu is active (bit 1), B-tap to dismiss before moving.
+            if ((mapflagsPre and 0x02) != 0) {
+                val t = toolset.tap(button = "B", count = 1, pressFrames = 4, gapFrames = 8)
+                val s = toolset.step(buttons = emptyList(), frames = 4)
+                totalFrames += t.frame + s.frame
+                taps++
+                continue
+            }
+
+            // V5.6 + 2026-05-09: in town overlay, smPlayerX/Y is the LOCAL coord
+            // that actually moves; worldX/worldY tracks the overworld entry tile
+            // and stays constant. Run-3's cardinal-taps used worldX/Y for stuck
+            // detection — flagged stuck every tap, rotating direction unhelpfully.
+            val smxPre = ramPre["smPlayerX"] ?: 0
+            val smyPre = ramPre["smPlayerY"] ?: 0
+
+            val tap = toolset.tap(button = cardinals[dirIdx], count = 1,
+                pressFrames = PRESS_FRAMES, gapFrames = GAP_FRAMES)
+            val settle = toolset.step(buttons = emptyList(), frames = SETTLE_FRAMES)
+            totalFrames += tap.frame + settle.frame
+            taps++
+
+            if (taps == maxTaps / 2) dump("mid")
+
+            val ramPost = toolset.getState().ram
+            val mapflagsPost = ramPost["mapflags"] ?: 0
+            if ((mapflagsPost and 0x01) == 0) return totalFrames to true
+
+            val smxPost = ramPost["smPlayerX"] ?: 0
+            val smyPost = ramPost["smPlayerY"] ?: 0
+            println("[exit-town] tap#$taps dir=${cardinals[dirIdx]} " +
+                "smPlayer=($smxPre,$smyPre)→($smxPost,$smyPost) " +
+                "mapflags=$mapflagsPre→$mapflagsPost stuck=$stuckCount")
+
+            if (smxPost == smxPre && smyPost == smyPre) {
+                stuckCount++
+                if (stuckCount >= stuckThreshold) {
+                    if (idleWaitsAt == 0) {
+                        // First time hitting stuckThreshold at this position — dump
+                        // full RAM to hunt for the dialog-signal byte. Compare
+                        // against the entry dump offline.
+                        dump("stuck-${cardinals[dirIdx]}-$smxPost-$smyPost")
+                    }
+                    if (idleWaitsAt < maxIdleWaitsAt && cardinals[dirIdx] == "DOWN") {
+                        // Wait for NPC to wander off the south-blocking tile.
+                        val s = toolset.step(buttons = emptyList(), frames = idleFrames)
+                        totalFrames += s.frame
+                        idleWaitsAt++
+                        stuckCount = 0
+                        println("[exit-town] idle-wait $idleWaitsAt/$maxIdleWaitsAt at " +
+                            "smPlayer=($smxPost,$smyPost) — NPC may be blocking south")
+                    } else {
+                        // Exhausted DOWN+wait budget; rotate cardinal (only UP left
+                        // in our restricted list — typically gives up next iter).
+                        dirIdx = (dirIdx + 1) % cardinals.size
+                        stuckCount = 0
+                        idleWaitsAt = 0
+                    }
+                }
+            } else {
+                stuckCount = 0
+                idleWaitsAt = 0  // moved → reset wait budget for next stuck position
+            }
+        }
+        dump("exit")
+        return totalFrames to false
     }
 }

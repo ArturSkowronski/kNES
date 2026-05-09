@@ -8,6 +8,15 @@ import kotlin.math.absoluteValue
  * is exhausted, or party drifts outside the corridor. Deterministic — no LLM
  * inside; AgentSession's PostBattle handler handles the resulting battle.
  *
+ * IMPORTANT (FF1 mechanics, user-confirmed 2026-05-09):
+ *   - Random encounters fire on GREEN GRASS and FOREST (tree) overworld tiles
+ *     — trees are walkable, not obstacles.
+ *   - Mountain and water tiles block movement (no encounters).
+ *   - Town/castle entry tiles are WARP TILES — walking onto them transitions
+ *     into the standard map (mapflags.bit0=1) and breaks the grind corridor.
+ *   - The grind corridor anchor must be placed such that the entire walked
+ *     range stays clear of warp tiles.
+ *
  * Outcome encoded in [SkillResult.message] prefix:
  *   - "EncounteredBattle: ..."   ok=true
  *   - "NoEncounter: ..."         ok=true
@@ -32,6 +41,16 @@ class GrindLoop(private val toolset: EmulatorToolset) : Skill {
         var steps = 0
         var goingNorth = true
 
+        // Per-step screenshot evidence for grind walk — confirms the agent is
+        // actually traversing GREEN grass tiles where encounters fire (per
+        // user-confirmed FF1 mechanic). Dump entry frame.
+        try {
+            val ramEntry = toolset.getState().ram
+            val shotEntry = toolset.getScreen().base64
+            java.io.File("/tmp/spec5-grind-entry-w${ramEntry["worldX"]}_${ramEntry["worldY"]}-mf${ramEntry["mapflags"]}.png")
+                .writeBytes(java.util.Base64.getDecoder().decode(shotEntry))
+        } catch (_: Throwable) {}
+
         while (steps < maxStepsWithoutEncounter) {
             val targetY = if (goingNorth) anchorY - corridorRadius else anchorY + corridorRadius
             toolset.tap(
@@ -39,6 +58,24 @@ class GrindLoop(private val toolset: EmulatorToolset) : Skill {
                 count = 1, pressFrames = 5, gapFrames = 30
             )
             steps++
+
+            // Per-step screenshot for the first few steps (visual proof we are
+            // walking on grass, not stuck in stone-walled town overlay).
+            // Also log encounterCounter to verify FF1's step-based encounter
+            // timer is actually decrementing (if not, encounters won't fire
+            // regardless of how many steps we walk).
+            val ramStep = toolset.getState().ram
+            if (steps <= 6) {
+                try {
+                    val shotN = toolset.getScreen().base64
+                    java.io.File("/tmp/spec5-grind-step%02d-w%d_%d-mf%d.png".format(
+                        steps, ramStep["worldX"] ?: 0, ramStep["worldY"] ?: 0, ramStep["mapflags"] ?: 0))
+                        .writeBytes(java.util.Base64.getDecoder().decode(shotN))
+                } catch (_: Throwable) {}
+            }
+            println("[grind] step=$steps world=(${ramStep["worldX"]},${ramStep["worldY"]}) " +
+                "mapflags=${ramStep["mapflags"]} encounterCounter=${ramStep["encounterCounter"]} " +
+                "screenState=0x${(ramStep["screenState"] ?: 0).toString(16)}")
 
             val stateAfter = toolset.getState()
             val ram = stateAfter.ram

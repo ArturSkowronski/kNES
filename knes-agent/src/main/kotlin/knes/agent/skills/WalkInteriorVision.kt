@@ -28,6 +28,12 @@ class WalkInteriorVision(
     private val interiorMemory: InteriorMemory? = null,
     private val mapSession: MapSession? = null,
     private val framesPerTile: Int = 48,  // matches V2.4.5 ExitInterior tuning
+    /**
+     * 2026-05-09 cont 3: free-form context passed verbatim to the navigator's
+     * prompt. Typically AgentScratchpad.renderForLLM() — the walk-in
+     * trajectory used as a reasoning hint for finding the exit.
+     */
+    private val historyHint: String? = null,
 ) : Skill {
     override val id = "walk_interior_vision"
     override val description =
@@ -91,6 +97,7 @@ class WalkInteriorVision(
                 shotB64, frame, lastBlocked,
                 frontierHint = frontierHint,
                 unvisitedReachable = unvisitedReachable,
+                historyHint = historyHint,
             )
             toolCallLog?.append("walkInteriorVision.dir",
                 "step=$stepsTaken dir=${dir.name}" +
