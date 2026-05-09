@@ -265,6 +265,13 @@ class AnthropicVisionInteriorNavigator(
                 "Building doorways on LEFT/RIGHT lead INTO other shops and trap you in a dialog — " +
                 "avoid them unless SOUTH is genuinely blocked. Trees in the town overlay block " +
                 "movement; trees on the overworld do NOT — they're walkable encounter terrain. " +
+                "USE RECENT MOVES (when listed in the user message): each entry shows the dir you " +
+                "picked plus smPre→smPost and moved=true|false. If the SAME direction repeats with " +
+                "moved=false 2+ times in a row, the party is blocked there — pick a PERPENDICULAR " +
+                "cardinal next (LEFT/RIGHT blocked → try DOWN or UP; DOWN blocked → try LEFT or RIGHT). " +
+                "If recent moves show party drifting WEST or NORTH without progress to overworld, " +
+                "force SOUTH or EAST. Treat RECENT MOVES as STRONGER evidence than what the still " +
+                "image suggests — the image cannot show that the last 5 cardinals were no-ops. " +
                 "Output ONLY JSON: {\"direction\":\"N|S|E|W|EXIT|STUCK\",\"reason\":\"<<=80 chars\"}."
     }
 }
