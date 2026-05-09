@@ -82,6 +82,27 @@ This encodes user-hint #1 (DOWN-from-shop) and primes the model for the town/ove
 - `boot_phase4_grind_result {outcome, anchorReanchorCount, encounterByteDead}`
 - `boot_pipeline_end {victory, lastPhase}`
 
+## Regression protection (pinned phases)
+
+Phase 1 (WALK_TO_SHOP) and Phase 2 (BUY) are **pinned** — this rework MUST NOT change their code, prompts, savestate handling, or invocation contract. Spec 5 4/4 weapon purchase (Run B2-v3) is the baseline; any drop below 4/4 in a fresh run is a regression.
+
+**Invariants the implementation plan must preserve:**
+
+- `BuyAtShop.invokeWithAdvisor` cap=120 unchanged.
+- `SYSTEM_SHOP_PURCHASE` prompt unchanged (POST-PURCHASE FLOW + ERROR_DIALOG sections that took multiple sessions to land).
+- 120-frame pre-warm + 120-frame post-pump around `loadState` unchanged (`Main.kt`).
+- `runOutfitBootPhase` savestate-skip branch (`KNES_FF1_LOAD_SAVESTATE` set → skip walk + nav advisor) unchanged.
+- `NameTable.stateSave` fix unchanged (no diff to vNES).
+- `boot_outfit_summary` trace event still emitted with `weaponsBought=N totalGoldSpent=M`.
+- Per-iter buy screenshots `/tmp/spec5-buy-advisor-iter-NN-served-XXXX.png` still dumped.
+
+**Plan must include two smoke checks before declaring done:**
+
+1. **Fresh-run smoke:** end-to-end run from clean ROM (no savestate). Expect `boot_outfit_summary: weaponsBought=4` in trace. If <4, the rework regressed buy — STOP, do not proceed.
+2. **Savestate smoke:** `KNES_FF1_LOAD_SAVESTATE=/tmp/spec5-post-buy.savestate` run. Expect Phase 3 (vision exit) and Phase 4 (grind) to fire; Phase 1+2 are skipped by the savestate-skip branch and not exercised here. This is the fast-iter loop for Phase 3+4 development.
+
+If a Phase 3/4 change requires touching shared state used by Phase 2 (e.g., `runOutfitBootPhase` boot trigger, scratchpad load path), it must be raised as an explicit risk in the plan, not folded silently.
+
 ## Out of scope
 
 - EquipWeapon (bare-hand grind works; separate follow-up).
