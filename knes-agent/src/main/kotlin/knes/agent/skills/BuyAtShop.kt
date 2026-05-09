@@ -134,8 +134,12 @@ class BuyAtShop(
             val curGold = StrategyContext.totalGold(ram)
             val curInvSum = (0..3).sumOf { StrategyContext.weaponId(StrategyContext.weaponSlot(ram, forCharSlot, it)) }
             if (curGold < preGold && curInvSum > preInvSum) {
-                // 2 B-taps backs out of "another?" prompt + BUY list, leaves us at shop main menu.
-                repeat(2) { toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 15) }
+                // 5 B-taps fully exits the dialog stack (any of: confirm-YES,
+                // for-whom, item list, BUY/SELL/EXIT) back to "facing keeper,
+                // no menu" so the next BuyAtShop call has a predictable
+                // starting state (run #5 evidence: 2-B left state ambiguous,
+                // char2/3/4 hit off-by-one). B is no-op once shop is closed.
+                repeat(5) { toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12) }
                 return SkillResult(
                     ok = true,
                     message = "Bought: cost=${preGold - curGold} char=$forCharSlot slot=$itemSlot " +
@@ -146,8 +150,9 @@ class BuyAtShop(
             if (curGold == preGold && curInvSum == preInvSum) {
                 unchangedTaps++
                 if (unchangedTaps >= wrongClassFrames) {
-                    // 3 B-taps unwinds further: confirm-dialog dismiss + BUY list + shop main menu.
-                    repeat(3) { toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 15) }
+                    // 5 B-taps fully exits the dialog stack — same rationale
+                    // as the success branch: predictable post-call state.
+                    repeat(5) { toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 12) }
                     return SkillResult(ok = false,
                         message = "WrongClass: char=$forCharSlot itemSlot=$itemSlot — gold/inventory " +
                             "unchanged after $unchangedTaps dismiss taps",

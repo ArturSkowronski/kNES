@@ -1146,16 +1146,28 @@ class AgentSession(
             if (StrategyContext.anyWeaponEquipped(toolset.getState().ram, charSlot)) continue
             var slot = weaponSlotByChar[charSlot] ?: continue
             var retries = 0
-            while (retries < 3) {
+            // V5.41 (2026-05-09): bumped 3→4 to try ALL 4 slot positions in
+            // the rotation. With 4 chars × 4 retries = 16 attempts, every
+            // class-compatible weapon in a 4-slot Coneria shop becomes
+            // reachable for at least one char.
+            while (retries < 4) {
+                // Per-call menu state probe: vision-confirms whether the shop
+                // dialog overlay is currently drawn. BuyAtShop's 5-B exit
+                // SHOULD land at "facing keeper, no menu" but FF1 menu state
+                // can drift across iterations; the probe keeps menuAlreadyOpen
+                // honest. Cost: ~$0.005 per char (one classifyShopMenu call).
+                val probeRam = toolset.getState().ram
+                val probeShot = toolset.getScreen().base64
+                val probe = ShopUiDetector.detect(probeRam, probeShot, outfitVision)
+                val callMenuOpen = probe.open && probe.kind == "weapon"
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_purchase_probe: char$charSlot slot=$slot retry=$retries " +
+                           "menuOpen=$callMenuOpen detectKind=${probe.kind}"))
                 val r = buySkill.invoke(mapOf(
                     "itemSlot" to slot.toString(),
                     "forCharSlot" to charSlot.toString(),
                     "expectedKeeperKind" to "weapon",
-                    // Only the FIRST call benefits from skipping the dialog-
-                    // open A-tap; once the first purchase completes, BuyAtShop
-                    // exits via 2 B-taps which lands at "facing keeper, no
-                    // menu" — subsequent calls re-open via the standard A-tap.
-                    "menuAlreadyOpen" to (menuAlreadyOpen && charsBought.isEmpty()).toString(),
+                    "menuAlreadyOpen" to callMenuOpen.toString(),
                 ))
                 trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
                     note = "boot_purchase: char$charSlot slot=$slot result=${r.message}"))
