@@ -1,8 +1,44 @@
-# FF1 Koog Agent — Handoff (Spec 5 — Coneria pipeline rework, 2026-05-09 cont 4)
+# FF1 Koog Agent — Handoff (Spec 5 — Coneria pipeline rework, 2026-05-10 cont 5)
 
-**Master HEAD:** `598df2d` (model-ID hotfix on top of plan Tasks 1–4).
+**Master HEAD:** `2371e6e` (recent-moves history on top of cont-4).
 **Branch:** `ff1-buy-and-equip-coneria`.
-**Tests:** 353 unit (348 baseline + 5 new in `GrindAnchorSelectorTest`) + 3 in `SavestateRoundtripDebug`. Compiles clean. 3 pre-existing failures (`Coneria8VisualDiffTest`, `ConeriaTownEmpiricalDiscoveryTest`, `ExploreOverworldFrontierTest`) unchanged from `41b01df` baseline — out of scope for this rework.
+**Tests:** 353 unit (348 baseline + 5 in `GrindAnchorSelectorTest`) + 3 in `SavestateRoundtripDebug`. Compiles clean.
+
+## TL;DR — 2026-05-10 cont 5 progress (vision diagnostics + history)
+
+**What landed:**
+
+- `2412b58 feat(nav): per-iter PNG dump in WalkInteriorVision` — fixes a diagnostic blind spot the user surfaced ("Czemu nie widziałem żadnych screenów"). Each vision call now writes `/tmp/spec5-vision-exit-iter-NN-smX_Y-mfM.png` BEFORE the navigator decision, so a 60-step drift leaves 60 visible artefacts. Per `feedback_per_iter_screenshots.md` (new memory: *every* iter-driven LLM skill must dump per-iter PNG, not just BuyAtShop).
+- `2371e6e feat(nav): vision-exit recent-moves history` — fixes the user-diagnosed "circles LEFT, doesn't know to go DOWN because no history" failure mode. `WalkInteriorVision` now maintains an 8-entry rolling buffer of `step=N dir=X smPre=(a,b) smPost=(c,d) moved=Y/N` and concatenates it into `historyHint`. `VisionInteriorNavigator.SYSTEM_PROMPT` extended: "If same direction repeats with moved=false 2+ times → pick PERPENDICULAR cardinal. RECENT MOVES is STRONGER evidence than the still image (image cannot show that the last 5 cardinals were no-ops)."
+
+**Smoke #1 retry (post both fixes):** `boot_phase3_exit_result: ok=false msg=vision returned UNCLEAR 2x in a row after 12 steps world=(147,155) mapflags=3 via=vision`. Trajectory:
+
+- iter 00: `sm(11,10) mf1` — in shop (post-load).
+- iter 09: `sm(14,22) mf1` — south edge of town. **The cont-3 deadlock position.** Vision walked the party from shop counter to south edge in 9 steps — the LEFT-LEFT-LEFT loop is broken.
+- iter 10–12: drift WEST to `sm(9,22)`, `mapflags=3` (mid-scroll bit 1 set).
+- iter 12: vision UNCLEAR x2 → bail.
+
+This is **less-bad** than cont-4 (60-step drift west, never reached south edge). Recent-moves history clearly works as a control signal. But the cont-3 sm(14,22) deadlock — solvable in cont-3 only via hardcoded `Up Right Right Down Down` tree-detour — still defeats vision. The model sees the south horizon, walks west toward visible grass, hits mid-scroll mapflags=3 at sm(9,22), gets confused (UNCLEAR).
+
+**Savestate corruption discovered:** `runOutfitBootPhase` always dumps `/tmp/spec5-post-buy.savestate` after BuyAtShop returns, REGARDLESS of `bought=N`. The previously-good 4/4 buy savestate from 2026-05-09 21:24 was overwritten by subsequent runs where buy advisor returned `Fail` (shop classified CLOSED on savestate-load path). The current `/tmp/spec5-post-buy.savestate` represents party post-buy-failed, not post-buy-success. Workaround: regenerate via fresh-run (~5 min, ~$2). Proper fix: gate savestate dump on `charsBought.isNotEmpty() == originalNeeds`. Out of cont-5 scope.
+
+## Honest cont-5 assessment
+
+**Vision-LLM is not the right primary tool for Coneria town-exit.** Two independent runs with progressively richer prompts (cont-4 POST-SHOP-TOWN-EXIT paragraph, cont-5 RECENT MOVES history) made measurable but insufficient progress: drift west → south-edge-deadlock. The Coneria south exit requires either (a) the cont-3 hardcoded tree-detour `Up Right Right Down Down` from `sm(14,22)`, which is non-deterministic across savestate restore points, or (b) genuine map-aware navigation that knows the town overlay tile data.
+
+Per spec § Risks Risk #1: this is the documented escalation path. **Approach B (PPU nametable read) is the next-session direction.**
+
+## Next-session direction (cont 6)
+
+1. **Approach B — PPU nametable read for town overlay tile data.** Read `$2000-$23FF`, classify tiles by tile-ID (wall / floor / NPC / doorway / warp), build a walkable graph for `mapId=0+mapflags.bit0=1`. Once available, deterministic BFS works. New spec required. Vision-LLM stays as fallback for non-Coneria towns until each one is mapped.
+
+2. **Fix savestate-dump regression.** `runOutfitBootPhase` must NOT overwrite `/tmp/spec5-post-buy.savestate` when `weaponsBought < expected`. Quick fix: gate the dump on the `charsBought` count. Without this, every dev iteration corrupts the fast-iter test fixture.
+
+3. **Run Smoke #2 (fresh-run, ~$2-3) before any merge to master.** Critical regression check: `weaponsBought=4` on a clean ROM. cont-4 + cont-5 changes have NOT been empirically validated against the 4/4 buy baseline. Compile-time pinning + `OutfitBootPhaseTest` greenness give partial confidence; full validation requires the run.
+
+4. **Per-iter PNG + recent-moves history are good-enough for vision-LLM diagnostics now.** Reuse pattern in any future iter-LLM skill (overworld nav, advisor variants).
+
+5. **EquipWeapon revisit** — separate follow-up; bare-hand grinding works.
 
 ## TL;DR — 2026-05-09 cont 4 progress
 
