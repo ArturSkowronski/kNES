@@ -28,6 +28,12 @@ class WalkInteriorVision(
     private val interiorMemory: InteriorMemory? = null,
     private val mapSession: MapSession? = null,
     private val framesPerTile: Int = 48,  // matches V2.4.5 ExitInterior tuning
+    /**
+     * 2026-05-09 cont 3: free-form context passed verbatim to the navigator's
+     * prompt. Typically AgentScratchpad.renderForLLM() — the walk-in
+     * trajectory used as a reasoning hint for finding the exit.
+     */
+    private val historyHint: String? = null,
 ) : Skill {
     override val id = "walk_interior_vision"
     override val description =
@@ -39,6 +45,12 @@ class WalkInteriorVision(
         var stepsTaken = 0
         var lastBlocked: InteriorMove? = null
         var consecutiveStuck = 0
+        // 2026-05-10 cont 5: rolling buffer of recent decisions + outcomes.
+        // Without this the model picks LEFT 8 times in a row at the same
+        // smPlayer because each call is stateless (lastBlocked is only the
+        // most-recent failed cardinal). Per `feedback_locate_party_first`
+        // and the cont-4 sm(2,14) deadlock evidence.
+        val recentMoves = ArrayDeque<String>()
         try {
         // V3.2: when navigator says STUCK on step 0 with no movement evidence, the
         // skill should not yet trust it. Default to SOUTH (FF1 castle/town entries
@@ -70,6 +82,16 @@ class WalkInteriorVision(
 
             val frame = toolset.getState().frame
             val shotB64 = toolset.getScreen().base64
+            // 2026-05-09 cont 4: per-iter PNG for offline diagnosis. Without
+            // these, a 60-step vision drift leaves zero visual evidence of
+            // what the model saw or whether the party moved tile-to-tile.
+            // Per `feedback_per_iter_screenshots.md`.
+            try {
+                val mfPre = ramPre["mapflags"] ?: 0
+                val fn = "/tmp/spec5-vision-exit-iter-%02d-sm%d_%d-mf%d.png".format(
+                    stepsTaken, partyXPre, partyYPre, mfPre)
+                java.io.File(fn).writeBytes(java.util.Base64.getDecoder().decode(shotB64))
+            } catch (_: Throwable) { /* dev noise */ }
             // V5.11: compute frontier hint when memory + mapSession are available.
             var frontierHint: InteriorMove? = null
             var unvisitedReachable = 0
@@ -87,10 +109,20 @@ class WalkInteriorVision(
                     unvisitedReachable = 1
                 }
             }
+            val extendedHint: String? = run {
+                val parts = mutableListOf<String>()
+                if (!historyHint.isNullOrBlank()) parts += historyHint
+                if (recentMoves.isNotEmpty()) {
+                    parts += "RECENT MOVES (most recent last):\n" +
+                        recentMoves.joinToString("\n")
+                }
+                parts.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
+            }
             val dir = navigator.nextDirection(
                 shotB64, frame, lastBlocked,
                 frontierHint = frontierHint,
                 unvisitedReachable = unvisitedReachable,
+                historyHint = extendedHint,
             )
             toolCallLog?.append("walkInteriorVision.dir",
                 "step=$stepsTaken dir=${dir.name}" +
@@ -140,6 +172,11 @@ class WalkInteriorVision(
                     "moved=$moved transitioned=$transitioned")
 
             lastBlocked = if (!moved && !transitioned) effectiveDir else null
+            recentMoves.addLast("step=$stepsTaken dir=${effectiveDir.name} " +
+                "smPre=(${ramPre["smPlayerX"]},${ramPre["smPlayerY"]}) " +
+                "smPost=(${ramPost["smPlayerX"]},${ramPost["smPlayerY"]}) " +
+                "moved=$moved")
+            while (recentMoves.size > 8) recentMoves.removeFirst()
             if (transitioned) {
                 // V5.9: record exit-confirmed at the pre-step tile + direction.
                 if (mapIdPre >= 0) {

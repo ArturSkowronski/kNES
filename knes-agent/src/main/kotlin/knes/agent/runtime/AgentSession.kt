@@ -8,6 +8,7 @@ import knes.agent.skills.BuyAtShop
 import knes.agent.skills.EquipWeapon
 import knes.agent.skills.ExitInterior
 import knes.agent.skills.GrindLoop
+import knes.agent.skills.SkillResult
 import knes.agent.skills.WalkOverworldTo
 import knes.agent.perception.FfPhase
 import knes.agent.perception.FogOfWar
@@ -85,6 +86,15 @@ class AgentSession(
      * without modifying the production goal of reaching Garland.
      */
     private val onTurnEnd: ((FfPhase, Map<String, Int>) -> Outcome?)? = null,
+    /**
+     * 2026-05-09 cont 3: persistent action notebook. Records significant agent
+     * actions (boot walk-in, BuyAtShop iters, exit attempts) and serializes
+     * alongside savestate dumps as `*.actions.json`. On savestate-load with a
+     * sister file present, the loaded scratchpad is the agent's "memory of how
+     * it got here" — usable for reverse-replay or LLM prompt context.
+     * Defaults to a fresh per-session scratchpad when no prior history exists.
+     */
+    private val scratchpad: AgentScratchpad = AgentScratchpad.newSession(),
 ) {
     private val resolvedRunDir = runDir
     private val trace = Trace(resolvedRunDir)
@@ -255,7 +265,12 @@ class AgentSession(
         // (FIGHT-normal random encounter). Require N consecutive observations
         // and require phase is NOT Battle/PostBattle (those resolve themselves).
         var consecutiveTrapObs = 0
-        val TRAP_CONFIRM_THRESHOLD = 3
+        // 2026-05-09 cont 3: bumped 3→10. Coneria south exit lands at world
+        // (147,155) on a peninsula gate tile; the adjacent overworld tile
+        // walks back into town (mapflags=1), looking like UnknownMapTrap.
+        // GrindLoop has adaptive anchor-shift (3 NoEncounter → shift +2 E -4 N
+        // toward bridge) but needs more breathing room than 3 obs to fire.
+        val TRAP_CONFIRM_THRESHOLD = 10
 
         try {
             while (true) {
@@ -378,13 +393,24 @@ class AgentSession(
                             // for 50+ grind cycles without ever triggering a battle.
                             // Larger corridor reaches into the encounter-bearing
                             // grass to the north of the safe zone.
+                            // 2026-05-09 cont 3: corridor 6→2. With anchor
+                            // captured at (145,155) post-Coneria-exit, radius=6
+                            // walks party UP to y=149 — passes through Coneria
+                            // CASTLE entry at (145,152) = warps into mapId=8.
+                            // Radius=2 keeps corridor at y=153-157 (safe grass
+                            // between Coneria town south and castle north).
+                            // maxSteps 12→24 to give encounter rate more rolls
+                            // (FF1 is ~10% per step, 24 steps ≈ 92% chance).
                             val res = GrindLoop(toolset).invoke(mapOf(
                                 "anchorX" to ax.toString(),
                                 "anchorY" to ay.toString(),
-                                "corridorRadius" to "6",
-                                "maxStepsWithoutEncounter" to "12",
+                                "corridorRadius" to "2",
+                                "maxStepsWithoutEncounter" to "24",
                             ))
                             println("[strategy:grind] ok=${res.ok} ${res.message.take(120)}")
+                            trace.record(TraceEvent(turn = 0, role = "system", phase = phase.toString(),
+                                note = "strategy_grind_result: ok=${res.ok} anchor=($ax,$ay) " +
+                                    "msg=${res.message.take(160)}"))
                             // V5.36.2: adaptive anchor. Validation run 3 evidence:
                             // spawn area (146,158) + corridor radius 6 still landed
                             // entirely in the Coneria peninsula no-encounter pocket.
@@ -407,6 +433,9 @@ class AgentSession(
                                     grindNoProgress = 0
                                     println("[strategy:grind] adaptive shift #${grindAnchorShifts}: " +
                                         "anchor ($oax,$oay) -> ($nax,$nay)")
+                                    trace.record(TraceEvent(turn = 0, role = "system", phase = phase.toString(),
+                                        note = "strategy_grind_anchor_shift: #$grindAnchorShifts " +
+                                            "($oax,$oay) -> ($nax,$nay)"))
                                 }
                             } else {
                                 grindNoProgress = 0
@@ -649,6 +678,19 @@ class AgentSession(
         )
         val pre = phase.run()
         if (pre.skipped || pre.reason == "no_town_entry") return
+
+        // Scratchpad: mark boot phase start. The kind/summary tags here are
+        // significant — `reverseTrajectoryFromTownEntry()` keys off "town_entry"
+        // to slice the cardinal-tap log when computing exit reverse.
+        run {
+            val ram = toolset.getState().ram
+            scratchpad.record(kind = "phase",
+                summary = "boot_phase_start: town_entry pending",
+                smPre = (ram["smPlayerX"] ?: 0) to (ram["smPlayerY"] ?: 0),
+                mapflagsPost = ram["mapflags"] ?: 0,
+                note = "savestateLoaded=${!System.getenv("KNES_FF1_LOAD_SAVESTATE").isNullOrBlank()} " +
+                    "world=(${ram["worldX"]},${ram["worldY"]}) mapId=${ram["currentMapId"]}")
+        }
 
         // Full orchestration requires vision + mapSession + viewportSource (all optional
         // constructor params — fall through if any missing so existing tests keep working).
@@ -1061,6 +1103,19 @@ class AgentSession(
                 }
                 actionLog.addLast(ActionLogEntry(iter, advice.action, beforeXY, afterX to afterY))
                 while (actionLog.size > actionLogMaxSize) actionLog.removeFirst()
+                // 2026-05-09 cont 3: record cardinal taps in scratchpad so the
+                // walk-in trajectory persists alongside the savestate. The
+                // ExitTownEmpirical skill (and any future reverse-replay) can
+                // mine this for known-walkable transitions.
+                if (advice.action in setOf("Up", "Down", "Left", "Right")) {
+                    scratchpad.record(kind = "tap",
+                        summary = "boot_walk_in: ${advice.action}",
+                        dir = advice.action.uppercase(),
+                        smPre = beforeXY,
+                        smPost = afterX to afterY,
+                        mapflagsPost = afterRamRead["mapflags"] ?: 0,
+                        note = if (regime == "TOWN_OVERLAY") "town_overlay" else regime)
+                }
                 // Minimap update: tag this direction as blocked-from-this-tile
                 // when the action was a cardinal that produced no movement and
                 // we stayed in the same map regime (so the block is geometric,
@@ -1324,6 +1379,39 @@ class AgentSession(
         }
         trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
             note = "boot_purchase_advisor_done: bought=$charsBought of needs=$charsNeeding"))
+        run {
+            val ram = toolset.getState().ram
+            scratchpad.record(kind = "phase",
+                summary = "shop_reached: buy_advisor_done bought=$charsBought",
+                smPre = (ram["smPlayerX"] ?: 0) to (ram["smPlayerY"] ?: 0),
+                mapflagsPost = ram["mapflags"] ?: 0)
+        }
+
+        // 2026-05-09 cont 3: dump savestate post-buy so subsequent dev runs can
+        // skip the ~5-min buy advisor and iterate on exit+grind directly. Mirror
+        // of the spec5-shop-entered.savestate pattern above. Wrapped in try/catch
+        // — failure to dump is dev-tool noise, not a session-blocking error.
+        try {
+            val bytes = toolset.session.saveState()
+            val ssFile = java.io.File("/tmp/spec5-post-buy.savestate")
+            ssFile.writeBytes(bytes)
+            // Coding-agent-style scratchpad sister file. Captures the action log
+            // up to this savestate so subsequent runs can reason about "where
+            // we came from" without burning an LLM call to figure it out.
+            val padFile = AgentScratchpad.sisterPathFor(ssFile)
+            scratchpad.record(kind = "summary",
+                summary = "post_buy_savestate_dumped",
+                note = "bought=$charsBought spent=${initialGold - StrategyContext.totalGold(toolset.getState().ram)}G")
+            scratchpad.save(padFile)
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_post_buy_savestate_dumped: bytes=${bytes.size} " +
+                       "path=${ssFile.absolutePath} sister=${padFile.absolutePath} " +
+                       "scratchpad_entries=${scratchpad.all().size} " +
+                       "(set KNES_FF1_LOAD_SAVESTATE to load and skip buy)"))
+        } catch (e: Throwable) {
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_post_buy_savestate_dump_failed: ${e.message}"))
+        }
 
         // Legacy stateful-batch retry path — only used if advisor served zero
         // chars (e.g., advisor immediately gave up). Kept as a safety net.
@@ -1375,27 +1463,130 @@ class AgentSession(
             roundIdx++
         }
 
-        // 5. Exit shop interior; equip on overworld.
-        ExitInterior(toolset, outfitMapSession, fog).invoke(emptyMap())
+        // 5. Exit shop + town to overworld via vision-LLM (Phase 3).
+        // Per spec 2026-05-09-coneria-pipeline: vision is the sole hot-path
+        // exit. ExitTownEmpirical / tree-detour stay reachable only when the
+        // navigator is unwired (offline tests).
+        repeat(8) {
+            toolset.tap(button = "B", count = 1, pressFrames = 4, gapFrames = 8)
+            toolset.step(buttons = emptyList(), frames = 4)
+        }
 
-        val equipSkill = EquipWeapon(toolset)
-        val charsEquipped = mutableListOf<Int>()
-        for (charSlot in 1..4) {
-            val ram = toolset.getState().ram
-            val ownedSlot = (0..3).firstOrNull {
-                StrategyContext.weaponId(StrategyContext.weaponSlot(ram, charSlot, it)) != 0
-            } ?: continue
-            if (StrategyContext.isEquipped(StrategyContext.weaponSlot(ram, charSlot, ownedSlot))) {
-                charsEquipped += charSlot
-                continue
-            }
-            val r = equipSkill.invoke(mapOf(
-                "charSlot" to charSlot.toString(),
-                "weaponSlot" to ownedSlot.toString(),
-            ))
+        val exitResult = if (outfitNavigator != null) {
+            knes.agent.skills.WalkInteriorVision(
+                toolset, outfitNavigator, toolCallLog,
+                historyHint = scratchpad.renderForLLM(),
+            ).invoke(mapOf("maxSteps" to "60"))
+        } else {
+            // Offline fallback: empirical+tree-detour, then BFS.
+            val emp = knes.agent.skills.ExitTownEmpirical(toolset, scratchpad)
+                .invoke(mapOf("maxTaps" to "120"))
+            if (emp.ok) emp
+            else ExitInterior(toolset, outfitMapSession, fog).invoke(emptyMap())
+        }
+        val exitRam = exitResult.ramAfter
+        trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+            note = "boot_phase3_exit_result: ok=${exitResult.ok} msg=${exitResult.message} " +
+                "world=(${exitRam["worldX"] ?: "?"},${exitRam["worldY"] ?: "?"}) " +
+                "mapflags=${exitRam["mapflags"] ?: "?"} " +
+                "via=${if (outfitNavigator != null) "vision" else "fallback"}"))
+        scratchpad.record(kind = "exit",
+            summary = "phase3_exit_result: ok=${exitResult.ok}",
+            smPost = (exitRam["smPlayerX"] ?: 0) to (exitRam["smPlayerY"] ?: 0),
+            mapflagsPost = exitRam["mapflags"] ?: 0,
+            note = exitResult.message.take(120))
+
+        // Phase 4: grind anchor selection + GrindLoop with re-anchor.
+        // Only run when exit succeeded AND viewport source is an OverworldMap.
+        val owMap = outfitViewportSource as? knes.agent.perception.OverworldMap
+        if (exitResult.ok && owMap != null) {
+            // 120-frame settle so any mapflags.bit1 mid-scroll transient clears.
+            toolset.step(buttons = emptyList(), frames = 120)
+            val ramSettled = toolset.getState().ram
+            val partyXY = (ramSettled["worldX"] ?: 0) to (ramSettled["worldY"] ?: 0)
+            val triedAnchors = mutableSetOf<Pair<Int, Int>>()
+            val firstPick = GrindAnchorSelector.pickGrindAnchor(partyXY, owMap)
             trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
-                note = "boot_equip: char$charSlot slot=$ownedSlot result=${r.message}"))
-            if (r.ok) charsEquipped += charSlot
+                note = "boot_phase4_grind_anchor: anchor=(${firstPick.anchor.first}," +
+                    "${firstPick.anchor.second}) tileClass=${firstPick.tileClass} " +
+                    "fellBack=${firstPick.fellBack} party=(${partyXY.first},${partyXY.second})"))
+            var grindAttempt = 0
+            val maxAttempts = 3  // 1 initial + 2 re-anchors
+            var lastResult: knes.agent.skills.SkillResult? = null
+            var currentPick = firstPick
+            while (grindAttempt < maxAttempts) {
+                triedAnchors += currentPick.anchor
+                val (ax, ay) = currentPick.anchor
+                lastResult = knes.agent.skills.GrindLoop(toolset).invoke(mapOf(
+                    "anchorX" to ax.toString(),
+                    "anchorY" to ay.toString(),
+                    "corridorRadius" to "3",
+                    "maxStepsWithoutEncounter" to "12",
+                ))
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_phase4_grind_result: attempt=${grindAttempt + 1}/$maxAttempts " +
+                        "anchor=($ax,$ay) outcome=${lastResult.message}"))
+                val msg = lastResult.message
+                val battle = msg.startsWith("EncounteredBattle")
+                if (battle) break
+                val noEnc = msg.startsWith("NoEncounter")
+                if (!noEnc) break  // WanderedOff / Blocked → don't re-anchor
+                grindAttempt++
+                if (grindAttempt >= maxAttempts) break
+                // Re-anchor: read current world coord and pick the next-best
+                // tile that we haven't tried yet. Loosen by widening radius.
+                val reRam = toolset.getState().ram
+                val reParty = (reRam["worldX"] ?: ax) to (reRam["worldY"] ?: ay)
+                val widerPicks = (1..3).asSequence().mapNotNull { r ->
+                    val p = GrindAnchorSelector.pickGrindAnchor(reParty, owMap, radius = r + 1)
+                    if (p.anchor in triedAnchors || p.fellBack) null else p
+                }
+                currentPick = widerPicks.firstOrNull() ?: break
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_phase4_grind_reanchor: attempt=${grindAttempt + 1} " +
+                        "newAnchor=(${currentPick.anchor.first},${currentPick.anchor.second}) " +
+                        "tileClass=${currentPick.tileClass}"))
+            }
+            val pipelineVictory = lastResult?.message?.startsWith("EncounteredBattle") == true
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_pipeline_end: victory=$pipelineVictory " +
+                    "lastPhase=${if (pipelineVictory) "phase4_battle_pending" else "phase4_grind"}"))
+        } else if (!exitResult.ok) {
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_pipeline_end: victory=false lastPhase=phase3_exit_failed"))
+        } else {
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_pipeline_end: victory=false lastPhase=phase4_skipped_no_overworld_map"))
+        }
+
+        // Per 2026-05-09 cont 2 handoff: skip equip by default. Chars can grind
+        // bare-handed (lower DPS but works); equip is a separate follow-up since
+        // EquipWeapon is a brittle deterministic state-machine that returned
+        // MenuStuck × 4 in Run B2-v3, costing ~240 A-taps before the strategic
+        // loop reached GRIND. Set KNES_FF1_BOOT_EQUIP=1 to re-enable.
+        val charsEquipped = mutableListOf<Int>()
+        if (System.getenv("KNES_FF1_BOOT_EQUIP") == "1") {
+            val equipSkill = EquipWeapon(toolset)
+            for (charSlot in 1..4) {
+                val ram = toolset.getState().ram
+                val ownedSlot = (0..3).firstOrNull {
+                    StrategyContext.weaponId(StrategyContext.weaponSlot(ram, charSlot, it)) != 0
+                } ?: continue
+                if (StrategyContext.isEquipped(StrategyContext.weaponSlot(ram, charSlot, ownedSlot))) {
+                    charsEquipped += charSlot
+                    continue
+                }
+                val r = equipSkill.invoke(mapOf(
+                    "charSlot" to charSlot.toString(),
+                    "weaponSlot" to ownedSlot.toString(),
+                ))
+                trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                    note = "boot_equip: char$charSlot slot=$ownedSlot result=${r.message}"))
+                if (r.ok) charsEquipped += charSlot
+            }
+        } else {
+            trace.record(TraceEvent(turn = 0, role = "system", phase = "BOOT",
+                note = "boot_outfit_equip_skipped: KNES_FF1_BOOT_EQUIP not set; bare-handed grind enabled"))
         }
 
         // 6. Summary.

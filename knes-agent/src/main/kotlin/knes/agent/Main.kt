@@ -17,6 +17,7 @@ import knes.agent.perception.AnthropicVisionOverworldNavigator
 import knes.agent.perception.AnthropicVisionPhaseClassifier
 import knes.agent.perception.RamObserver
 import java.io.File
+import knes.agent.runtime.AgentScratchpad
 import knes.agent.runtime.AgentSession
 import knes.agent.runtime.Budget
 import knes.agent.runtime.Outcome
@@ -40,6 +41,27 @@ fun main(args: Array<String>) {
     // navigation loop and go directly into the in-shop purchase advisor for
     // dev iteration on shop-side bugs without burning nav budget.
     val loadStatePath = System.getenv("KNES_FF1_LOAD_SAVESTATE")?.takeIf { it.isNotBlank() }
+
+    // 2026-05-09 cont 3: when a savestate is loaded, also try to load its
+    // sister `*.actions.json` (the agent's "where I came from" notebook).
+    // Falls back to a fresh empty scratchpad if the file is absent. The
+    // loaded notebook is injected into AgentSession so subsequent skills can
+    // read in-walk trajectory + summarize history for prompts.
+    val scratchpad: AgentScratchpad = run {
+        val loaded = loadStatePath?.let { p ->
+            try {
+                AgentScratchpad.loadSister(File(p))?.also {
+                    System.err.println("[main] loaded scratchpad from " +
+                        "${AgentScratchpad.sisterPathFor(File(p)).absolutePath} " +
+                        "(${it.all().size} entries)")
+                }
+            } catch (e: Throwable) {
+                System.err.println("[main] WARN: scratchpad load failed: ${e.message}; using fresh")
+                null
+            }
+        }
+        loaded ?: AgentScratchpad.newSession()
+    }
 
     val outcome: Outcome = runBlocking {
         AnthropicSession(key).use { anthropic ->
@@ -154,6 +176,7 @@ fun main(args: Array<String>) {
                 outfitMapSession = mapSession,
                 bridgeVision = visionBackend,
                 bridgeViewportSource = overworldMap,
+                scratchpad = scratchpad,
             ).run()
         }
     }

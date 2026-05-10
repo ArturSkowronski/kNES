@@ -66,6 +66,7 @@ interface VisionInteriorNavigator {
         entryDirection: InteriorMove? = null,
         frontierHint: InteriorMove? = null,
         unvisitedReachable: Int = 0,
+        historyHint: String? = null,
     ): InteriorMove
 }
 
@@ -83,7 +84,7 @@ interface VisionInteriorNavigator {
  */
 class AnthropicVisionInteriorNavigator(
     private val apiKey: String,
-    private val model: String = "claude-opus-4-5-20251101",
+    private val model: String = "claude-sonnet-4-6",
     private val client: HttpClient = HttpClient(CIO) {
         install(HttpTimeout) { requestTimeoutMillis = 30_000 }
     },
@@ -101,14 +102,15 @@ class AnthropicVisionInteriorNavigator(
         entryDirection: InteriorMove?,
         frontierHint: InteriorMove?,
         unvisitedReachable: Int,
+        historyHint: String?,
     ): InteriorMove {
         val key = "$frame|${hintLastBlocked?.name}|${entryDirection?.name}" +
-            "|${frontierHint?.name}|$unvisitedReachable"
+            "|${frontierHint?.name}|$unvisitedReachable|${historyHint?.hashCode()}"
         if (frame == cachedFrame && key == cachedKey && cachedMove != InteriorMove.UNCLEAR) {
             return cachedMove
         }
         val body = buildRequestBody(screenshotBase64, hintLastBlocked, entryDirection,
-            frontierHint, unvisitedReachable)
+            frontierHint, unvisitedReachable, historyHint)
         val resp = try {
             client.post(API_URL) {
                 header("x-api-key", apiKey)
@@ -137,9 +139,24 @@ class AnthropicVisionInteriorNavigator(
         entryDirection: InteriorMove?,
         frontierHint: InteriorMove?,
         unvisitedReachable: Int,
+        historyHint: String?,
     ): String {
         val userText = buildString {
             append("Pick the next direction for the party. Return JSON only.")
+            if (!historyHint.isNullOrBlank()) {
+                // 2026-05-09 cont 3: free-form context from agent scratchpad —
+                // typically a render of the walk-in trajectory ("you walked
+                // UP×9 LEFT×1 ... from town entry to the shop"). Use this to
+                // reason about the exit path; it's a HINT, not a deterministic
+                // replay — current screen + NPC positions take precedence.
+                append("\nCONTEXT (your own action history, use as reasoning hint, not literal replay):\n")
+                append(historyHint.trim())
+                append("\nThe REVERSE of the walk-in trajectory points toward the exit. ")
+                append("Use this to bias direction choice when the screen is ambiguous. ")
+                append("\nGRIND/ENCOUNTER zone after exit = solid GREEN grass tiles on the overworld ")
+                append("(NOT the gray stone Coneria walls, NOT the trees). Random battles only fire ")
+                append("on green grass tiles. After exit, the party should walk on green tiles to find encounters.")
+            }
             if (entryDirection != null) {
                 val opposite = when (entryDirection) {
                     InteriorMove.NORTH -> "S"
@@ -240,6 +257,21 @@ class AnthropicVisionInteriorNavigator(
                 "unvisited, treat covering the map as your TOP priority — even above seeking the exit. " +
                 "Pick the suggested explore direction (or any direction toward unvisited area) and " +
                 "return EXIT only when no unvisited tiles remain or the party is genuinely on the overworld. " +
+                "POST-SHOP TOWN EXIT (when the screen shows a town interior with shops/houses): " +
+                "after buying weapons your goal is to leave the town to the overworld. " +
+                "Walk SOUTH out of the shop building first (counter is north, door is south); " +
+                "then keep walking SOUTH along the dirt path between buildings until the camera " +
+                "scrolls off the town onto the overworld (terrain map: grass, trees, mountains, water). " +
+                "Building doorways on LEFT/RIGHT lead INTO other shops and trap you in a dialog — " +
+                "avoid them unless SOUTH is genuinely blocked. Trees in the town overlay block " +
+                "movement; trees on the overworld do NOT — they're walkable encounter terrain. " +
+                "USE RECENT MOVES (when listed in the user message): each entry shows the dir you " +
+                "picked plus smPre→smPost and moved=true|false. If the SAME direction repeats with " +
+                "moved=false 2+ times in a row, the party is blocked there — pick a PERPENDICULAR " +
+                "cardinal next (LEFT/RIGHT blocked → try DOWN or UP; DOWN blocked → try LEFT or RIGHT). " +
+                "If recent moves show party drifting WEST or NORTH without progress to overworld, " +
+                "force SOUTH or EAST. Treat RECENT MOVES as STRONGER evidence than what the still " +
+                "image suggests — the image cannot show that the last 5 cardinals were no-ops. " +
                 "Output ONLY JSON: {\"direction\":\"N|S|E|W|EXIT|STUCK\",\"reason\":\"<<=80 chars\"}."
     }
 }
