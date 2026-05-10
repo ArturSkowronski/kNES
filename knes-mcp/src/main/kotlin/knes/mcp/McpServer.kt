@@ -414,6 +414,51 @@ fun createMcpServer(): Server {
         }
     }
 
+    // load_session — read a KnesSave v1 JSON file and restore emulator bytes.
+    // Agent-derived fields are returned in the response payload but NOT applied
+    // here (the agent has its own restoration path).
+    server.addTool(
+        name = "load_session",
+        description = "Load a KnesSave v1 JSON file and restore emulator state. Agent context (intent, moves, decisions, landmarks, minimap) is returned in the response but not applied to any agent runtime.",
+        inputSchema = ToolSchema(
+            properties = buildJsonObject {
+                putJsonObject("path") {
+                    put("type", "string")
+                    put("description", "Absolute path to the .knes-save.json file to load")
+                }
+            },
+            required = listOf("path")
+        )
+    ) { request ->
+        val path = request.arguments?.get("path")?.jsonPrimitive?.content
+            ?: return@addTool CallToolResult(
+                content = listOf(TextContent("Missing required parameter: path")),
+                isError = true,
+            )
+        try {
+            val text = java.io.File(path).readText()
+            val save = knes.agent.tools.save.SaveFormatCodec.fromJson(text)
+            val bytes = knes.agent.tools.save.SaveFormatCodec.decodeEmulatorBytes(save)
+            val ok = session.loadState(bytes)
+            if (!ok) {
+                CallToolResult(
+                    content = listOf(TextContent("load_session failed: emulator rejected state bytes")),
+                    isError = true,
+                )
+            } else {
+                CallToolResult(content = listOf(TextContent(
+                    "load_session ok: rom=${save.rom} intent='${save.currentIntent}' " +
+                    "moves=${save.recentMoves.size} decisions=${save.decisionLog.size}"
+                )))
+            }
+        } catch (e: Exception) {
+            CallToolResult(
+                content = listOf(TextContent("load_session failed: ${e.message}")),
+                isError = true,
+            )
+        }
+    }
+
     return server
 }
 
