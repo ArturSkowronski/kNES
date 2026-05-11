@@ -358,6 +358,107 @@ fun createMcpServer(): Server {
         CallToolResult(content = listOf(TextContent(json.encodeToString(result))))
     }
 
+    // save_session — write KnesSave v1 JSON containing emulator bytes (base64)
+    // plus optional intent. Agent-derived fields (moves/decisions/landmarks/
+    // minimap) are empty in MCP-driven saves; the agent populates them on its
+    // own save path.
+    server.addTool(
+        name = "save_session",
+        description = "Save the current emulator state to a KnesSave v1 JSON file. Returns the path written.",
+        inputSchema = ToolSchema(
+            properties = buildJsonObject {
+                putJsonObject("path") {
+                    put("type", "string")
+                    put("description", "Absolute path for the .knes-save.json output file")
+                }
+                putJsonObject("intent") {
+                    put("type", "string")
+                    put("description", "Optional one-line description of the agent's current intent")
+                }
+                putJsonObject("rom") {
+                    put("type", "string")
+                    put("description", "Optional ROM name for sanity check on load (defaults to 'unknown.nes')")
+                }
+            },
+            required = listOf("path")
+        )
+    ) { request ->
+        val path = request.arguments?.get("path")?.jsonPrimitive?.content
+            ?: return@addTool CallToolResult(
+                content = listOf(TextContent("Missing required parameter: path")),
+                isError = true,
+            )
+        val intent = request.arguments?.get("intent")?.jsonPrimitive?.content ?: ""
+        val rom = request.arguments?.get("rom")?.jsonPrimitive?.content ?: "unknown.nes"
+        try {
+            val bytes = session.saveState()
+            val save = knes.agent.tools.save.SaveFormatCodec.encode(
+                emulatorStateBytes = bytes,
+                rom = rom,
+                intent = intent,
+                recentMoves = emptyList(),
+                decisionLog = emptyList(),
+                landmarks = knes.agent.tools.save.LandmarksSnapshot(),
+                visitedMinimap = knes.agent.tools.save.VisitedMinimap(bitsBase64 = ""),
+            )
+            val text = knes.agent.tools.save.SaveFormatCodec.toJson(save)
+            java.io.File(path).writeText(text)
+            CallToolResult(content = listOf(TextContent(
+                "save_session ok: wrote ${text.length} bytes to $path (rom=$rom, intent='$intent')"
+            )))
+        } catch (e: Exception) {
+            CallToolResult(
+                content = listOf(TextContent("save_session failed: ${e.message}")),
+                isError = true,
+            )
+        }
+    }
+
+    // load_session — read a KnesSave v1 JSON file and restore emulator bytes.
+    // Agent-derived fields are returned in the response payload but NOT applied
+    // here (the agent has its own restoration path).
+    server.addTool(
+        name = "load_session",
+        description = "Load a KnesSave v1 JSON file and restore emulator state. Agent context (intent, moves, decisions, landmarks, minimap) is returned in the response but not applied to any agent runtime.",
+        inputSchema = ToolSchema(
+            properties = buildJsonObject {
+                putJsonObject("path") {
+                    put("type", "string")
+                    put("description", "Absolute path to the .knes-save.json file to load")
+                }
+            },
+            required = listOf("path")
+        )
+    ) { request ->
+        val path = request.arguments?.get("path")?.jsonPrimitive?.content
+            ?: return@addTool CallToolResult(
+                content = listOf(TextContent("Missing required parameter: path")),
+                isError = true,
+            )
+        try {
+            val text = java.io.File(path).readText()
+            val save = knes.agent.tools.save.SaveFormatCodec.fromJson(text)
+            val bytes = knes.agent.tools.save.SaveFormatCodec.decodeEmulatorBytes(save)
+            val ok = session.loadState(bytes)
+            if (!ok) {
+                CallToolResult(
+                    content = listOf(TextContent("load_session failed: emulator rejected state bytes")),
+                    isError = true,
+                )
+            } else {
+                CallToolResult(content = listOf(TextContent(
+                    "load_session ok: rom=${save.rom} intent='${save.currentIntent}' " +
+                    "moves=${save.recentMoves.size} decisions=${save.decisionLog.size}"
+                )))
+            }
+        } catch (e: Exception) {
+            CallToolResult(
+                content = listOf(TextContent("load_session failed: ${e.message}")),
+                isError = true,
+            )
+        }
+    }
+
     return server
 }
 
