@@ -95,6 +95,18 @@ class DefaultToolSurface(
     }
 
     override suspend fun battleFightAll(): ToolOutcome {
+        // Gate on Phase.Battle. The ff1.battle_fight_all profile action
+        // returns ok=true with "Battle complete in 0 rounds" when no battle
+        // is in progress (it just confirms the post-battle screen check
+        // passed trivially). Smoke 1 evidence: Sonnet picked this 1484×
+        // in a row in Town because it was the only tool returning ok, and
+        // the watchdog never tripped (skillProgress=true reset the counter).
+        // Rejecting here forces real failure to surface so the Advisor can
+        // replan toward the actual buy/walk flow.
+        val phase = phaseProvider()
+        if (phase != Phase.Battle) {
+            return ToolOutcome.Reject("battleFightAll only valid in Phase.Battle (current: $phase)")
+        }
         val r = toolset.executeAction(profileId = "ff1", actionId = "battle_fight_all")
         return if (r.ok) ToolOutcome.Ok(r.message, r.data) else ToolOutcome.Fail(r.message)
     }
