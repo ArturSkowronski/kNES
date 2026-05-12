@@ -91,6 +91,13 @@ fun main(args: Array<String>) {
                 // Phase 0: bootstrap
                 val firstTurn = memory.campaign.lastTurn + 1
                 if (cfg.fresh) {
+                    // Pre-cartographer: deterministically press through title → party creation → overworld.
+                    // Cartographer needs a party sprite on-screen to do locate-party-first vision.
+                    System.err.println("[v2.main] pressStartUntilOverworld …")
+                    val bootResult = knes.agent.skills.PressStartUntilOverworld(toolset)
+                        .invoke(mapOf("maxAttempts" to "60"))
+                    System.err.println("[v2.main] boot → ${bootResult.message}")
+                    require(bootResult.ok) { "PressStartUntilOverworld failed: ${bootResult.message}" }
                     cartographer.exploreInitialOverworld()
                     snapshotDumper.dump(0)
                     val snap0 = toolset.getScreen().base64
