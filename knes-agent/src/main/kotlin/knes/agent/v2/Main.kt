@@ -19,6 +19,7 @@ import knes.agent.v2.agents.ReviewerAgent
 import knes.agent.v2.llm.GeminiPro31Client
 import knes.agent.v2.llm.HaikuClient
 import knes.agent.v2.llm.SonnetClient
+import knes.agent.v2.runtime.Resumer
 import knes.agent.v2.runtime.SnapshotDumper
 import knes.agent.v2.runtime.V2Memory
 import knes.agent.v2.runtime.V2RunDirectory
@@ -57,6 +58,7 @@ fun main(args: Array<String>) {
 
                 // v2 runtime
                 val memory = V2Memory(run)
+                if (cfg.resumeDir != null) Resumer(session, run, memory).resume()
                 val snapshotDumper = SnapshotDumper(toolset, run)
                 val watchdog = Watchdog()
 
