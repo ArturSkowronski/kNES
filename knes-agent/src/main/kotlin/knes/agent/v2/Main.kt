@@ -67,17 +67,16 @@ fun main(args: Array<String>) {
                 val exitInterior = ExitInterior(toolset, mapSession, fog,
                     knes.agent.pathfinding.InteriorPathfinder(memory = knes.agent.perception.InteriorMemory(), mapIdProvider = { toolset.getState().ram["currentMapId"] ?: -1 }),
                     knes.agent.runtime.ToolCallLog(), knes.agent.perception.InteriorMemory())
-                // BuyAtShop / EquipWeapon / RestAtInn full constructor args mirror v1 Main wiring — for first
-                // cut leave as null guards; ToolSurface placeholder paths still return Reject. Promote to
-                // real wiring in D3 after Smoke 0 confirms baseline.
+                // Macros: v1 skills (BuyAtShop V5.45 vision-advisor, EquipWeapon, RestAtInn).
+                // EquipWeapon has a known MenuStuck bug — see spec section 13.
                 val tools = DefaultToolSurface(
                     toolset = toolset,
                     phaseProvider = { knes.agent.v2.runtime.Phase.fromRam(toolset.getState().ram) },
                     walkOverworld = walkOverworld,
                     exitInterior = exitInterior,
-                    buyAtShopSkill = TODO("wire in D3"),
-                    equipWeaponSkill = TODO("wire in D3"),
-                    restAtInnSkill = TODO("wire in D3"),
+                    buyAtShopSkill = BuyAtShop(toolset, landmarks),
+                    equipWeaponSkill = EquipWeapon(toolset),
+                    restAtInnSkill = RestAtInn(toolset),
                 )
 
                 // Agents
