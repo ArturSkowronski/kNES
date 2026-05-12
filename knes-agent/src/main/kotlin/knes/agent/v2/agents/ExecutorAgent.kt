@@ -70,6 +70,7 @@ class ExecutorAgent(
     }
 
     private suspend fun dispatch(tool: String, args: Map<String, String>): ToolOutcome = when (tool) {
+        "boot"            -> tools.boot()
         "walkTo"          -> tools.walkTo(args.getValue("x").toInt(), args.getValue("y").toInt())
         "interactAt"      -> tools.interactAt(args.getValue("x").toInt(), args.getValue("y").toInt())
         "useMenu"         -> tools.useMenu(args.getValue("path"))

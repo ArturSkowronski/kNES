@@ -46,14 +46,29 @@ class AdvisorAgent(
         Campaign so far: ${memory.campaign.milestones.joinToString { "${it.id}=${it.status}" }}
         Recent plans: ${memory.campaign.plans.takeLast(3).joinToString("\n") { "T${it.turn}: ${it.summary}" }}
 
-        Output schema:
+        Output schema (STRICT — every step uses one of the seven tools below; intentArgs values are STRINGS):
         {"steps":[
-          {"index":0,"description":"...","intentTool":"walkTo|interactAt|useMenu|buyAtShop|equipWeapon|restAtInn|battleFightAll","intentArgs":{"x":"15","y":"22"}},
+          {"index":0,"description":"...","intentTool":"<tool>","intentArgs":{"<key>":"<value>"}},
           ...
         ]}
 
-        Available tools: walkTo(x,y), interactAt(x,y), useMenu(path), buyAtShop(items,charSlots),
-        equipWeapon(charSlot,weaponSlot), restAtInn(innMapId), battleFightAll().
+        TOOLS — pick exactly one per step, match arg keys precisely:
+          - boot                          intentArgs: {}                                         (title→party creation→overworld; use for the FIRST step of a fresh campaign)
+          - walkTo                        intentArgs: {"x":"<int>","y":"<int>"}                  (overworld OR indoor; phase auto-detected)
+          - interactAt                    intentArgs: {"x":"<int>","y":"<int>"}                  (walkTo then A — NPC/chest/door)
+          - useMenu                       intentArgs: {"path":"<menu-path>"}                     (FIELD menu only — see grammar below; NOT for title screen)
+          - buyAtShop                     intentArgs: {"items":"0,1,2,3","charSlots":"0,1,2,3"}  (comma-joined int lists, equal length)
+          - equipWeapon                   intentArgs: {"charSlot":"<0-3>","weaponSlot":"<0-3>"}
+          - restAtInn                     intentArgs: {"innMapId":"<int>"}
+          - battleFightAll                intentArgs: {}
+
+        useMenu path grammar (use ONLY these tokens — never raw labels like "NEW GAME" / "FIGHTER"):
+          main/<item|magic|equip|status|exit>[/char1|char2|char3|char4][/weapon|armor][/<0-3>]
+          shop/<buy|sell|exit>[/<0-7>][/char1|char2|char3|char4]
+        Example: main/equip/char1/weapon/0
+
+        For a FRESH campaign (Boot phase), step 0 MUST be {"intentTool":"boot","intentArgs":{}}.
+        Plans for Boot phase should NOT use useMenu — boot() handles the entire title→class-selection→overworld flow.
     """.trimIndent()
 
     private fun parsePlan(raw: String, milestone: String, turn: Int): Plan {

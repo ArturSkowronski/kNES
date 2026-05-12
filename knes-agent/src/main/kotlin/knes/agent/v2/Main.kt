@@ -13,6 +13,7 @@ import knes.agent.runtime.ToolCallLog
 import knes.agent.skills.BuyAtShop
 import knes.agent.skills.EquipWeapon
 import knes.agent.skills.ExitInterior
+import knes.agent.skills.PressStartUntilOverworld
 import knes.agent.skills.RestAtInn
 import knes.agent.skills.WalkOverworldTo
 import knes.agent.tools.EmulatorToolset
@@ -93,10 +94,12 @@ fun main(args: Array<String>) {
                 val buyAtShop = BuyAtShop(toolset, landmarks)
                 val equipWeapon = EquipWeapon(toolset)
                 val restAtInn = RestAtInn(toolset)
+                val pressStart = PressStartUntilOverworld(toolset)
 
                 val tools = DefaultToolSurface(
                     toolset = toolset,
                     phaseProvider = { Phase.fromRam(toolset.getState().ram) },
+                    pressStartUntilOverworld = pressStart,
                     walkOverworld = walkOverworld,
                     exitInterior = exitInterior,
                     buyAtShopSkill = buyAtShop,

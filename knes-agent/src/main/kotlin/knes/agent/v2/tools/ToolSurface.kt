@@ -3,6 +3,7 @@ package knes.agent.v2.tools
 import knes.agent.skills.BuyAtShop
 import knes.agent.skills.EquipWeapon
 import knes.agent.skills.ExitInterior
+import knes.agent.skills.PressStartUntilOverworld
 import knes.agent.skills.RestAtInn
 import knes.agent.skills.SkillResult
 import knes.agent.skills.WalkOverworldTo
@@ -16,6 +17,7 @@ sealed class ToolOutcome {
 }
 
 interface ToolSurface {
+    suspend fun boot(): ToolOutcome
     suspend fun walkTo(x: Int, y: Int): ToolOutcome
     suspend fun interactAt(x: Int, y: Int): ToolOutcome
     suspend fun useMenu(path: String): ToolOutcome
@@ -28,6 +30,7 @@ interface ToolSurface {
 class DefaultToolSurface(
     private val toolset: EmulatorToolset,
     private val phaseProvider: () -> Phase,
+    private val pressStartUntilOverworld: PressStartUntilOverworld,
     private val walkOverworld: WalkOverworldTo,
     private val exitInterior: ExitInterior,
     private val buyAtShopSkill: BuyAtShop,
@@ -35,6 +38,8 @@ class DefaultToolSurface(
     private val restAtInnSkill: RestAtInn,
     private val menuWalker: MenuWalker = MenuWalker(),
 ) : ToolSurface {
+
+    override suspend fun boot(): ToolOutcome = wrap(pressStartUntilOverworld.invoke(emptyMap()))
 
     override suspend fun walkTo(x: Int, y: Int): ToolOutcome = when (phaseProvider()) {
         Phase.Overworld -> wrap(walkOverworld.invoke(mapOf("targetX" to "$x", "targetY" to "$y", "maxSteps" to "32")))
