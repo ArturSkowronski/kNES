@@ -43,7 +43,9 @@ class DefaultToolSurface(
 
     override suspend fun walkTo(x: Int, y: Int): ToolOutcome = when (phaseProvider()) {
         Phase.Overworld -> wrap(walkOverworld.invoke(mapOf("targetX" to "$x", "targetY" to "$y", "maxSteps" to "32")))
+            .also { if (it is ToolOutcome.Ok) settleMapflagsTransient() }
         Phase.Indoors   -> wrap(exitInterior.invoke(mapOf("maxSteps" to "64")))
+            .also { if (it is ToolOutcome.Ok) settleMapflagsTransient() }
         // Town overlay (mapId=0, mapflags.bit0=1): no in-town pathfinder yet.
         // Returning Reject avoids the prior bug where Indoors-dispatch routed
         // here, calling exitInterior and bouncing the agent back to overworld
@@ -81,6 +83,25 @@ class DefaultToolSurface(
             return ToolOutcome.Reject("useMenu had no effect — menu/screen state unchanged (pre=post=$pre); path '$path' likely doesn't match current screen")
         }
         return ToolOutcome.Ok("menu walked: $path")
+    }
+
+    /**
+     * Wait for the mapflags bit1 transition transient to clear after a successful
+     * walk. Pattern from ExitTownEmpirical.kt:104: mapflags bit1 = "dialog/menu
+     * active in transition"; resolves within ~300 frames once the engine commits
+     * to the new map/overlay. Without this, Smoke 1 v3/v4/v5 fired buyAtShop
+     * immediately after walkTo while mapflags=2 (bit0=0, bit1=1) and BuyAtShop's
+     * standard-map check failed with "NotInShop: mapflags.bit0=0, mapId=0".
+     *
+     * Polls in 60-frame chunks up to ~5 seconds wallclock. Idempotent if bit1
+     * is already clear.
+     */
+    private suspend fun settleMapflagsTransient() {
+        repeat(5) {
+            val mf = toolset.getState().ram["mapflags"] ?: 0
+            if ((mf and 0x02) == 0) return
+            toolset.step(buttons = emptyList(), frames = 60)
+        }
     }
 
     private suspend fun snapshotMenuRam(): List<Int> {
