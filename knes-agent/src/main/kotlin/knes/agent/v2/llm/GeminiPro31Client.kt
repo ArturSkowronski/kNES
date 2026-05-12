@@ -2,6 +2,7 @@ package knes.agent.v2.llm
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -18,7 +19,9 @@ import kotlinx.serialization.json.jsonPrimitive
  * returns model text. Reuses HTTP wiring style from v1 GeminiVisionConsult.
  */
 class GeminiPro31Client(private val apiKey: String) : AutoCloseable {
-    private val http = HttpClient(CIO)
+    private val http = HttpClient(CIO) {
+        install(HttpTimeout) { requestTimeoutMillis = 120_000 }
+    }
     private val json = Json { ignoreUnknownKeys = true }
     private val model = "gemini-3.1-pro-preview"
 
