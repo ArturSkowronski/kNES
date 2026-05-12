@@ -118,11 +118,29 @@ class DefaultToolSurface(
         val haiku = this.haiku ?: return ToolOutcome.Reject(
             "townWalkVision: Haiku not wired (DefaultToolSurface haiku=null)"
         )
+        // Snapshot the map identity at start. If either changes mid-loop we've
+        // left the town overlay (typically by stepping onto a door tile that
+        // triggered a castle/inn/shop transition). Abort cleanly so Sonnet
+        // can replan instead of cardinal-tapping deeper into the unintended
+        // interior. Smoke 1 v11 evidence: townWalk pushed party north out
+        // Coneria's top exit into Coneria CASTLE (mapId=8) → throne room
+        // (mapId=24).
+        val startMapId = toolset.getState().ram["currentMapId"] ?: 0
+        val startMapflagsBit0 = (toolset.getState().ram["mapflags"] ?: 0) and 0x01
         var steps = 0
         var consecutiveStuck = 0
         val stuckLimit = 8
         while (steps < maxSteps) {
             val r = toolset.getState().ram
+            val curMapId = r["currentMapId"] ?: 0
+            val curMapflagsBit0 = (r["mapflags"] ?: 0) and 0x01
+            if (curMapId != startMapId || curMapflagsBit0 != startMapflagsBit0) {
+                return ToolOutcome.Reject(
+                    "townWalk: left town overlay mid-loop (startMid=$startMapId/mfBit0=$startMapflagsBit0 " +
+                    "→ now mid=$curMapId/mfBit0=$curMapflagsBit0); door tile triggered transition. " +
+                    "Caller should walk back to overworld and reapproach."
+                )
+            }
             val sx = r["smPlayerX"] ?: 0
             val sy = r["smPlayerY"] ?: 0
             val dx = tx - sx
