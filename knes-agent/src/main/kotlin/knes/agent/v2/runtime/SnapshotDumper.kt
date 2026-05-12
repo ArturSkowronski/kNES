@@ -16,4 +16,13 @@ class SnapshotDumper(
         Files.write(out, bytes)
         return run.root.relativize(out).toString()
     }
+
+    /** Pre-campaign Cartographer iterations get their own file prefix. */
+    fun dumpCartographer(iter: Int): String {
+        val b64 = toolset.getScreen().base64
+        val bytes = Base64.getDecoder().decode(b64)
+        val out = run.snapshotsDir.resolve("cart-%05d.png".format(iter))
+        Files.write(out, bytes)
+        return run.root.relativize(out).toString()
+    }
 }
