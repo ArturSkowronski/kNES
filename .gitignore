@@ -50,3 +50,6 @@ nbdist/
 !**/src/test/resources/*.nes
 knes-agent/runs/
 roms
+
+# isolated workspaces for parallel feature work
+.worktrees/
