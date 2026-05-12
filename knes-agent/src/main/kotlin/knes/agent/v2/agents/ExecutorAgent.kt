@@ -132,8 +132,14 @@ class ExecutorAgent(
             - restAtInn: args = {"innMapId":"<int>"}
             - boot / battleFightAll: args = {}
             - Pick battleFightAll ONLY if scene overlay = battle.
-            - If the scene shows party-near-shopkeeper (vp distance ≤ 1), pick buyAtShop.
-            - If shopkeeper visible but party far, pick walkTo / interactAt at world coords from RAM (worldX,worldY).
+            - Pick buyAtShop ONLY when ALL of:
+                (a) phase=Town (mapflags.bit0=1, mapId=0 from RAM digest),
+                (b) scene shows party-adjacent (viewport distance ≤ 1) to a shopkeeper sprite.
+              If (a) holds but (b) doesn't: pick walkTo with TOWN-LOCAL coords from the known
+              landmark (e.g. weapon shopkeeper local(11,10) in Coneria — see landmarks digest
+              in plan context).
+            - If phase=Overworld and party is at a town entry tile: pick walkTo(entry-world-coords)
+              to step INTO town first; do NOT call buyAtShop from overworld (it will Reject).
             - DO NOT explain. JSON only.
         """.trimIndent()
     }

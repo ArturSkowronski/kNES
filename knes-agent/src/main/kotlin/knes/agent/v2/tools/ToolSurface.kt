@@ -247,6 +247,19 @@ class DefaultToolSurface(
 
     override suspend fun buyAtShop(items: List<Int>, charSlots: List<Int>): ToolOutcome {
         require(items.size == charSlots.size) { "items.size must equal charSlots.size" }
+        // Phase pre-flight. BuyAtShop.invoke assumes party is facing the keeper
+        // inside a town overlay; firing it from Overworld returns
+        // "NotInShop: mapflags.bit0=0, mapId=0" (Smoke 1 v12 evidence: 17 such
+        // calls in one run from Sonnet+haiku planning buy without walking in
+        // first). Reject early with a clear hint so the next plan picks walkTo
+        // to the shopkeeper's local coords before re-trying buyAtShop.
+        val phase = phaseProvider()
+        if (phase != Phase.Town) {
+            return ToolOutcome.Reject(
+                "buyAtShop only valid in Phase.Town (current: $phase). " +
+                "Walk into town first via walkTo(<town-entry world coords>), then walkTo(<keeper local coords>), then buyAtShop."
+            )
+        }
         val results = mutableListOf<String>()
         for ((i, c) in items.zip(charSlots)) {
             val r = buyAtShopSkill.invoke(mapOf(
