@@ -1,9 +1,72 @@
 package knes.agent.v2.llm
 
-import knes.agent.llm.AnthropicSession
-
-class HaikuClient(private val anthropic: AnthropicSession) {
+class HaikuClient(private val http: AnthropicHttp) {
     val modelId = "claude-haiku-4-5-20251001"
-    // ReviewerAgent uses a placeholder LLM invocation for first cut; this
-    // holder pins the model id for the future wire-up.
+
+    /**
+     * Scene description for the Executor. Returns a compact text breakdown of
+     * what's visible in the viewport: party position, visible NPC sprites with
+     * kind+viewport coords, and any interactive overlays (dialog/menu/shop UI).
+     *
+     * Per spec §3: vision pre-processing belongs in Haiku, not the Executor's
+     * Sonnet call directly. Sonnet reads this text + RAM digest + plan and
+     * picks the next tool.
+     */
+    suspend fun describeScene(screenshotB64: String): String {
+        val systemPrompt = """
+            You are a vision pre-processor for an FF1 NES playing agent.
+            Read the screenshot and emit a TERSE scene digest in this exact format
+            (one line per fact, no prose):
+
+            party: vp(<x>,<y>) facing <N|S|E|W|?>
+            overlay: <none|field-menu|dialog|shop-menu|battle|post-battle|title|encounter-flash>
+            sprite: <kind> vp(<x>,<y>) [<short note>]
+            sprite: ...
+            exits-visible: <south|north|east|west|south,east|...|none>
+
+            Rules:
+            - Viewport tiles are 0..15 horizontally, 0..14 vertically. Party sprite is usually at vp(8,7) but verify.
+            - Sprite kinds: shopkeeper, innkeeper, king, generic-npc, chest, sign, exit-tile.
+            - For shopkeeper: include note with merchandise type if visible (weapon/armor/item/magic).
+            - If overlay is shop-menu/dialog/battle, omit sprite lines (they're covered by the UI).
+            - Be honest: if you can't tell, write "?" instead of guessing.
+            - Max 8 lines total. NO markdown, NO extra prose.
+        """.trimIndent()
+        return http.generate(
+            model = modelId,
+            systemPrompt = systemPrompt,
+            userText = "Describe what is on the screen now.",
+            imageB64 = screenshotB64,
+            maxTokens = 400,
+        ).trim()
+    }
+
+    /**
+     * One-shot cardinal direction picker for vision-driven walking. Used by
+     * the Town walkTo loop: ask Haiku which cardinal moves the party toward
+     * a described target visible (or believed to be near) on screen. Returns
+     * exactly one of: N, S, E, W, DONE, UNCLEAR.
+     */
+    suspend fun directionTo(screenshotB64: String, targetText: String): String {
+        val systemPrompt = """
+            You navigate an FF1 NES party. The party sprite is usually at viewport
+            tile (8,7). Given a screenshot and a target description, decide which
+            cardinal direction (N/S/E/W) the party should step next to get closer
+            to the target.
+
+            Rules:
+            - Output EXACTLY one token: N, S, E, W, DONE, or UNCLEAR. No prose.
+            - DONE if the party is already adjacent to (or on) the target.
+            - UNCLEAR if you cannot see the target on screen.
+            - Follow locate-party → locate-target → derive-direction. NO prior-knowledge
+              of FF1 geography.
+        """.trimIndent()
+        return http.generate(
+            model = modelId,
+            systemPrompt = systemPrompt,
+            userText = "Target: $targetText. Cardinal direction?",
+            imageB64 = screenshotB64,
+            maxTokens = 8,
+        ).trim().uppercase().take(8)
+    }
 }

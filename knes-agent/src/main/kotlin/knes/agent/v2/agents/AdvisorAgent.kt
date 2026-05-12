@@ -1,5 +1,7 @@
 package knes.agent.v2.agents
 
+import knes.agent.perception.LandmarkMemory
+import knes.agent.runtime.LandmarkContext
 import knes.agent.v2.llm.GeminiPro31Client
 import knes.agent.v2.runtime.Plan
 import knes.agent.v2.runtime.PlanEntry
@@ -16,6 +18,7 @@ class AdvisorAgent(
     private val gemini: GeminiPro31Client,
     private val memory: V2Memory,
     private val run: V2RunDirectory,
+    private val landmarks: LandmarkMemory? = null,
 ) {
     suspend fun plan(reason: String, screenshotB64: String, turn: Int) {
         val prompt = buildPrompt(reason)
@@ -32,6 +35,28 @@ class AdvisorAgent(
         System.err.println("[v2.advisor] turn=$turn reason=$reason steps=${plan.steps.size}")
     }
 
+    private fun landmarksDigest(): String {
+        val lm = landmarks ?: return ""
+        val rendered = LandmarkContext.render(lm) ?: return ""
+        // Append concrete guidance so the planner stops emitting raw walkTo(x,y)
+        // toward in-town NPCs (Smoke 0 T2-T7 trace): interior-coord landmarks
+        // (mapId>=0 with localX/localY) are only reachable via interactAt at
+        // those local coords once the party is in the matching map/town.
+        return """
+            $rendered
+
+            Landmark usage:
+            - Overworld landmarks (worldX,worldY) — valid targets for walkTo / interactAt while phase=Overworld.
+              walkTo args are overworld world coords (worldX,worldY space).
+            - Town-overlay landmarks (mapId=0, has localX/localY) — the party first crosses a TOWN_ENTRY
+              tile via walkTo on the overworld; once mapflags.bit0=1 (phase=Town), walkTo args become
+              TOWN-LOCAL coords (smPlayerX/smPlayerY space). E.g. walkTo(11,10) in Town walks the party
+              to local tile (11,10) using Haiku vision per step. Ends in Ok when party is adjacent.
+              After walking adjacent, call buyAtShop.
+            - True interior landmarks (mapId>0) — interactAt with local coords once inside that mapId.
+        """.trimIndent()
+    }
+
     private fun currentMilestone(): String =
         memory.campaign.milestones.firstOrNull { it.status == "in_progress" }?.id
             ?: memory.campaign.milestones.firstOrNull { it.status == "pending" }?.id
@@ -45,6 +70,8 @@ class AdvisorAgent(
         Trigger reason: $reason
         Campaign so far: ${memory.campaign.milestones.joinToString { "${it.id}=${it.status}" }}
         Recent plans: ${memory.campaign.plans.takeLast(3).joinToString("\n") { "T${it.turn}: ${it.summary}" }}
+
+        ${landmarksDigest()}
 
         Output schema (STRICT — every step uses one of the seven tools below; intentArgs values are STRINGS):
         {"steps":[

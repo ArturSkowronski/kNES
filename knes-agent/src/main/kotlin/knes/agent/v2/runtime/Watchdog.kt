@@ -36,7 +36,7 @@ class Watchdog(
     companion object {
         val DEFAULT_THRESHOLDS: Map<Phase, Int> = mapOf(
             Phase.Battle to 3, Phase.MenuStuck to 3,
-            Phase.Overworld to 5, Phase.Indoors to 5,
+            Phase.Overworld to 5, Phase.Town to 5, Phase.Indoors to 5,
             Phase.CartographerExplore to 10,
         )
     }

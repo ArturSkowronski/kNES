@@ -11,6 +11,9 @@ class V2MemoryTest : StringSpec({
         val run = V2RunDirectory(tmpRoot).also { it.ensure() }
 
         val m1 = V2Memory(run)
+        // First-open auto-seeds the coneria_buy_equip_grind milestones; clear them so
+        // this test exercises a clean append + reopen round-trip.
+        m1.campaign.milestones.clear()
         m1.campaign.milestones += Milestone(id = "boot", status = "done", turnStart = 1, turnEnd = 47)
         m1.campaign.plans += PlanEntry(turn = 48, by = "advisor", summary = "head to (15,22)", snapshot = "snapshots/turn-00048.png")
         m1.saveCampaign()
