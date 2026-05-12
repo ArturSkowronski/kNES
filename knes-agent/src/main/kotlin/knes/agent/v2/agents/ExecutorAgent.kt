@@ -33,10 +33,22 @@ class ExecutorAgent(
     private val memory: V2Memory,
 ) {
     private val recentOutcomes = ArrayDeque<String>(4)
+    private var lastPlanCreatedAt: Int = -1
 
     suspend fun act(screenshotB64: String, ramDigest: String): ExecutorDecision {
         val started = System.currentTimeMillis()
         val plan = memory.currentPlan
+        // Reset recent-outcomes history when the Advisor writes a new plan.
+        // Without this, stale Reject/Fail entries from the previous plan keep
+        // shouldUsePlanHint=false for the new plan's first steps, so even a
+        // fresh sensible plan never executes. Smoke 1 v4 evidence: 39
+        // consecutive Rejects across 8 replans because recentOutcomes carried
+        // forward.
+        val planCreatedAt = plan?.createdAtTurn ?: -1
+        if (planCreatedAt != lastPlanCreatedAt) {
+            recentOutcomes.clear()
+            lastPlanCreatedAt = planCreatedAt
+        }
         val step = plan?.steps?.getOrNull(plan.cursor)
 
         // Plan exhausted (cursor past last step) — signal Reject directly so the
@@ -79,10 +91,15 @@ class ExecutorAgent(
 
     private suspend fun askLlm(plan: Plan?, screenshotB64: String, ramDigest: String): Triple<String, Map<String, String>, String> {
         // TODO(C3-followup): plug a Koog tool registry so Sonnet can call tools natively.
-        // Until then: return the "(none)" sentinel so dispatch Rejects. The prior
-        // "fallback to plan tail" caused Sonnet to repeat the plan's last step
-        // forever once the recent-failure threshold was hit (Smoke 1 v3 evidence).
-        return Triple("(none)", emptyMap(), "askLlm not yet wired — Reject to trigger advisor replan")
+        // Until then: fall back to the plan's tail step so the emulator keeps
+        // running frames (a pure Reject path skips emulator interaction → the
+        // mapflags=2 transition transient never settles, Smoke 1 v4 evidence).
+        // Fix B (useMenu RAM-diff gate) and Gap #1 (battleFightAll phase gate)
+        // already catch the stealth-no-op variants of plan-tail; anything else
+        // genuinely runs frames and either advances state or Fails honestly.
+        val tail = plan?.steps?.lastOrNull()
+        if (tail?.intentTool != null) return Triple(tail.intentTool, tail.intentArgs ?: emptyMap(), "fallback to plan tail")
+        return Triple("useMenu", mapOf("path" to "main/exit"), "no plan + no LLM wired yet — best-effort menu exit")
     }
 
     private suspend fun dispatch(tool: String, args: Map<String, String>): ToolOutcome = when (tool) {
