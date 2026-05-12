@@ -44,6 +44,16 @@ class DefaultToolSurface(
     override suspend fun walkTo(x: Int, y: Int): ToolOutcome = when (phaseProvider()) {
         Phase.Overworld -> wrap(walkOverworld.invoke(mapOf("targetX" to "$x", "targetY" to "$y", "maxSteps" to "32")))
         Phase.Indoors   -> wrap(exitInterior.invoke(mapOf("maxSteps" to "64")))
+        // Town overlay (mapId=0, mapflags.bit0=1): no in-town pathfinder yet.
+        // Returning Reject avoids the prior bug where Indoors-dispatch routed
+        // here, calling exitInterior and bouncing the agent back to overworld
+        // before it could ever reach the shopkeeper (Smoke 0 T2-T5 trace).
+        // Caller must use interactAt at the landmark's local coords, or
+        // (once available) a townWalkTo skill.
+        Phase.Town      -> ToolOutcome.Reject(
+            "walkTo not implemented for Town overlay — use interactAt at landmark local coords " +
+            "(see prompt for known landmarks)"
+        )
         else -> ToolOutcome.Reject("walkTo not applicable in phase ${phaseProvider()}")
     }
 

@@ -108,7 +108,7 @@ fun main(args: Array<String>) {
                 )
 
                 // Agents
-                val advisor = AdvisorAgent(gemini, memory, run)
+                val advisor = AdvisorAgent(gemini, memory, run, landmarks)
                 val executor = ExecutorAgent(anthropic, SonnetClient(anthropic), tools, memory)
                 val reviewer = ReviewerAgent(HaikuClient(anthropic), memory)
                 val cartographer = CartographerAgent(
