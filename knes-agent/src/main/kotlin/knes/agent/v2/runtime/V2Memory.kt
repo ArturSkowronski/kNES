@@ -48,6 +48,14 @@ class V2Memory(val run: V2RunDirectory) {
             Campaign(
                 startedAt = OffsetDateTime.now().toString(),
                 scope = "coneria_buy_equip_grind",
+                milestones = mutableListOf(
+                    Milestone(id = "boot",          status = "in_progress"),
+                    Milestone(id = "enter_coneria", status = "pending"),
+                    Milestone(id = "buy_weapons",   status = "pending"),
+                    Milestone(id = "equip_weapons", status = "pending"),
+                    Milestone(id = "exit_coneria", status = "pending"),
+                    Milestone(id = "grind",         status = "pending"),
+                ),
             ).also { c ->
                 atomicWrite(run.campaignJson, json.encodeToString(Campaign.serializer(), c))
             }

@@ -174,6 +174,8 @@ fun main(args: Array<String>) {
                         )
                     )
 
+                    advanceMilestones(memory, phase, state.ram, decision, turn)
+
                     if (watchdog.stuckSignal(phase)) {
                         val diag = watchdog.diagnose(phase, recentExecutorOutcomes.toList())
                         System.err.println("[v2.main] stuck-signal — $diag")
@@ -196,4 +198,57 @@ fun main(args: Array<String>) {
             }
         }
     }
+}
+
+/**
+ * Advance campaign milestones based on observed phase + RAM signals. Idempotent:
+ * each milestone flips from "in_progress" to "done" exactly once, and the next
+ * pending milestone becomes "in_progress". Without this, `currentMilestone()`
+ * falls through to "boot" forever and the Advisor keeps emitting "Restart with
+ * default party" (Smoke 1 v2 evidence: 20 replans in 109 turns all saying that).
+ *
+ * Signals (deliberately coarse — refinement deferred until a milestone earns it):
+ *  - boot          → done when phase != Boot (party + worldX present)
+ *  - enter_coneria → done when phase == Town (mapflags.bit0=1, mapId=0)
+ *  - buy_weapons   → done when any char has a non-zero weapon byte in any slot
+ *  - equip_weapons → done when ≥1 char has an equipped weapon (bit7 set)
+ *  - exit_coneria  → done when phase == Overworld AFTER enter_coneria fired
+ *  - grind         → done when any char's xpLow > 0 (post-battle XP gained)
+ */
+private fun advanceMilestones(
+    memory: knes.agent.v2.runtime.V2Memory,
+    phase: knes.agent.v2.runtime.Phase,
+    ram: Map<String, Int>,
+    @Suppress("UNUSED_PARAMETER") decision: knes.agent.v2.agents.ExecutorDecision,
+    turn: Int,
+) {
+    val ms = memory.campaign.milestones
+    fun mark(id: String, predicate: () -> Boolean) {
+        val m = ms.firstOrNull { it.id == id } ?: return
+        if (m.status == "in_progress" && predicate()) {
+            m.status = "done"; m.turnEnd = turn
+            val next = ms.firstOrNull { it.status == "pending" }
+            if (next != null) { next.status = "in_progress"; next.turnStart = turn }
+            System.err.println("[v2.main] milestone $id done at T$turn; next=${next?.id ?: "(none)"}")
+        }
+    }
+    val anyWeaponHeld = (1..4).any { c -> (0..3).any { s ->
+        (ram["char${c}_weapon${s}"] ?: 0) != 0
+    } }
+    val anyWeaponEquipped = (1..4).any { c -> (0..3).any { s ->
+        ((ram["char${c}_weapon${s}"] ?: 0) and 0x80) != 0
+    } }
+    val anyXp = (1..4).any { c -> (ram["char${c}_xpLow"] ?: 0) > 0 || (ram["char${c}_xpHigh"] ?: 0) > 0 }
+
+    mark("boot")          { phase != knes.agent.v2.runtime.Phase.Boot }
+    mark("enter_coneria") { phase == knes.agent.v2.runtime.Phase.Town }
+    mark("buy_weapons")   { anyWeaponHeld }
+    mark("equip_weapons") { anyWeaponEquipped }
+    mark("exit_coneria")  {
+        val enterDone = ms.firstOrNull { it.id == "enter_coneria" }?.status == "done"
+        enterDone && phase == knes.agent.v2.runtime.Phase.Overworld
+    }
+    mark("grind")         { anyXp }
+
+    memory.saveCampaign()
 }
