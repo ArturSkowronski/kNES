@@ -23,7 +23,9 @@ class GeminiPro31Client(private val apiKey: String) : AutoCloseable {
         install(HttpTimeout) { requestTimeoutMillis = 120_000 }
     }
     private val json = Json { ignoreUnknownKeys = true }
-    private val model = "gemini-3.1-pro-preview"
+    // 2026-05-12: switched from gemini-3.1-pro-preview → gemini-2.5-pro after Smoke 0 timeouts.
+    // Preview model >2min latency on vision calls; 2.5 Pro is what v1 uses with 60s timeout reliably.
+    private val model = "gemini-2.5-pro"
 
     suspend fun generate(prompt: String, imageB64: String? = null): String {
         val parts = buildList<JsonObject> {
