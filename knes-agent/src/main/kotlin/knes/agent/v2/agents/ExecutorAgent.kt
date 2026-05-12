@@ -39,6 +39,22 @@ class ExecutorAgent(
         val plan = memory.currentPlan
         val step = plan?.steps?.getOrNull(plan.cursor)
 
+        // Plan exhausted (cursor past last step) — signal Reject directly so the
+        // watchdog ticks and the Advisor replans. The previous "fallback to
+        // plan tail" repeated the last step forever, masking progress: Smoke 1
+        // v3 spent 266/300 turns hammering useMenu(shop/exit) via this path.
+        if (plan != null && step == null) {
+            val outcome = ToolOutcome.Reject("plan exhausted at cursor=${plan.cursor}/${plan.steps.size} — awaiting advisor replan")
+            recentOutcomes.addLast(outcome.javaClass.simpleName)
+            if (recentOutcomes.size > 4) recentOutcomes.removeFirst()
+            return ExecutorDecision(
+                tool = "(none)", args = emptyMap(),
+                reasoning = "plan exhausted — Reject to trigger replan",
+                outcome = outcome,
+                ms = System.currentTimeMillis() - started,
+            )
+        }
+
         val (tool, args, reasoning) =
             if (shouldUsePlanHint(step)) {
                 Triple(step!!.intentTool!!, step.intentArgs ?: emptyMap(),
@@ -63,10 +79,10 @@ class ExecutorAgent(
 
     private suspend fun askLlm(plan: Plan?, screenshotB64: String, ramDigest: String): Triple<String, Map<String, String>, String> {
         // TODO(C3-followup): plug a Koog tool registry so Sonnet can call tools natively.
-        // For first cut, fall back to plan tail or safe no-op so the loop doesn't crash.
-        val tail = plan?.steps?.lastOrNull()
-        if (tail?.intentTool != null) return Triple(tail.intentTool, tail.intentArgs ?: emptyMap(), "fallback to plan tail")
-        return Triple("useMenu", mapOf("path" to "main/exit"), "no plan + no LLM wired yet — safe no-op")
+        // Until then: return the "(none)" sentinel so dispatch Rejects. The prior
+        // "fallback to plan tail" caused Sonnet to repeat the plan's last step
+        // forever once the recent-failure threshold was hit (Smoke 1 v3 evidence).
+        return Triple("(none)", emptyMap(), "askLlm not yet wired — Reject to trigger advisor replan")
     }
 
     private suspend fun dispatch(tool: String, args: Map<String, String>): ToolOutcome = when (tool) {

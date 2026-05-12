@@ -67,8 +67,30 @@ class DefaultToolSurface(
     override suspend fun useMenu(path: String): ToolOutcome {
         val taps = try { menuWalker.parse(path) }
                    catch (e: IllegalArgumentException) { return ToolOutcome.Reject(e.message ?: "bad path") }
+        // RAM-diff gate: capture menu/screen state before and after taps. If
+        // nothing changes, the path didn't match what was actually on screen
+        // (e.g. shop/exit when no shop dialog open) — return Reject so the
+        // watchdog can tick. Without this, MenuWalker happily emits button
+        // taps for any well-formed path; Smoke 1 v3 evidence: 266/300 turns
+        // looping useMenu(shop/exit) with screenState=menuCursor=menuHandX
+        // =menuHandY=0 throughout, every call returning ok.
+        val pre = snapshotMenuRam()
         for (t in taps) toolset.tap(button = t.button, count = t.count, pressFrames = 5, gapFrames = 12)
+        val post = snapshotMenuRam()
+        if (pre == post) {
+            return ToolOutcome.Reject("useMenu had no effect — menu/screen state unchanged (pre=post=$pre); path '$path' likely doesn't match current screen")
+        }
         return ToolOutcome.Ok("menu walked: $path")
+    }
+
+    private suspend fun snapshotMenuRam(): List<Int> {
+        val r = toolset.getState().ram
+        return listOf(
+            r["screenState"] ?: 0,
+            r["menuCursor"] ?: 0,
+            r["menuHandX"] ?: 0,
+            r["menuHandY"] ?: 0,
+        )
     }
 
     override suspend fun buyAtShop(items: List<Int>, charSlots: List<Int>): ToolOutcome {
