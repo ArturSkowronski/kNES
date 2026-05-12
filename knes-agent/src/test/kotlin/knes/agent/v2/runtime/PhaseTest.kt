@@ -28,4 +28,20 @@ class PhaseTest : StringSpec({
     "Boot: no party state → Boot" {
         Phase.fromRam(mapOf("currentMapId" to 0, "mapflags" to 0)) shouldBe Phase.Boot
     }
+
+    "Battle: screenState=0x68 → Battle (even with mapflags=0)" {
+        Phase.fromRam(mapOf(
+            "currentMapId" to 0, "mapflags" to 0,
+            "char1_hpLow" to 35, "worldX" to 149,
+            "screenState" to 0x68, "battleTurn" to 2, "enemyCount" to 5,
+        )) shouldBe Phase.Battle
+    }
+
+    "Battle: battleTurn>0 alone classifies as Battle" {
+        Phase.fromRam(mapOf(
+            "currentMapId" to 0, "mapflags" to 0,
+            "char1_hpLow" to 35, "worldX" to 149,
+            "battleTurn" to 1,
+        )) shouldBe Phase.Battle
+    }
 })
