@@ -57,9 +57,25 @@ class AdvisorAgent(
     """.trimIndent()
 
     private fun parsePlan(raw: String, milestone: String, turn: Int): Plan {
-        val jsonText = raw.substringAfter("{").let { "{$it" }.substringBeforeLast("}") + "}"
-        val parsed = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-            .decodeFromString(PlanWire.serializer(), jsonText)
+        // Gemini often wraps JSON in ```json ... ``` fences or includes preamble text.
+        // Robust extraction: strip fences, then take substring between first `{` and last `}`.
+        val stripped = raw
+            .replace(Regex("```(?:json)?\\s*", RegexOption.IGNORE_CASE), "")
+            .replace("```", "")
+        val firstBrace = stripped.indexOf('{')
+        val lastBrace = stripped.lastIndexOf('}')
+        if (firstBrace < 0 || lastBrace < firstBrace) {
+            System.err.println("[v2.advisor] no JSON braces in response (first 300 chars): ${raw.take(300)}")
+            throw IllegalStateException("Advisor: no JSON object in Gemini response")
+        }
+        val jsonText = stripped.substring(firstBrace, lastBrace + 1)
+        val parsed = try {
+            kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                .decodeFromString(PlanWire.serializer(), jsonText)
+        } catch (e: Exception) {
+            System.err.println("[v2.advisor] JSON parse failed; extracted=${jsonText.take(500)}")
+            throw e
+        }
         return Plan(
             createdAtTurn = turn,
             milestone = milestone,
