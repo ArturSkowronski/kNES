@@ -88,7 +88,86 @@ fun main(args: Array<String>) {
                     cfg.cartographerBudgetSeconds, cfg.cartographerMaxVisionCalls,
                 )
 
-                System.err.println("[v2.main] bootstrap complete — campaign loop in D2")
+                // Phase 0: bootstrap
+                val firstTurn = memory.campaign.lastTurn + 1
+                if (cfg.fresh) {
+                    cartographer.exploreInitialOverworld()
+                    snapshotDumper.dump(0)
+                    val snap0 = toolset.getScreen().base64
+                    advisor.plan(reason = "T0 fresh campaign", screenshotB64 = snap0, turn = firstTurn)
+                } else {
+                    val snap = toolset.getScreen().base64
+                    advisor.plan(reason = "resume context", screenshotB64 = snap, turn = firstTurn)
+                }
+
+                // Phase 1: campaign loop
+                val recentExecutorOutcomes = ArrayDeque<String>(4)
+                var turn = firstTurn
+                while (turn <= cfg.maxTurns && !memory.campaign.done) {
+                    val snap = toolset.getScreen().base64
+                    snapshotDumper.dump(turn)
+                    val state = toolset.getState()
+                    val phase = knes.agent.v2.runtime.Phase.fromRam(state.ram)
+                    val ramDigest = state.ram.entries.joinToString(",") { "${it.key}=${it.value}" }
+
+                    val decision = executor.act(screenshotB64 = snap, ramDigest = ramDigest)
+
+                    val outcomeLabel = decision.outcome.javaClass.simpleName
+                    recentExecutorOutcomes.addLast(outcomeLabel)
+                    if (recentExecutorOutcomes.size > 4) recentExecutorOutcomes.removeFirst()
+
+                    val ramHash = state.ram.values.fold(0) { acc, v -> 31 * acc + v }
+                    val skillProgress = decision.outcome is knes.agent.v2.tools.ToolOutcome.Ok
+                    watchdog.observe(phase, ramHash, skillProgress)
+
+                    memory.appendTurn(
+                        knes.agent.v2.runtime.TurnLog(
+                            turn = turn,
+                            frame = state.frame.toLong(),
+                            phase = phase.name,
+                            ram = state.ram,
+                            snapshot = "snapshots/turn-%05d.png".format(turn),
+                            executor = knes.agent.v2.runtime.ExecutorTrace(
+                                model = SonnetClient(anthropic).modelId,
+                                tool = decision.tool,
+                                args = decision.args,
+                                reasoningSummary = decision.reasoning,
+                                outcome = outcomeLabel.lowercase(),
+                                message = (decision.outcome as? knes.agent.v2.tools.ToolOutcome.Ok)?.message
+                                    ?: (decision.outcome as? knes.agent.v2.tools.ToolOutcome.Fail)?.message
+                                    ?: (decision.outcome as? knes.agent.v2.tools.ToolOutcome.Reject)?.reason,
+                                ms = decision.ms,
+                            ),
+                            watchdog = knes.agent.v2.runtime.WatchdogTrace(
+                                stuckCounter = watchdog.counter(),
+                                threshold = watchdog.threshold(phase),
+                            ),
+                        )
+                    )
+
+                    if (watchdog.stuckSignal(phase)) {
+                        System.err.println("[v2.main] stuck-signal — ${watchdog.diagnose(phase, recentExecutorOutcomes.toList())}")
+                        advisor.plan(
+                            reason = "stuck: ${watchdog.diagnose(phase, recentExecutorOutcomes.toList())}",
+                            screenshotB64 = snap, turn = turn,
+                        )
+                        watchdog.reset()
+                    }
+
+                    if (turn % 50 == 0) {
+                        reviewer.audit(turn)
+                    }
+
+                    if (turn % 100 == 0) {
+                        val saveBytes = session.saveState()
+                        java.nio.file.Files.write(run.savestate(turn), saveBytes)
+                        System.err.println("[v2.main] checkpoint saved at T$turn (${saveBytes.size} bytes)")
+                    }
+
+                    turn++
+                }
+
+                System.err.println("[v2.main] done. last_turn=${memory.campaign.lastTurn}")
             }
         }
     }
