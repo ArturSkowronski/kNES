@@ -120,7 +120,7 @@ class DefaultToolSurface(
         )
         var steps = 0
         var consecutiveStuck = 0
-        var lastSm = -1 to -1
+        val stuckLimit = 8
         while (steps < maxSteps) {
             val r = toolset.getState().ram
             val sx = r["smPlayerX"] ?: 0
@@ -138,35 +138,75 @@ class DefaultToolSurface(
             } catch (e: Exception) {
                 return ToolOutcome.Fail("townWalk: Haiku error after $steps steps: ${e.message?.take(80)}")
             }
-            val btn = mapCardinal(dir) ?: run {
-                // Haiku unsure — fallback to dominant-axis cardinal toward target
-                when {
-                    kotlin.math.abs(dx) >= kotlin.math.abs(dy) && dx != 0 -> if (dx > 0) "Right" else "Left"
-                    dy != 0 -> if (dy > 0) "Down" else "Up"
-                    else -> null
-                }
-            }
-            if (btn == null)
-                return ToolOutcome.Fail("townWalk: no direction (Haiku=$dir, dx=$dx dy=$dy) after $steps steps")
+            val primary = mapCardinal(dir) ?: dominantAxisCardinal(dx, dy)
+                ?: return ToolOutcome.Fail("townWalk: no direction (Haiku=$dir, dx=$dx dy=$dy) after $steps steps")
 
-            toolset.tap(button = btn, count = 1, pressFrames = 5, gapFrames = 12)
-            steps++
-
+            // Try primary; if blocked, try both perpendicular cardinals before
+            // counting as stuck. Coneria evidence (Smoke 1 v10): party reached
+            // sm=(15,18), Haiku kept picking blocked cardinal — single-direction
+            // retry hit the 4-stuck guard and gave up. Perpendicular fallback
+            // lets us route around walls/NPCs without a full BFS pathfinder.
+            val tried = tryCardinals(primary, dx, dy, sx, sy)
+            steps += tried.tapsUsed
             val r2 = toolset.getState().ram
             val sx2 = r2["smPlayerX"] ?: 0
             val sy2 = r2["smPlayerY"] ?: 0
             val moved = (sx2 != sx || sy2 != sy)
-            if (!moved && (sx2 to sy2) == lastSm) {
+            if (!moved) {
                 consecutiveStuck++
-                if (consecutiveStuck >= 4)
-                    return ToolOutcome.Fail("townWalk: stuck at sm=($sx,$sy) for 4 taps toward ($tx,$ty)")
+                if (consecutiveStuck >= stuckLimit)
+                    return ToolOutcome.Fail("townWalk: stuck at sm=($sx,$sy) for $stuckLimit rounds toward ($tx,$ty); tried=${tried.tried.joinToString(",")}")
             } else {
                 consecutiveStuck = 0
             }
-            lastSm = sx to sy
         }
         val r = toolset.getState().ram
         return ToolOutcome.Fail("townWalk: maxSteps=$maxSteps reached, sm=(${r["smPlayerX"]},${r["smPlayerY"]}) target=($tx,$ty)")
+    }
+
+    private data class CardinalTryResult(val tried: List<String>, val tapsUsed: Int)
+
+    /** Try primary, then perpendiculars, then opposite — first one that moves the party wins. */
+    private suspend fun tryCardinals(
+        primary: String, dx: Int, dy: Int, sx: Int, sy: Int,
+    ): CardinalTryResult {
+        // Build try order: primary first, then two perpendiculars (target-biased),
+        // then the opposite (last resort).
+        val perps = perpendicularsOf(primary, dx, dy)
+        val opp = oppositeOf(primary)
+        val order = listOfNotNull(primary, perps.first, perps.second, opp).distinct()
+        val tried = mutableListOf<String>()
+        var tapsUsed = 0
+        for (btn in order) {
+            toolset.tap(button = btn, count = 1, pressFrames = 5, gapFrames = 12)
+            tapsUsed++
+            tried += btn
+            val r = toolset.getState().ram
+            val nx = r["smPlayerX"] ?: 0
+            val ny = r["smPlayerY"] ?: 0
+            if (nx != sx || ny != sy) break
+        }
+        return CardinalTryResult(tried, tapsUsed)
+    }
+
+    private fun dominantAxisCardinal(dx: Int, dy: Int): String? = when {
+        kotlin.math.abs(dx) >= kotlin.math.abs(dy) && dx != 0 -> if (dx > 0) "Right" else "Left"
+        dy != 0 -> if (dy > 0) "Down" else "Up"
+        else -> null
+    }
+
+    private fun perpendicularsOf(primary: String, dx: Int, dy: Int): Pair<String, String> {
+        // For a vertical primary (Up/Down), perpendiculars are Left/Right — biased
+        // toward dx sign. Vice-versa for horizontal.
+        return when (primary) {
+            "Up", "Down" -> if (dx >= 0) "Right" to "Left" else "Left" to "Right"
+            "Left", "Right" -> if (dy >= 0) "Down" to "Up" else "Up" to "Down"
+            else -> "Up" to "Down"
+        }
+    }
+
+    private fun oppositeOf(primary: String): String = when (primary) {
+        "Up" -> "Down"; "Down" -> "Up"; "Left" -> "Right"; "Right" -> "Left"; else -> "Down"
     }
 
     private fun mapCardinal(dir: String): String? = when (dir.trim().uppercase().take(4)) {
