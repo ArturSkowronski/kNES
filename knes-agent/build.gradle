@@ -66,3 +66,14 @@ tasks.register('runExplorer', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     standardInput = System.in
 }
+
+tasks.register('runV2', JavaExec) {
+    group = 'application'
+    description = 'Run knes-agent v2 (PDF architecture)'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'knes.agent.v2.MainKt'
+    standardInput = System.in
+    if (project.hasProperty('appArgs')) {
+        args(project.property('appArgs').toString().split(' '))
+    }
+}
