@@ -5,7 +5,7 @@ class Watchdog(
     private val staticWhitelist: Set<Phase> = PHASE_STATIC_WHITELIST,
 ) {
     private var stuck = 0
-    private var lastRamHash: Int = 0
+    private var lastRamHash: Int? = null
 
     /**
      * @param phase  current Phase classification
@@ -14,7 +14,12 @@ class Watchdog(
      */
     fun observe(phase: Phase, ramHash: Int, skillProgress: Boolean) {
         if (phase in staticWhitelist) return
-        stuck = if (ramHash == lastRamHash && !skillProgress) stuck + 1 else 0
+        val ramChanged = lastRamHash != null && ramHash != lastRamHash
+        stuck = when {
+            skillProgress -> 0
+            ramChanged -> 0
+            else -> stuck + 1
+        }
         lastRamHash = ramHash
     }
 
