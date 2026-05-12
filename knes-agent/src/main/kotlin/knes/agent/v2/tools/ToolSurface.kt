@@ -1,6 +1,9 @@
 package knes.agent.v2.tools
 
+import knes.agent.skills.BuyAtShop
+import knes.agent.skills.EquipWeapon
 import knes.agent.skills.ExitInterior
+import knes.agent.skills.RestAtInn
 import knes.agent.skills.SkillResult
 import knes.agent.skills.WalkOverworldTo
 import knes.agent.tools.EmulatorToolset
@@ -27,6 +30,9 @@ class DefaultToolSurface(
     private val phaseProvider: () -> Phase,
     private val walkOverworld: WalkOverworldTo,
     private val exitInterior: ExitInterior,
+    private val buyAtShopSkill: BuyAtShop,
+    private val equipWeaponSkill: EquipWeapon,
+    private val restAtInnSkill: RestAtInn,
     private val menuWalker: MenuWalker = MenuWalker(),
 ) : ToolSurface {
 
@@ -51,16 +57,27 @@ class DefaultToolSurface(
     }
 
     override suspend fun buyAtShop(items: List<Int>, charSlots: List<Int>): ToolOutcome {
-        return ToolOutcome.Reject("buyAtShop wiring TBD until Main wires v1 BuyAtShop instance")
-            .also { System.err.println("[v2.tool] buyAtShop placeholder hit — wire in Phase C.") }
+        require(items.size == charSlots.size) { "items.size must equal charSlots.size" }
+        val results = mutableListOf<String>()
+        for ((i, c) in items.zip(charSlots)) {
+            val r = buyAtShopSkill.invoke(mapOf(
+                "itemSlot" to "$i", "forCharSlot" to "$c", "expectedKeeperKind" to "weapon",
+            ))
+            results += "i=$i c=$c → ${r.message}"
+            if (!r.ok) return ToolOutcome.Fail("buyAtShop aborted at i=$i c=$c: ${r.message}")
+        }
+        return ToolOutcome.Ok(results.joinToString("; "))
     }
 
     override suspend fun equipWeapon(charSlot: Int, weaponSlot: Int): ToolOutcome {
-        return ToolOutcome.Reject("equipWeapon wiring TBD until Main wires v1 instance")
+        val r = equipWeaponSkill.invoke(mapOf("charSlot" to "$charSlot", "weaponSlot" to "$weaponSlot"))
+        return if (r.ok) ToolOutcome.Ok(r.message) else ToolOutcome.Fail(r.message)
     }
 
-    override suspend fun restAtInn(innMapId: String): ToolOutcome =
-        ToolOutcome.Reject("restAtInn wiring TBD")
+    override suspend fun restAtInn(innMapId: String): ToolOutcome {
+        val r = restAtInnSkill.invoke(mapOf("innInteriorMapId" to innMapId))
+        return if (r.ok) ToolOutcome.Ok(r.message) else ToolOutcome.Fail(r.message)
+    }
 
     override suspend fun battleFightAll(): ToolOutcome {
         val r = toolset.executeAction(profileId = "ff1", actionId = "battle_fight_all")
