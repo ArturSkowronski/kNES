@@ -37,11 +37,16 @@ class PhaseTest : StringSpec({
         )) shouldBe Phase.Battle
     }
 
-    "Battle: battleTurn>0 alone classifies as Battle" {
+    "Post-battle: stale battleTurn/enemyCount without screenState=0x68 → not Battle" {
+        // After victory, screenState transitions away from 0x68 but
+        // battleTurn/enemyCount retain their last values. Phase must
+        // recover to Overworld (or whatever map+mapflags says) so the
+        // agent can continue the campaign loop — see Smoke 1 v7 sticky
+        // bug in 2026-05-12-v2-smoke handoff.
         Phase.fromRam(mapOf(
             "currentMapId" to 0, "mapflags" to 0,
             "char1_hpLow" to 35, "worldX" to 149,
-            "battleTurn" to 1,
-        )) shouldBe Phase.Battle
+            "screenState" to 0x60, "battleTurn" to 2, "enemyCount" to 5,
+        )) shouldBe Phase.Overworld
     }
 })

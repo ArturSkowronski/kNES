@@ -21,17 +21,15 @@ enum class Phase {
         fun fromRam(ram: Map<String, Int>): Phase {
             val mapId = ram["currentMapId"] ?: -1
             val mapflags = ram["mapflags"] ?: 0
-            // Battle detection: the ff1 RAM profile doesn't expose a
-            // canonical "battleState" byte. The reliable signals are
-            // screenState=0x68 (battle screen drawn) and battleTurn>0.
-            // Smoke 1 v6 evidence: 12 turns sat in battle (screenState=104,
-            // battleTurn=2, enemyCount=5) but Phase reported Overworld
-            // because the `battleState` lookup missed — blocking Gap #1's
-            // battleFightAll gate on a legitimate battle.
+            // Battle detection: screenState == 0x68 is the only signal that
+            // unambiguously means "battle screen is being drawn right now".
+            // battleTurn and enemyCount retain their last-battle values
+            // after victory (Smoke 1 v7 evidence: T86 had screenState=0x60
+            // post-battle but battleTurn=2 enemyCount=5 stale → my prior
+            // "OR battleTurn>0 OR enemyCount>0" check kept Phase=Battle
+            // sticky and blocked the agent from continuing post-victory).
             val screenState = ram["screenState"] ?: 0
-            val battleInProgress = screenState == 0x68 ||
-                (ram["battleTurn"] ?: 0) > 0 ||
-                (ram["enemyCount"] ?: 0) > 0
+            val battleInProgress = screenState == 0x68
             val menuState = ram["menuState"] ?: 0
             val party = (ram["char1_hpLow"] ?: 0) != 0 || (ram["worldX"] ?: 0) != 0
             return when {
