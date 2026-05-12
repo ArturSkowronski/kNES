@@ -40,4 +40,33 @@ class HaikuClient(private val http: AnthropicHttp) {
             maxTokens = 400,
         ).trim()
     }
+
+    /**
+     * One-shot cardinal direction picker for vision-driven walking. Used by
+     * the Town walkTo loop: ask Haiku which cardinal moves the party toward
+     * a described target visible (or believed to be near) on screen. Returns
+     * exactly one of: N, S, E, W, DONE, UNCLEAR.
+     */
+    suspend fun directionTo(screenshotB64: String, targetText: String): String {
+        val systemPrompt = """
+            You navigate an FF1 NES party. The party sprite is usually at viewport
+            tile (8,7). Given a screenshot and a target description, decide which
+            cardinal direction (N/S/E/W) the party should step next to get closer
+            to the target.
+
+            Rules:
+            - Output EXACTLY one token: N, S, E, W, DONE, or UNCLEAR. No prose.
+            - DONE if the party is already adjacent to (or on) the target.
+            - UNCLEAR if you cannot see the target on screen.
+            - Follow locate-party → locate-target → derive-direction. NO prior-knowledge
+              of FF1 geography.
+        """.trimIndent()
+        return http.generate(
+            model = modelId,
+            systemPrompt = systemPrompt,
+            userText = "Target: $targetText. Cardinal direction?",
+            imageB64 = screenshotB64,
+            maxTokens = 8,
+        ).trim().uppercase().take(8)
+    }
 }

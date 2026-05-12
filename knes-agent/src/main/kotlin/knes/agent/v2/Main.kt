@@ -98,6 +98,8 @@ fun main(args: Array<String>) {
                 val restAtInn = RestAtInn(toolset)
                 val pressStart = PressStartUntilOverworld(toolset)
 
+                val sonnet = SonnetClient(anthropicHttp)
+                val haiku = HaikuClient(anthropicHttp)
                 val tools = DefaultToolSurface(
                     toolset = toolset,
                     phaseProvider = { Phase.fromRam(toolset.getState().ram) },
@@ -107,11 +109,10 @@ fun main(args: Array<String>) {
                     buyAtShopSkill = buyAtShop,
                     equipWeaponSkill = equipWeapon,
                     restAtInnSkill = restAtInn,
+                    haiku = haiku,
                 )
 
                 // Agents
-                val sonnet = SonnetClient(anthropicHttp)
-                val haiku = HaikuClient(anthropicHttp)
                 val advisor = AdvisorAgent(gemini, memory, run, landmarks)
                 val executor = ExecutorAgent(anthropic, sonnet, haiku, tools, memory)
                 val reviewer = ReviewerAgent(haiku, memory)

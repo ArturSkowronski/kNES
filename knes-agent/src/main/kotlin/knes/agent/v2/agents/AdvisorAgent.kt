@@ -47,11 +47,12 @@ class AdvisorAgent(
 
             Landmark usage:
             - Overworld landmarks (worldX,worldY) — valid targets for walkTo / interactAt while phase=Overworld.
-            - Town-overlay landmarks (mapId=0, has localX/localY) — the party must first cross a TOWN_ENTRY
-              tile via walkTo on the overworld; once mapflags.bit0=1, the party is in town overlay. Town
-              walkTo is currently unimplemented (returns Reject); the next planned tool call once inside
-              town should be buyAtShop (which probes the shopkeeper directly) or interactAt at the local
-              coords if the party already happens to be adjacent.
+              walkTo args are overworld world coords (worldX,worldY space).
+            - Town-overlay landmarks (mapId=0, has localX/localY) — the party first crosses a TOWN_ENTRY
+              tile via walkTo on the overworld; once mapflags.bit0=1 (phase=Town), walkTo args become
+              TOWN-LOCAL coords (smPlayerX/smPlayerY space). E.g. walkTo(11,10) in Town walks the party
+              to local tile (11,10) using Haiku vision per step. Ends in Ok when party is adjacent.
+              After walking adjacent, call buyAtShop.
             - True interior landmarks (mapId>0) — interactAt with local coords once inside that mapId.
         """.trimIndent()
     }

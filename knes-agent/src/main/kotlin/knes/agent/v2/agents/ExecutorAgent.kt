@@ -123,7 +123,9 @@ class ExecutorAgent(
             {"tool":"<one of: boot|walkTo|interactAt|useMenu|buyAtShop|equipWeapon|restAtInn|battleFightAll>","args":{"<key>":"<value>"},"reasoning":"<≤80 chars why>"}
 
             Hard rules:
-            - For walkTo / interactAt: args = {"x":"<int>","y":"<int>"} (overworld coords)
+            - For walkTo / interactAt: args = {"x":"<int>","y":"<int>"}.
+              Coordinate space depends on phase: Overworld → world coords (worldX,worldY).
+              Town → town-local coords (smPlayerX,smPlayerY space — e.g. 11,10 for weapon shopkeeper).
             - useMenu: args = {"path":"<menu-path>"} — path grammar: main/<item|equip|magic|status|exit>[/charN][/weapon|armor][/0-3] or shop/<buy|sell|exit>[/N][/charN]
             - buyAtShop: args = {"items":"3,2,1,0","charSlots":"0,1,2,3"} (comma lists same length)
             - equipWeapon: args = {"charSlot":"<0-3>","weaponSlot":"<0-3>"}
