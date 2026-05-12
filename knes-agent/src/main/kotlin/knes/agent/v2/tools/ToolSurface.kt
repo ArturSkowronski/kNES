@@ -28,9 +28,11 @@ interface ToolSurface {
 class DefaultToolSurface(
     private val toolset: EmulatorToolset,
     private val phaseProvider: () -> Phase,
-    // injected v1 skill instances (constructed in Main wiring)
     private val walkOverworld: WalkOverworldTo,
     private val exitInterior: ExitInterior,
+    private val buyAtShopSkill: BuyAtShop,
+    private val equipWeaponSkill: EquipWeapon,
+    private val restAtInnSkill: RestAtInn,
     private val menuWalker: MenuWalker = MenuWalker(),
 ) : ToolSurface {
 
@@ -55,19 +57,30 @@ class DefaultToolSurface(
     }
 
     override suspend fun buyAtShop(items: List<Int>, charSlots: List<Int>): ToolOutcome {
-        // Delegate to v1 BuyAtShop V5.45 via invokeWithAdvisor entry point.
-        // Concrete signature wiring done in Main; here we use a thin lambda.
-        return ToolOutcome.Reject("buyAtShop wiring TBD until Main wires v1 BuyAtShop instance")
-            .also { System.err.println("[v2.tool] buyAtShop placeholder hit — wire in Phase C.") }
+        require(items.size == charSlots.size) { "items.size must equal charSlots.size" }
+        // v1 BuyAtShop V5.45 takes a single (itemSlot, forCharSlot) pair via invoke,
+        // OR a batch via invokeWithAdvisor. Iterate the simple way; macros own their
+        // own per-iter PNG dump and shop-dialog state.
+        val results = mutableListOf<String>()
+        for ((i, c) in items.zip(charSlots)) {
+            val r = buyAtShopSkill.invoke(mapOf(
+                "itemSlot" to "$i", "forCharSlot" to "$c", "expectedKeeperKind" to "weapon",
+            ))
+            results += "i=$i c=$c → ${r.message}"
+            if (!r.ok) return ToolOutcome.Fail("buyAtShop aborted at i=$i c=$c: ${r.message}")
+        }
+        return ToolOutcome.Ok(results.joinToString("; "))
     }
 
     override suspend fun equipWeapon(charSlot: Int, weaponSlot: Int): ToolOutcome {
-        // v1 EquipWeapon known-buggy (MenuStuck). Reuse anyway per spec section 13.
-        return ToolOutcome.Reject("equipWeapon wiring TBD until Main wires v1 instance")
+        val r = equipWeaponSkill.invoke(mapOf("charSlot" to "$charSlot", "weaponSlot" to "$weaponSlot"))
+        return if (r.ok) ToolOutcome.Ok(r.message) else ToolOutcome.Fail(r.message)
     }
 
-    override suspend fun restAtInn(innMapId: String): ToolOutcome =
-        ToolOutcome.Reject("restAtInn wiring TBD")
+    override suspend fun restAtInn(innMapId: String): ToolOutcome {
+        val r = restAtInnSkill.invoke(mapOf("innInteriorMapId" to innMapId))
+        return if (r.ok) ToolOutcome.Ok(r.message) else ToolOutcome.Fail(r.message)
+    }
 
     override suspend fun battleFightAll(): ToolOutcome {
         val r = toolset.executeAction(profileId = "ff1", actionId = "battle_fight_all")
