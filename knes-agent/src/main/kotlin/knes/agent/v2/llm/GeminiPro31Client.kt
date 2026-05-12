@@ -20,7 +20,7 @@ import kotlinx.serialization.json.jsonPrimitive
 class GeminiPro31Client(private val apiKey: String) : AutoCloseable {
     private val http = HttpClient(CIO)
     private val json = Json { ignoreUnknownKeys = true }
-    private val model = "gemini-3.1-pro"
+    private val model = "gemini-3.1-pro-preview"
 
     suspend fun generate(prompt: String, imageB64: String? = null): String {
         val parts = buildList<JsonObject> {
