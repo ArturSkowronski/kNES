@@ -2,6 +2,7 @@ package knes.agent.v2.llm
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -14,13 +15,25 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
- * Minimal Gemini 3.1 Pro client for v2 agents. Sends a text+image prompt,
- * returns model text. Reuses HTTP wiring style from v1 GeminiVisionConsult.
+ * Minimal Gemini client for v2 agents. Sends a text+image prompt, returns model text.
+ * Reuses HTTP wiring style from v1 GeminiVisionConsult.
+ *
+ * NOTE: spec called for "Gemini 3.1 Pro" (from the PDF talk); that ID is not exposed
+ * by generativelanguage v1beta as of 2026-05. Falls back to `gemini-2.5-pro` (same
+ * model v1 uses successfully) until 3.1 Pro lands. Override via `GEMINI_MODEL` env.
  */
 class GeminiPro31Client(private val apiKey: String) : AutoCloseable {
-    private val http = HttpClient(CIO)
+    // gemini-2.5-pro in thinking mode often takes 20–60s. Default ktor timeout is far
+    // too tight. Match v1 GeminiVisionConsult's 120s budget (we bump higher because v2
+    // Advisor prompts include campaign history and can be longer).
+    private val http = HttpClient(CIO) {
+        install(HttpTimeout) {
+            requestTimeoutMillis = 180_000
+            socketTimeoutMillis = 180_000
+        }
+    }
     private val json = Json { ignoreUnknownKeys = true }
-    private val model = "gemini-3.1-pro"
+    private val model = System.getenv("GEMINI_MODEL")?.takeIf { it.isNotBlank() } ?: "gemini-2.5-pro"
 
     suspend fun generate(prompt: String, imageB64: String? = null): String {
         val parts = buildList<JsonObject> {

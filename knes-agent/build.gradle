@@ -18,6 +18,7 @@ tasks.register('runV2', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'knes.agent.v2.MainKt'
     standardInput = System.in
+    workingDir = rootProject.projectDir
     if (project.hasProperty('appArgs')) {
         args(project.property('appArgs').toString().split(' '))
     }
