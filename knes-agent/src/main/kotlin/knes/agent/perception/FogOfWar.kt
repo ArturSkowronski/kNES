@@ -42,4 +42,12 @@ class FogOfWar {
         val ys = seen.keys.map { it.second }
         return (xs.min() to ys.min()) to (xs.max() to ys.max())
     }
+
+    /**
+     * Used by knes-agent-v2 Cartographer as a frontier-exhausted check.
+     * First-cut: always returns false so the Cartographer keeps exploring
+     * until budget exhausted. A future refinement can check the four
+     * orthogonal neighbours of `from` against `seen`.
+     */
+    fun allReachableKnown(from: Pair<Int, Int>): Boolean = false
 }
