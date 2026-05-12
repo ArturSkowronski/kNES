@@ -28,10 +28,16 @@ import knes.agent.v2.runtime.SnapshotDumper
 import knes.agent.v2.runtime.V2Memory
 import knes.agent.v2.runtime.V2RunDirectory
 import knes.agent.v2.runtime.Watchdog
+import knes.agent.v2.runtime.ExecutorTrace
+import knes.agent.v2.runtime.Resumer
+import knes.agent.v2.runtime.TurnLog
+import knes.agent.v2.runtime.WatchdogTrace
 import knes.agent.v2.tools.DefaultToolSurface
+import knes.agent.v2.tools.ToolOutcome
 import knes.api.EmulatorSession
 import kotlinx.coroutines.runBlocking
 import java.io.File
+import java.nio.file.Files
 
 fun main(args: Array<String>) {
     val cfg = V2Config.parse(args)
@@ -62,7 +68,7 @@ fun main(args: Array<String>) {
 
                 // v2 runtime
                 val memory = V2Memory(run)
-                if (cfg.resumeDir != null) knes.agent.v2.runtime.Resumer(session, run, memory).resume()
+                if (cfg.resumeDir != null) Resumer(session, run, memory).resume()
                 val snapshotDumper = SnapshotDumper(toolset, run)
                 val watchdog = Watchdog()
 
@@ -107,12 +113,83 @@ fun main(args: Array<String>) {
                     cfg.cartographerBudgetSeconds, cfg.cartographerMaxVisionCalls,
                 )
 
-                System.err.println("[v2.main] bootstrap complete — campaign loop in D4")
-                // Touch every constructed component so unused-warning doesn't
-                // hide accidental no-ops during the D2/D4 wire-up.
-                System.err.println("[v2.main] agents=${listOf(advisor.javaClass.simpleName,
-                    executor.javaClass.simpleName, reviewer.javaClass.simpleName,
-                    cartographer.javaClass.simpleName, watchdog.javaClass.simpleName)}")
+                System.err.println("[v2.main] bootstrap complete — entering campaign loop")
+
+                // Phase 0: bootstrap (Cartographer + first Advisor plan)
+                val firstTurn = memory.campaign.lastTurn + 1
+                if (cfg.fresh) {
+                    cartographer.exploreInitialOverworld()
+                    snapshotDumper.dump(0)
+                    val snap0 = toolset.getScreen().base64
+                    advisor.plan(reason = "T0 fresh campaign", screenshotB64 = snap0, turn = firstTurn)
+                } else {
+                    val snap = toolset.getScreen().base64
+                    advisor.plan(reason = "resume context", screenshotB64 = snap, turn = firstTurn)
+                }
+
+                // Phase 1: campaign loop
+                val recentExecutorOutcomes = ArrayDeque<String>(4)
+                val sonnetModelId = SonnetClient(anthropic).modelId
+                var turn = firstTurn
+                while (turn <= cfg.maxTurns && !memory.campaign.done) {
+                    val snap = toolset.getScreen().base64
+                    snapshotDumper.dump(turn)
+                    val state = toolset.getState()
+                    val phase = Phase.fromRam(state.ram)
+                    val ramDigest = state.ram.entries.joinToString(",") { "${it.key}=${it.value}" }
+
+                    val decision = executor.act(screenshotB64 = snap, ramDigest = ramDigest)
+
+                    val outcomeLabel = decision.outcome.javaClass.simpleName
+                    recentExecutorOutcomes.addLast(outcomeLabel)
+                    if (recentExecutorOutcomes.size > 4) recentExecutorOutcomes.removeFirst()
+
+                    val ramHash = state.ram.values.fold(0) { acc, v -> 31 * acc + v }
+                    val skillProgress = decision.outcome is ToolOutcome.Ok
+                    watchdog.observe(phase, ramHash, skillProgress)
+
+                    memory.appendTurn(
+                        TurnLog(
+                            turn = turn, frame = state.frame.toLong(), phase = phase.name,
+                            ram = state.ram,
+                            snapshot = "snapshots/turn-%05d.png".format(turn),
+                            executor = ExecutorTrace(
+                                model = sonnetModelId,
+                                tool = decision.tool, args = decision.args,
+                                reasoningSummary = decision.reasoning,
+                                outcome = outcomeLabel.lowercase(),
+                                message = when (val o = decision.outcome) {
+                                    is ToolOutcome.Ok -> o.message
+                                    is ToolOutcome.Fail -> o.message
+                                    is ToolOutcome.Reject -> o.reason
+                                },
+                                ms = decision.ms,
+                            ),
+                            watchdog = WatchdogTrace(
+                                stuckCounter = watchdog.counter(), threshold = watchdog.threshold(phase),
+                            ),
+                        )
+                    )
+
+                    if (watchdog.stuckSignal(phase)) {
+                        val diag = watchdog.diagnose(phase, recentExecutorOutcomes.toList())
+                        System.err.println("[v2.main] stuck-signal — $diag")
+                        advisor.plan(reason = "stuck: $diag", screenshotB64 = snap, turn = turn)
+                        watchdog.reset()
+                    }
+
+                    if (turn % 50 == 0) reviewer.audit(turn)
+
+                    if (turn % 100 == 0) {
+                        val saveBytes = session.saveState()
+                        Files.write(run.savestate(turn), saveBytes)
+                        System.err.println("[v2.main] checkpoint saved at T$turn (${saveBytes.size} bytes)")
+                    }
+
+                    turn++
+                }
+
+                System.err.println("[v2.main] done. last_turn=${memory.campaign.lastTurn}")
             }
         }
     }
