@@ -62,6 +62,7 @@ fun main(args: Array<String>) {
 
                 // v2 runtime
                 val memory = V2Memory(run)
+                if (cfg.resumeDir != null) knes.agent.v2.runtime.Resumer(session, run, memory).resume()
                 val snapshotDumper = SnapshotDumper(toolset, run)
                 val watchdog = Watchdog()
 
