@@ -42,4 +42,11 @@ class FogOfWar {
         val ys = seen.keys.map { it.second }
         return (xs.min() to ys.min()) to (xs.max() to ys.max())
     }
+
+    /**
+     * V2 Cartographer frontier check. First-cut stub returns false — forces
+     * Cartographer to continue exploring until its time/vision-call budget
+     * is exhausted. Refine with a fog-coverage heuristic in follow-up.
+     */
+    fun allReachableKnown(from: Pair<Int, Int>): Boolean = false
 }
