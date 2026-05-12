@@ -2,6 +2,7 @@ package knes.agent.v2
 
 import java.nio.file.Path
 
+/** CLI config for runV2. API keys (ANTHROPIC_API_KEY, GEMINI_API_KEY) are read from env in Main, not parsed here. */
 data class V2Config(
     val rom: String,
     val profile: String,
