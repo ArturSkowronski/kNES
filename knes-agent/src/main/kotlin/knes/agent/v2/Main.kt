@@ -21,6 +21,7 @@ import knes.agent.v2.agents.AdvisorAgent
 import knes.agent.v2.agents.CartographerAgent
 import knes.agent.v2.agents.ExecutorAgent
 import knes.agent.v2.agents.ReviewerAgent
+import knes.agent.v2.llm.AnthropicHttp
 import knes.agent.v2.llm.GeminiPro31Client
 import knes.agent.v2.llm.HaikuClient
 import knes.agent.v2.llm.SonnetClient
@@ -53,6 +54,7 @@ fun main(args: Array<String>) {
 
     runBlocking {
         AnthropicSession(anthropicKey).use { anthropic ->
+            AnthropicHttp(anthropicKey).use { anthropicHttp ->
             GeminiPro31Client(geminiKey).use { gemini ->
                 val session = EmulatorSession()
                 val toolset = EmulatorToolset(session)
@@ -108,9 +110,11 @@ fun main(args: Array<String>) {
                 )
 
                 // Agents
+                val sonnet = SonnetClient(anthropicHttp)
+                val haiku = HaikuClient(anthropicHttp)
                 val advisor = AdvisorAgent(gemini, memory, run, landmarks)
-                val executor = ExecutorAgent(anthropic, SonnetClient(anthropic), tools, memory)
-                val reviewer = ReviewerAgent(HaikuClient(anthropic), memory)
+                val executor = ExecutorAgent(anthropic, sonnet, haiku, tools, memory)
+                val reviewer = ReviewerAgent(haiku, memory)
                 val cartographer = CartographerAgent(
                     gemini, toolset, memory, snapshotDumper, overworldMap, fog, landmarks,
                     cfg.cartographerBudgetSeconds, cfg.cartographerMaxVisionCalls,
@@ -132,7 +136,7 @@ fun main(args: Array<String>) {
 
                 // Phase 1: campaign loop
                 val recentExecutorOutcomes = ArrayDeque<String>(4)
-                val sonnetModelId = SonnetClient(anthropic).modelId
+                val sonnetModelId = sonnet.modelId
                 var turn = firstTurn
                 while (turn <= cfg.maxTurns && !memory.campaign.done) {
                     val snap = toolset.getScreen().base64
@@ -195,6 +199,7 @@ fun main(args: Array<String>) {
                 }
 
                 System.err.println("[v2.main] done. last_turn=${memory.campaign.lastTurn}")
+            }
             }
         }
     }
