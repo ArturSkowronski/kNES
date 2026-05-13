@@ -18,12 +18,14 @@ import kotlinx.serialization.json.jsonPrimitive
  * Minimal Gemini client for v2 agents. Sends a text+image prompt, returns model text.
  * Reuses HTTP wiring style from v1 GeminiVisionConsult.
  *
- * NOTE: spec called for "Gemini 3.1 Pro" (from the PDF talk); that ID is not exposed
- * by generativelanguage v1beta as of 2026-05. Falls back to `gemini-2.5-pro` (same
- * model v1 uses successfully) until 3.1 Pro lands. Override via `GEMINI_MODEL` env.
+ * Default: `gemini-3-pro` (latest as of 2026-05). Override via `GEMINI_MODEL` env;
+ * older runs that used `gemini-2.5-pro` still work via the override.
  */
-class GeminiPro31Client(private val apiKey: String) : AutoCloseable {
-    // gemini-2.5-pro in thinking mode often takes 20–60s. Default ktor timeout is far
+class GeminiPro31Client(
+    private val apiKey: String,
+    modelOverride: String? = null,
+) : AutoCloseable {
+    // gemini-3-pro thinking mode often takes 20–60s. Default ktor timeout is far
     // too tight. Match v1 GeminiVisionConsult's 120s budget (we bump higher because v2
     // Advisor prompts include campaign history and can be longer).
     private val http = HttpClient(CIO) {
@@ -33,7 +35,9 @@ class GeminiPro31Client(private val apiKey: String) : AutoCloseable {
         }
     }
     private val json = Json { ignoreUnknownKeys = true }
-    private val model = System.getenv("GEMINI_MODEL")?.takeIf { it.isNotBlank() } ?: "gemini-2.5-pro"
+    val model = modelOverride
+        ?: System.getenv("GEMINI_MODEL")?.takeIf { it.isNotBlank() }
+        ?: "gemini-3.1-pro-preview"
 
     suspend fun generate(prompt: String, imageB64: String? = null): String {
         val parts = buildList<JsonObject> {

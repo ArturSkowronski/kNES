@@ -55,7 +55,15 @@ fun main(args: Array<String>) {
     runBlocking {
         AnthropicSession(anthropicKey).use { anthropic ->
             AnthropicHttp(anthropicKey).use { anthropicHttp ->
+            // Two Gemini clients: Pro for thinking-heavy Advisor + Cartographer,
+            // Flash-lite for the per-turn Executor (5-10× lower latency on
+            // gemini-3.1-flash-lite vs gemini-3.1-pro-preview; Executor only
+            // emits a single button or one tool call so it does not need full
+            // thinking). Override via GEMINI_MODEL (both) or GEMINI_EXECUTOR_MODEL.
+            val executorModel = System.getenv("GEMINI_EXECUTOR_MODEL")?.takeIf { it.isNotBlank() }
+                ?: "gemini-3.1-flash-lite"
             GeminiPro31Client(geminiKey).use { gemini ->
+            GeminiPro31Client(geminiKey, modelOverride = executorModel).use { geminiExec ->
                 val session = EmulatorSession()
                 val toolset = EmulatorToolset(session)
                 require(toolset.loadRom(cfg.rom).ok) { "Failed to load ROM: ${cfg.rom}" }
@@ -110,29 +118,57 @@ fun main(args: Array<String>) {
                     equipWeaponSkill = equipWeapon,
                     restAtInnSkill = restAtInn,
                     haiku = haiku,
+                    livePngFile = run.liveSnapshot,
                 )
 
                 // Agents
                 val advisor = AdvisorAgent(gemini, memory, run, landmarks)
-                val executor = ExecutorAgent(anthropic, sonnet, haiku, tools, memory)
-                val reviewer = ReviewerAgent(haiku, memory)
+                val executor = ExecutorAgent(anthropic, sonnet, haiku, tools, memory, run, gemini = geminiExec)
+                System.err.println("[v2.main] LLM models: advisor/cart=${gemini.model} executor=${geminiExec.model}")
+                val reviewer = ReviewerAgent(haiku, memory, run)
                 val cartographer = CartographerAgent(
                     gemini, toolset, memory, snapshotDumper, overworldMap, fog, landmarks,
                     cfg.cartographerBudgetSeconds, cfg.cartographerMaxVisionCalls,
+                    run,
                 )
 
                 System.err.println("[v2.main] bootstrap complete — entering campaign loop")
 
-                // Phase 0: bootstrap (Cartographer + first Advisor plan)
+                // Phase 0: bootstrap (boot → Cartographer → first Advisor plan).
+                // CRITICAL ORDERING: boot MUST run before Cartographer. Otherwise
+                // Cartographer's first iter reads worldX=worldY=0 (title screen
+                // RAM) and asks Gemini for a direction looking at the title.
+                // Gemini answers "DONE" immediately and Cartographer logs "1
+                // vision calls, 0 steps" — landmarks come only from preseed,
+                // explore-the-world is pure waste. Pressing START first lands
+                // us on Overworld with a real worldX/worldY before cart sees
+                // anything.
                 val firstTurn = memory.campaign.lastTurn + 1
                 if (cfg.fresh) {
-                    cartographer.exploreInitialOverworld()
+                    System.err.println("[v2.main] pre-cart boot: pressing START to leave title")
+                    pressStart.invoke(emptyMap())
+                    waitForStableFrame(toolset)
+                    if (cfg.cartographerEnabled) {
+                        cartographer.exploreInitialOverworld()
+                    } else {
+                        System.err.println("[v2.main] cartographer SKIPPED (use --cart to enable). Using preseeded landmarks.")
+                    }
+                    waitForStableFrame(toolset)
                     snapshotDumper.dump(0)
                     val snap0 = toolset.getScreen().base64
-                    advisor.plan(reason = "T0 fresh campaign", screenshotB64 = snap0, turn = firstTurn)
+                    val s0 = toolset.getState()
+                    advisor.plan(
+                        reason = "T0 fresh campaign", screenshotB64 = snap0, turn = firstTurn,
+                        phase = Phase.fromRam(s0.ram), ram = s0.ram,
+                    )
                 } else {
+                    waitForStableFrame(toolset)
                     val snap = toolset.getScreen().base64
-                    advisor.plan(reason = "resume context", screenshotB64 = snap, turn = firstTurn)
+                    val s = toolset.getState()
+                    advisor.plan(
+                        reason = "resume context", screenshotB64 = snap, turn = firstTurn,
+                        phase = Phase.fromRam(s.ram), ram = s.ram,
+                    )
                 }
 
                 // Phase 1: campaign loop
@@ -140,13 +176,19 @@ fun main(args: Array<String>) {
                 val sonnetModelId = sonnet.modelId
                 var turn = firstTurn
                 while (turn <= cfg.maxTurns && !memory.campaign.done) {
+                    // Settle transition transients before vision/RAM sampling. Without
+                    // this, snapshots can land mid-scroll/mid-map-load (the screen
+                    // appears with black bars top/bottom) and RAM shows transient
+                    // mapflags.bit1=1 + mid-frame coords — Haiku then sees a partial
+                    // viewport and the Executor decides on bogus state.
+                    waitForStableFrame(toolset)
                     val snap = toolset.getScreen().base64
                     snapshotDumper.dump(turn)
                     val state = toolset.getState()
                     val phase = Phase.fromRam(state.ram)
                     val ramDigest = state.ram.entries.joinToString(",") { "${it.key}=${it.value}" }
 
-                    val decision = executor.act(screenshotB64 = snap, ramDigest = ramDigest)
+                    val decision = executor.act(screenshotB64 = snap, ramDigest = ramDigest, turn = turn)
 
                     val outcomeLabel = decision.outcome.javaClass.simpleName
                     recentExecutorOutcomes.addLast(outcomeLabel)
@@ -179,16 +221,58 @@ fun main(args: Array<String>) {
                         )
                     )
 
-                    advanceMilestones(memory, phase, state.ram, decision, turn)
+                    val milestoneJustAdvanced = advanceMilestones(memory, phase, state.ram, decision, turn)
+                    if (milestoneJustAdvanced != null) {
+                        val advisorReason = "milestone $milestoneJustAdvanced just done — replan for next"
+                        System.err.println("[v2.main] $advisorReason")
+                        advisor.plan(
+                            reason = advisorReason, screenshotB64 = snap, turn = turn,
+                            phase = phase, ram = state.ram,
+                        )
+                    }
 
                     if (watchdog.stuckSignal(phase)) {
                         val diag = watchdog.diagnose(phase, recentExecutorOutcomes.toList())
                         System.err.println("[v2.main] stuck-signal — $diag")
-                        advisor.plan(reason = "stuck: $diag", screenshotB64 = snap, turn = turn)
+                        advisor.plan(
+                            reason = "stuck: $diag", screenshotB64 = snap, turn = turn,
+                            phase = phase, ram = state.ram,
+                        )
                         watchdog.reset()
                     }
 
                     if (turn % 50 == 0) reviewer.audit(turn)
+
+                    // LLM-driven plan audit — every 25 turns Haiku checks whether
+                    // the Advisor's "done" steps actually happened (gold drop,
+                    // weapon equipped, party at target, etc). On reported issues
+                    // we trigger an Advisor replan with the diagnostic.
+                    if (turn % 25 == 0 && turn > 0) {
+                        val issues = reviewer.auditPlan(turn, snap, ramDigest)
+                        if (issues.isNotEmpty()) {
+                            advisor.plan(
+                                reason = "Reviewer audit found issues: ${issues.joinToString(" | ").take(160)}",
+                                screenshotB64 = snap, turn = turn,
+                                phase = phase, ram = state.ram,
+                            )
+                        }
+                    }
+
+                    // Deterministic milestone verifier — every 10 turns, re-check
+                    // each "done" milestone against current RAM. On regression,
+                    // revert to in_progress + trigger Advisor replan with the
+                    // diagnostic. Cheap (no LLM); catches false-positive latches
+                    // and savestate-induced state drops.
+                    if (turn % 10 == 0) {
+                        val regressed = reviewer.verifyMilestones(phase, state.ram, turn)
+                        if (regressed.isNotEmpty()) {
+                            advisor.plan(
+                                reason = "milestone REGRESSED: ${regressed.joinToString(",")}",
+                                screenshotB64 = snap, turn = turn,
+                                phase = phase, ram = state.ram,
+                            )
+                        }
+                    }
 
                     if (turn % 100 == 0) {
                         val saveBytes = session.saveState()
@@ -200,6 +284,7 @@ fun main(args: Array<String>) {
                 }
 
                 System.err.println("[v2.main] done. last_turn=${memory.campaign.lastTurn}")
+            }
             }
             }
         }
@@ -216,19 +301,41 @@ fun main(args: Array<String>) {
  * Signals (deliberately coarse — refinement deferred until a milestone earns it):
  *  - boot          → done when phase != Boot (party + worldX present)
  *  - enter_coneria → done when phase == Town (mapflags.bit0=1, mapId=0)
- *  - buy_weapons   → done when any char has a non-zero weapon byte in any slot
- *  - equip_weapons → done when ≥1 char has an equipped weapon (bit7 set)
+ *  - arm_party     → done when ALL 4 chars have ≥1 weapon equipped (bit7 set)
  *  - exit_coneria  → done when phase == Overworld AFTER enter_coneria fired
  *  - grind         → done when any char's xpLow > 0 (post-battle XP gained)
  */
+/**
+ * Block until the next stable frame: mapflags.bit1=0 (no dialog/transition
+ * transient) AND scrolling=0. Otherwise vision sees a half-drawn viewport and
+ * RAM reports mid-step coords. Polls in 30-frame chunks up to [maxPolls] times
+ * (~120 frames = ~2s wallclock at full speed). Idempotent if already stable.
+ *
+ * Empirical: snapshot at T7 in 2026-05-12-2120 run showed a chunked overworld
+ * frame (black bars top/bottom) because the screenshot was taken while the
+ * engine was mid-map-load — agent's Haiku then read garbage scene.
+ */
+private suspend fun waitForStableFrame(
+    toolset: EmulatorToolset, maxPolls: Int = 8,
+) {
+    repeat(maxPolls) {
+        val r = toolset.getState().ram
+        val mfBit1 = (r["mapflags"] ?: 0) and 0x02
+        val scrolling = r["scrolling"] ?: 0
+        if (mfBit1 == 0 && scrolling == 0) return
+        toolset.step(buttons = emptyList(), frames = 30)
+    }
+}
+
 private fun advanceMilestones(
     memory: knes.agent.v2.runtime.V2Memory,
     phase: knes.agent.v2.runtime.Phase,
     ram: Map<String, Int>,
     @Suppress("UNUSED_PARAMETER") decision: knes.agent.v2.agents.ExecutorDecision,
     turn: Int,
-) {
+): String? {
     val ms = memory.campaign.milestones
+    var advancedId: String? = null
     fun mark(id: String, predicate: () -> Boolean) {
         val m = ms.firstOrNull { it.id == id } ?: return
         if (m.status == "in_progress" && predicate()) {
@@ -236,25 +343,18 @@ private fun advanceMilestones(
             val next = ms.firstOrNull { it.status == "pending" }
             if (next != null) { next.status = "in_progress"; next.turnStart = turn }
             System.err.println("[v2.main] milestone $id done at T$turn; next=${next?.id ?: "(none)"}")
+            advancedId = id
         }
     }
-    val anyWeaponHeld = (1..4).any { c -> (0..3).any { s ->
-        (ram["char${c}_weapon${s}"] ?: 0) != 0
-    } }
-    val anyWeaponEquipped = (1..4).any { c -> (0..3).any { s ->
-        ((ram["char${c}_weapon${s}"] ?: 0) and 0x80) != 0
-    } }
-    val anyXp = (1..4).any { c -> (ram["char${c}_xpLow"] ?: 0) > 0 || (ram["char${c}_xpHigh"] ?: 0) > 0 }
-
-    mark("boot")          { phase != knes.agent.v2.runtime.Phase.Boot }
-    mark("enter_coneria") { phase == knes.agent.v2.runtime.Phase.Town }
-    mark("buy_weapons")   { anyWeaponHeld }
-    mark("equip_weapons") { anyWeaponEquipped }
-    mark("exit_coneria")  {
-        val enterDone = ms.firstOrNull { it.id == "enter_coneria" }?.status == "done"
-        enterDone && phase == knes.agent.v2.runtime.Phase.Overworld
+    // Single source of truth — see knes.agent.v2.runtime.MilestonePredicates.
+    val prereqDone = ms.associate { it.id to (it.status == "done") }
+    for (m in ms) {
+        if (m.status != "in_progress") continue
+        if (knes.agent.v2.runtime.MilestonePredicates.evaluate(m.id, phase, ram, prereqDone)) {
+            mark(m.id) { true }
+        }
     }
-    mark("grind")         { anyXp }
 
     memory.saveCampaign()
+    return advancedId
 }

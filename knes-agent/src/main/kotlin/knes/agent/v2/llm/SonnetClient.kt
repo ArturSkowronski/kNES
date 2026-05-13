@@ -9,12 +9,16 @@ class SonnetClient(private val http: AnthropicHttp) {
      * exactly one tool to execute. Returns the raw response text (JSON object
      * with tool/args/reasoning); ExecutorAgent parses it.
      */
-    suspend fun decideTool(systemPrompt: String, userText: String): String {
+    suspend fun decideTool(
+        systemPrompt: String,
+        userText: String,
+        imageB64: String? = null,
+    ): String {
         return http.generate(
             model = modelId,
             systemPrompt = systemPrompt,
             userText = userText,
-            imageB64 = null,
+            imageB64 = imageB64,
             maxTokens = 400,
         ).trim()
     }

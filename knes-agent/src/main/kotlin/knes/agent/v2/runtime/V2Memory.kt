@@ -51,8 +51,12 @@ class V2Memory(val run: V2RunDirectory) {
                 milestones = mutableListOf(
                     Milestone(id = "boot",          status = "in_progress"),
                     Milestone(id = "enter_coneria", status = "pending"),
-                    Milestone(id = "buy_weapons",   status = "pending"),
-                    Milestone(id = "equip_weapons", status = "pending"),
+                    // Merged buy_weapons+equip_weapons → arm_party. Equipping
+                    // implies holding, so two separate milestones forced the
+                    // Advisor to plan twice with a latch in between that could
+                    // mask incomplete purchases (run 2026-05-12-2257: latched
+                    // both milestones with only 2/4 chars armed).
+                    Milestone(id = "arm_party",     status = "pending"),
                     Milestone(id = "exit_coneria", status = "pending"),
                     Milestone(id = "grind",         status = "pending"),
                 ),

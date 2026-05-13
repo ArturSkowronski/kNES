@@ -7,6 +7,7 @@ import knes.agent.tools.EmulatorToolset
 import knes.agent.v2.llm.GeminiPro31Client
 import knes.agent.v2.runtime.SnapshotDumper
 import knes.agent.v2.runtime.V2Memory
+import knes.agent.v2.runtime.V2RunDirectory
 
 /**
  * Online vision exploration phase. Pushes party around spawn using vision-LLM
@@ -29,12 +30,14 @@ class CartographerAgent(
     private val landmarks: LandmarkMemory,
     private val budgetSeconds: Int,
     private val maxVisionCalls: Int,
+    private val run: V2RunDirectory? = null,
 ) {
     suspend fun exploreInitialOverworld() {
         val started = System.currentTimeMillis()
         var visionCalls = 0
         var turnCounter = 0
 
+        run?.markActive("cartographer", 0)
         System.err.println("[v2.cartographer] start: budget=${budgetSeconds}s maxCalls=$maxVisionCalls")
 
         while (true) {
@@ -76,13 +79,16 @@ class CartographerAgent(
         // Landmark scans (weapon/armor/inn) happen lazily during first Executor
         // visit to each building — keeps Cartographer scope minimal.
         System.err.println("[v2.cartographer] done: $visionCalls vision calls, $turnCounter steps")
+        run?.markIdle()
     }
 
     suspend fun targetedRepass(flags: List<String>) {
         System.err.println("[v2.cartographer] targetedRepass: ${flags.size} flags (stub)")
     }
 
+    private var cartIter: Int = 0
     private suspend fun askGeminiNextDirection(snap: String, x: Int, y: Int): String {
+        cartIter++
         val prompt = """
             You are looking at the FF1 NES overworld viewport.
             Step 1: LOCATE the party sprite on the screen — DO NOT use prior knowledge of FF1 geography.
@@ -92,6 +98,13 @@ class CartographerAgent(
             Party world-coords: ($x, $y).
             Return ONLY the letter: N or S or E or W, or DONE if no unexplored frontier.
         """.trimIndent()
-        return gemini.generate(prompt, imageB64 = snap).trim().take(4)
+        val raw = gemini.generate(prompt, imageB64 = snap).trim()
+        runCatching {
+            run?.promptFile(0, "cart-%02d".format(cartIter))?.toFile()?.writeText(
+                "=== CARTOGRAPHER iter $cartIter — Gemini Pro 3.1 vision ===\n" +
+                "world=($x,$y)\n\n=== PROMPT ===\n$prompt\n\n=== RESPONSE ===\n$raw"
+            )
+        }
+        return raw.take(4)
     }
 }

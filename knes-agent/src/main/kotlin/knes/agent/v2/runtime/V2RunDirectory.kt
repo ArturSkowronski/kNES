@@ -21,6 +21,7 @@ class V2RunDirectory(val root: Path) {
     val snapshotsDir: Path = root.resolve("snapshots")
     val interiorMapsDir: Path = root.resolve("interior-maps")
     val savestateDir: Path = root.resolve("savestate-checkpoints")
+    val promptsDir: Path = root.resolve("prompts")
 
     fun ensure() {
         root.createDirectories()
@@ -28,7 +29,25 @@ class V2RunDirectory(val root: Path) {
         snapshotsDir.createDirectories()
         interiorMapsDir.createDirectories()
         savestateDir.createDirectories()
+        promptsDir.createDirectories()
     }
+
+    fun promptFile(turn: Int, agent: String): Path =
+        promptsDir.resolve("T%05d-%s.txt".format(turn, agent))
+
+    val activeJson: Path = root.resolve("active.json")
+    val liveSnapshot: Path = snapshotsDir.resolve("live.png")
+
+    /** Mark which agent is currently doing work so the viewer can highlight it. */
+    fun markActive(agent: String, turn: Int = -1) {
+        runCatching {
+            activeJson.toFile().writeText(
+                """{"agent":"$agent","turn":$turn,"ts":${System.currentTimeMillis()}}"""
+            )
+        }
+    }
+
+    fun markIdle() = markActive("idle")
 
     fun turnDecisionFile(turn: Int): Path =
         decisionsDir.resolve("turn-%05d.json".format(turn))
