@@ -9,7 +9,7 @@ import knes.agent.pathfinding.InteriorPathfinder
 import knes.agent.runtime.ToolCallLog
 import knes.agent.skills.ExitInterior
 import knes.agent.skills.PressStartUntilOverworld
-import knes.agent.tools.EmulatorToolset
+import knes.agent.tools.LocalEmulatorToolset
 import knes.api.EmulatorSession
 import java.io.File
 
@@ -46,7 +46,7 @@ class V58InteriorMemoryLiveTest : FunSpec({
 
         // ---- live boot to Coneria interior (same path as V56InteriorPathfindingTest)
         val session = EmulatorSession()
-        val toolset = EmulatorToolset(session)
+        val toolset = LocalEmulatorToolset(session)
         check(toolset.loadRom(romPath).ok)
         toolset.applyProfile("ff1")
         check(PressStartUntilOverworld(toolset).invoke().ok) { "PressStartUntilOverworld failed" }

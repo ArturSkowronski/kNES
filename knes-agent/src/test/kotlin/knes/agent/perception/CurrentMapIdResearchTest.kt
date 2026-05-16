@@ -1,7 +1,7 @@
 package knes.agent.perception
 
 import io.kotest.core.spec.style.FunSpec
-import knes.agent.tools.EmulatorToolset
+import knes.agent.tools.LocalEmulatorToolset
 import knes.api.EmulatorSession
 import java.io.File
 
@@ -12,7 +12,7 @@ class CurrentMapIdResearchTest : FunSpec({
     test("locate currentMapId byte by RAM diff").config(enabled = romPresent) {
         val outDir = File("build/research/current-map-id").also { it.mkdirs() }
         val session = EmulatorSession()
-        val toolset = EmulatorToolset(session)
+        val toolset = LocalEmulatorToolset(session)
         check(toolset.loadRom(romPath).ok)
         toolset.applyProfile("ff1")
 

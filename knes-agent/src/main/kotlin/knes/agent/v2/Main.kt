@@ -36,7 +36,6 @@ import knes.agent.v2.runtime.TurnLog
 import knes.agent.v2.runtime.WatchdogTrace
 import knes.agent.v2.tools.DefaultToolSurface
 import knes.agent.v2.tools.ToolOutcome
-import knes.api.EmulatorSession
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.nio.file.Files
@@ -72,12 +71,11 @@ fun main(args: Array<String>) {
                 // `--remote=<url>` is set. The remote variant skips loadRom
                 // (the UI loads the ROM) and savestate checkpoints (no
                 // /save endpoint yet).
-                val session = EmulatorSession()
                 val toolset: EmulatorToolset = if (cfg.remoteUrl != null) {
                     Log.event("REMOTE mode — RemoteEmulatorToolset → ${cfg.remoteUrl} (ROM must be loaded in UI; /save checkpoints skipped)")
-                    knes.agent.tools.RemoteEmulatorToolset(cfg.remoteUrl, session)
+                    EmulatorToolset.remote(cfg.remoteUrl)
                 } else {
-                    EmulatorToolset(session)
+                    EmulatorToolset.local()
                 }
                 if (cfg.remoteUrl == null) {
                     require(toolset.loadRom(cfg.rom).ok) { "Failed to load ROM: ${cfg.rom}" }
@@ -98,7 +96,7 @@ fun main(args: Array<String>) {
                     require(cfg.remoteUrl == null) {
                         "--resume is not supported with --remote (no save/load over REST yet)"
                     }
-                    Resumer(session, run, memory).resume()
+                    Resumer(toolset, run, memory).resume()
                 }
                 val snapshotDumper = SnapshotDumper(toolset, run)
                 val watchdog = Watchdog()
@@ -415,7 +413,7 @@ fun main(args: Array<String>) {
                         // `session` isn't driving the emulator, so its
                         // saveState() snapshot would be garbage (an empty
                         // NES at boot state, not the Compose UI's frame).
-                        val saveBytes = session.saveState()
+                        val saveBytes = toolset.saveSavestate()
                         Files.write(run.savestate(turn), saveBytes)
                         Log.ok("checkpoint saved (${saveBytes.size} bytes)", turn)
                     }

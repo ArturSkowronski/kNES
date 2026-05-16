@@ -2,7 +2,7 @@ package knes.agent.perception
 
 import io.kotest.core.spec.style.FunSpec
 import knes.agent.skills.PressStartUntilOverworld
-import knes.agent.tools.EmulatorToolset
+import knes.agent.tools.LocalEmulatorToolset
 import knes.api.EmulatorSession
 import java.io.File
 
@@ -30,7 +30,7 @@ class MovementAuditTest : FunSpec({
         val outDir = File(repoRoot, "docs/superpowers/notes/movement-audit-2026-05-03").also { it.mkdirs() }
 
         val session = EmulatorSession()
-        val toolset = EmulatorToolset(session)
+        val toolset = LocalEmulatorToolset(session)
         check(toolset.loadRom(romPath).ok)
         toolset.applyProfile("ff1")
 

@@ -1,10 +1,10 @@
 package knes.agent.v2.runtime
 
-import knes.api.EmulatorSession
+import knes.agent.tools.EmulatorToolset
 import java.nio.file.Files
 
 class Resumer(
-    private val session: EmulatorSession,
+    private val toolset: EmulatorToolset,
     private val run: V2RunDirectory,
     private val memory: V2Memory,
 ) {
@@ -21,10 +21,10 @@ class Resumer(
             return
         }
         // PPU pre-warm (per v1 Main pattern)
-        session.advanceFrames(120)
-        val ok = session.loadState(Files.readAllBytes(checkpoint))
+        toolset.advanceFrames(120)
+        val ok = toolset.loadSavestate(Files.readAllBytes(checkpoint))
         require(ok) { "loadState failed for $checkpoint" }
-        session.advanceFrames(120)
+        toolset.advanceFrames(120)
         Log.ok("resume: restored T$checkpointTurn (last_turn=$lastTurn). Replay T$checkpointTurn→T$lastTurn not implemented — Advisor will reconcile via campaign.json.")
         // TODO(D2-followup): replay button events from decisions/turn-(checkpointTurn+1).json..turn-lastTurn.json
     }

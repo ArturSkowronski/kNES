@@ -2,7 +2,7 @@ package knes.mcp
 
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
-import knes.agent.tools.EmulatorToolset
+import knes.agent.tools.LocalEmulatorToolset
 import knes.agent.tools.save.LandmarksSnapshot
 import knes.agent.tools.save.SaveFormatCodec
 import knes.agent.tools.save.VisitedMinimap
@@ -26,7 +26,7 @@ class SaveSessionRoundTripTest : FunSpec({
     test("save then load via codec restores identical emulator bytes")
         .config(enabled = canRun) {
         val session = EmulatorSession()
-        val toolset = EmulatorToolset(session)
+        val toolset = LocalEmulatorToolset(session)
         check(toolset.loadRom(romPath).ok)
         toolset.applyProfile("ff1")
         toolset.step(buttons = emptyList(), frames = 60)
@@ -46,7 +46,7 @@ class SaveSessionRoundTripTest : FunSpec({
 
         // Fresh session — simulates "reset → load".
         val session2 = EmulatorSession()
-        val toolset2 = EmulatorToolset(session2)
+        val toolset2 = LocalEmulatorToolset(session2)
         check(toolset2.loadRom(romPath).ok)
 
         val parsed = SaveFormatCodec.fromJson(saveFile.readText())

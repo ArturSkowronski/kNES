@@ -3,7 +3,7 @@ package knes.agent.skills
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
-import knes.agent.tools.EmulatorToolset
+import knes.agent.tools.LocalEmulatorToolset
 import knes.agent.tools.results.StateSnapshot
 import knes.agent.tools.results.StepResult
 import knes.api.EmulatorSession
@@ -91,7 +91,7 @@ class RestAtInnTest : FunSpec({
  */
 private class ScriptedRestToolset(
     private val ramSequence: List<Map<String, Int>>
-) : EmulatorToolset(EmulatorSession()) {
+) : LocalEmulatorToolset(EmulatorSession()) {
     private var idx = 0
 
     override fun tap(

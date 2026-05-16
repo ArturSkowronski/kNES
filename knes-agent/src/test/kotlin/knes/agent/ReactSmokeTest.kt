@@ -8,7 +8,7 @@ import ai.koog.prompt.executor.clients.anthropic.AnthropicModels
 import ai.koog.prompt.executor.llms.all.simpleAnthropicExecutor
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldNotBe
-import knes.agent.tools.EmulatorToolset
+import knes.agent.tools.LocalEmulatorToolset
 import knes.api.EmulatorSession
 
 class ReactSmokeTest : FunSpec({
@@ -21,7 +21,7 @@ class ReactSmokeTest : FunSpec({
         }
 
         val session = EmulatorSession()
-        val toolset = EmulatorToolset(session)
+        val toolset = LocalEmulatorToolset(session)
         val registry = ToolRegistry { tools(toolset) }
 
         val agent = AIAgent(

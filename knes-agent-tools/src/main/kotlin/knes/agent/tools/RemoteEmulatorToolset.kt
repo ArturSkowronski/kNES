@@ -8,7 +8,6 @@ import knes.agent.tools.results.StateSnapshot
 import knes.agent.tools.results.StatusResult
 import knes.agent.tools.results.StepEntry
 import knes.agent.tools.results.StepResult
-import knes.api.EmulatorSession
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -28,28 +27,19 @@ import java.net.http.HttpResponse
 import java.time.Duration
 
 /**
- * Remote variant of [EmulatorToolset] that talks to a running kNES REST API
- * (`/health`, `/rom`, `/step`, `/tap`, `/screen/base64`, `/state`, `/profiles/...`)
- * instead of an in-process [EmulatorSession]. This lets the v2 agent play
- * against the emulator hosted by the Compose UI (which exposes the same
- * endpoints via [knes.api.EmbeddedApiServer]) so the audience sees the live
- * gameplay on the Compose window while the agent decides remotely.
- *
- * The parent class' `session` field is required by the type hierarchy but
- * NEVER touched here — every overridden method takes the HTTP path. A
- * default-constructed [EmulatorSession] still boots an in-process NES (~30 MB
- * idle), which is wasted memory but harmless; the trade-off keeps the
- * existing `EmulatorToolset` consumers (ToolSurface, SnapshotDumper, etc.)
- * working unchanged.
- *
- * **NOT used:** `loadRom` and direct save-state checkpoints. Use the Compose
- * UI's "Open ROM" menu to load before starting the agent. Resume mode is
- * also unsupported in remote (skip `--resume` when `--remote` is set).
+ * HTTP implementation of [EmulatorToolset] — talks to a running kNES REST API
+ * instead of an in-process emulator. Lets the agent run against the Compose UI's
+ * embedded server so the audience sees live gameplay while the agent decides remotely.
+ * Resume/savestate not supported in remote mode.
  */
 class RemoteEmulatorToolset(
     private val baseUrl: String,
-    sessionStub: EmulatorSession = EmulatorSession(),
-) : EmulatorToolset(sessionStub) {
+) : EmulatorToolset {
+
+
+    override fun saveSavestate(): ByteArray = error("saveSavestate not supported in remote mode")
+    override fun loadSavestate(bytes: ByteArray): Boolean = error("loadSavestate not supported in remote mode")
+    override fun advanceFrames(count: Int) = error("advanceFrames not supported in remote mode")
 
     private val http: HttpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(5))

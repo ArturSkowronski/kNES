@@ -10,7 +10,7 @@ import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
-import knes.agent.tools.EmulatorToolset
+import knes.agent.tools.LocalEmulatorToolset
 import knes.agent.tools.results.StepEntry
 import knes.api.EmulatorSession
 import kotlinx.io.asSink
@@ -34,7 +34,7 @@ import kotlinx.serialization.json.putJsonObject
  */
 fun createMcpServer(): Server {
     val session = EmulatorSession()
-    val toolset = EmulatorToolset(session)
+    val toolset = LocalEmulatorToolset(session)
 
     val server = Server(
         serverInfo = Implementation(
