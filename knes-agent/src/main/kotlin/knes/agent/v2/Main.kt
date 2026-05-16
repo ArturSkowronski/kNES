@@ -10,7 +10,6 @@ import knes.agent.perception.LandmarkMemory
 import knes.agent.perception.MapSession
 import knes.agent.perception.OverworldMap
 import knes.agent.runtime.ToolCallLog
-import knes.agent.skills.BuyAtShop
 import knes.agent.skills.EquipWeapon
 import knes.agent.skills.ExitInterior
 import knes.agent.skills.PressStartUntilOverworld
@@ -122,7 +121,6 @@ fun main(args: Array<String>) {
                     toolCallLog = toolCallLog,
                     interiorMemory = interiorMemory,
                 )
-                val buyAtShop = BuyAtShop(toolset, landmarks)
                 val equipWeapon = EquipWeapon(toolset)
                 val restAtInn = RestAtInn(toolset)
                 val pressStart = PressStartUntilOverworld(toolset)
@@ -135,7 +133,6 @@ fun main(args: Array<String>) {
                     pressStartUntilOverworld = pressStart,
                     walkOverworld = walkOverworld,
                     exitInterior = exitInterior,
-                    buyAtShopSkill = buyAtShop,
                     equipWeaponSkill = equipWeapon,
                     restAtInnSkill = restAtInn,
                     haiku = haiku,
