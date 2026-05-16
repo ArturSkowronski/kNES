@@ -5,7 +5,7 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import knes.agent.skills.PressStartUntilOverworld
-import knes.agent.tools.EmulatorToolset
+import knes.agent.tools.LocalEmulatorToolset
 import knes.api.EmulatorSession
 import java.io.File
 
@@ -43,7 +43,7 @@ class V516LoadStateInputDiagTest : FunSpec({
         .config(enabled = canRun, timeout = kotlin.time.Duration.parse("3m")) {
 
         val session = EmulatorSession()
-        val toolset = EmulatorToolset(session)
+        val toolset = LocalEmulatorToolset(session)
         check(toolset.loadRom(romPath).ok)
         toolset.applyProfile("ff1")
         check(PressStartUntilOverworld(toolset).invoke().ok)
@@ -149,7 +149,7 @@ class V516LoadStateInputDiagTest : FunSpec({
         }
 
         val session = EmulatorSession()
-        val toolset = EmulatorToolset(session)
+        val toolset = LocalEmulatorToolset(session)
         check(toolset.loadRom(romPath).ok)
         toolset.applyProfile("ff1")
         // NB: NO PressStartUntilOverworld here — straight from loadRom into loadState.
@@ -214,7 +214,7 @@ class V516LoadStateInputDiagTest : FunSpec({
             println("[v516-startem] fixture missing — skipping"); return@config
         }
         val session = EmulatorSession()
-        val toolset = EmulatorToolset(session)
+        val toolset = LocalEmulatorToolset(session)
         check(toolset.loadRom(romPath).ok)
         toolset.applyProfile("ff1")
         // KEY hypothesis: papu must be started so its IRQ scheduling exists. We
@@ -252,7 +252,7 @@ class V516LoadStateInputDiagTest : FunSpec({
         }
 
         val session = EmulatorSession()
-        val toolset = EmulatorToolset(session)
+        val toolset = LocalEmulatorToolset(session)
         check(toolset.loadRom(romPath).ok)
         toolset.applyProfile("ff1")
         // Live boot to "warm up" the emulator (CPU thread state, PPU NMI cycle, etc.)

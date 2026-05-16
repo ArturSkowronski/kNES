@@ -2,7 +2,7 @@ package knes.agent.perception
 
 import io.kotest.core.spec.style.FunSpec
 import knes.agent.skills.PressStartUntilOverworld
-import knes.agent.tools.EmulatorToolset
+import knes.agent.tools.LocalEmulatorToolset
 import knes.api.EmulatorSession
 import java.io.File
 
@@ -27,7 +27,7 @@ class PostBootFixtureBuilderTest : FunSpec({
     test("build post-boot fixture (Coneria Castle interior or overworld spawn)")
         .config(enabled = canRun && rebuild) {
         val session = EmulatorSession()
-        val toolset = EmulatorToolset(session)
+        val toolset = LocalEmulatorToolset(session)
         check(toolset.loadRom(romPath).ok)
         toolset.applyProfile("ff1")
         check(PressStartUntilOverworld(toolset).invoke().ok)

@@ -2,7 +2,7 @@ package knes.agent.perception
 
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
-import knes.agent.tools.EmulatorToolset
+import knes.agent.tools.LocalEmulatorToolset
 import knes.api.EmulatorSession
 import java.io.File
 
@@ -20,7 +20,7 @@ class SaveStateRoundTripTest : FunSpec({
     test("save/load round-trip preserves RAM hash and frame buffer hash")
         .config(enabled = canRun) {
         val session = EmulatorSession()
-        val toolset = EmulatorToolset(session)
+        val toolset = LocalEmulatorToolset(session)
         check(toolset.loadRom(romPath).ok)
         toolset.applyProfile("ff1")
 

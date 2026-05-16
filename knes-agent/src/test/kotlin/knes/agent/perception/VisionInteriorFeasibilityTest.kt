@@ -13,7 +13,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import knes.agent.skills.PressStartUntilOverworld
-import knes.agent.tools.EmulatorToolset
+import knes.agent.tools.LocalEmulatorToolset
 import knes.api.EmulatorSession
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -51,7 +51,7 @@ class VisionInteriorFeasibilityTest : FunSpec({
             .also { it.mkdirs() }
 
         val session = EmulatorSession()
-        val toolset = EmulatorToolset(session)
+        val toolset = LocalEmulatorToolset(session)
         toolset.loadRom(romPath).ok shouldBe true
         toolset.applyProfile("ff1").ok shouldBe true
 

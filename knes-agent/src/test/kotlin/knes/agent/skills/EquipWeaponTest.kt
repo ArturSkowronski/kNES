@@ -3,7 +3,7 @@ package knes.agent.skills
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
-import knes.agent.tools.EmulatorToolset
+import knes.agent.tools.LocalEmulatorToolset
 import knes.agent.tools.results.StateSnapshot
 import knes.agent.tools.results.StepResult
 import knes.api.EmulatorSession
@@ -92,7 +92,7 @@ class EquipWeaponTest : FunSpec({
 
 private class ScriptedEquipToolset(
     private val ramSequence: List<Map<String, Int>>
-) : EmulatorToolset(EmulatorSession()) {
+) : LocalEmulatorToolset(EmulatorSession()) {
     private var idx = 0
     var tapsIssued: Int = 0; private set
     override fun getState(): StateSnapshot {

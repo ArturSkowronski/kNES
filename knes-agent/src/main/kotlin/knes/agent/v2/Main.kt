@@ -16,7 +16,6 @@ import knes.agent.skills.PressStartUntilOverworld
 import knes.agent.skills.RestAtInn
 import knes.agent.skills.WalkOverworldTo
 import knes.agent.tools.EmulatorToolset
-import knes.agent.tools.RemoteEmulatorToolset
 import knes.agent.v2.agents.AdvisorAgent
 import knes.agent.v2.agents.CartographerAgent
 import knes.agent.v2.agents.ExecutorAgent
@@ -74,7 +73,7 @@ fun main(args: Array<String>) {
                 // /save endpoint yet).
                 val toolset: EmulatorToolset = if (cfg.remoteUrl != null) {
                     Log.event("REMOTE mode — RemoteEmulatorToolset → ${cfg.remoteUrl} (ROM must be loaded in UI; /save checkpoints skipped)")
-                    RemoteEmulatorToolset.remote(cfg.remoteUrl)
+                    EmulatorToolset.remote(cfg.remoteUrl)
                 } else {
                     EmulatorToolset.local()
                 }

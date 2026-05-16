@@ -1,7 +1,7 @@
 package knes.agent.perception
 
 import io.kotest.core.spec.style.FunSpec
-import knes.agent.tools.EmulatorToolset
+import knes.agent.tools.LocalEmulatorToolset
 import knes.api.EmulatorSession
 import java.io.File
 import java.nio.file.Files
@@ -12,7 +12,7 @@ class RamSignatureRecorderTest : FunSpec({
         if (!File(rom).exists()) return@test  // skip when ROM unavailable (CI)
 
         val session = EmulatorSession()
-        val toolset = EmulatorToolset(session)
+        val toolset = LocalEmulatorToolset(session)
         val loaded = toolset.loadRom(rom)
         if (!loaded.ok) {
             throw IllegalStateException("Failed to load ROM: ${loaded.message}")

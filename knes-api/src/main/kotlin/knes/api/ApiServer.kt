@@ -7,7 +7,7 @@ import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import knes.agent.tools.EmulatorToolset
+import knes.agent.tools.LocalEmulatorToolset
 import knes.emulator.input.InputHandler
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -53,7 +53,7 @@ data class ActionExecuteResponse(
 )
 
 fun Application.configureRoutes(session: EmulatorSession) {
-    val toolset = EmulatorToolset(session)
+    val toolset = LocalEmulatorToolset(session)
 
     install(ContentNegotiation) {
         json(Json { prettyPrint = true })

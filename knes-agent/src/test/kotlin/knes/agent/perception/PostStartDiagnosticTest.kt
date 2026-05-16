@@ -1,7 +1,7 @@
 package knes.agent.perception
 
 import io.kotest.core.spec.style.FunSpec
-import knes.agent.tools.EmulatorToolset
+import knes.agent.tools.LocalEmulatorToolset
 import knes.api.EmulatorSession
 import java.io.File
 
@@ -18,7 +18,7 @@ class PostStartDiagnosticTest : FunSpec({
         if (!File(rom).exists()) return@test
 
         val session = EmulatorSession()
-        val toolset = EmulatorToolset(session)
+        val toolset = LocalEmulatorToolset(session)
         toolset.loadRom(rom)
         toolset.applyProfile("ff1")
 
