@@ -37,7 +37,7 @@ class EmulatorToolsetStepModeTest : FunSpec({
         val session = EmulatorSession()
         session.loadRom(romPath!!)
 
-        val toolset = EmulatorToolset(session)
+        val toolset = LocalEmulatorToolset(session)
         val frameBefore = session.frameCount
 
         val elapsed = measureTime {
@@ -56,7 +56,7 @@ class EmulatorToolsetStepModeTest : FunSpec({
         val session = EmulatorSession()
         session.loadRom(romPath!!)
 
-        val toolset = EmulatorToolset(session)
+        val toolset = LocalEmulatorToolset(session)
         val frameBefore = session.frameCount
 
         val elapsed = measureTime {
@@ -79,7 +79,7 @@ class EmulatorToolsetStepModeTest : FunSpec({
         val session = EmulatorSession()
         session.loadRom(romPath!!)
 
-        val toolset = EmulatorToolset(session)
+        val toolset = LocalEmulatorToolset(session)
         val frameBefore = session.frameCount
 
         val elapsed = measureTime {
