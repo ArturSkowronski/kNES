@@ -51,11 +51,21 @@ class V2Memory(val run: V2RunDirectory) {
                 milestones = mutableListOf(
                     Milestone(id = "boot",          status = "in_progress"),
                     Milestone(id = "enter_coneria", status = "pending"),
-                    // Merged buy_weapons+equip_weapons → arm_party. Equipping
-                    // implies holding, so two separate milestones forced the
-                    // Advisor to plan twice with a latch in between that could
-                    // mask incomplete purchases (run 2026-05-12-2257: latched
-                    // both milestones with only 2/4 chars armed).
+                    // Event-type checkpoint: party reaches the Coneria
+                    // weapon-shop counter tile. Latches once and is NOT
+                    // re-verified (party will naturally leave the tile
+                    // during the buy menu — we don't want regression).
+                    Milestone(id = "enter_weapon_shop", status = "pending"),
+                    // Split-out checkpoint: ≥1 char holds ≥1 weapon. This
+                    // separates "we entered the shop and a buy succeeded"
+                    // from "weapons are equipped" — the Advisor replans on
+                    // each advance and the audit-hysteresis counter resets,
+                    // so the equipping phase doesn't suffer noise from
+                    // mid-buy navigation observations. (Reverses 2026-05-12
+                    // merge, but with a tighter predicate: arm_party still
+                    // requires ≥2 EQUIPPED so a single buy can't falsely
+                    // satisfy the armed-up goal.)
+                    Milestone(id = "buy_weapons",   status = "pending"),
                     Milestone(id = "arm_party",     status = "pending"),
                     Milestone(id = "exit_coneria", status = "pending"),
                     Milestone(id = "grind",         status = "pending"),

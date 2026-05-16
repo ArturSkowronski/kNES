@@ -31,6 +31,7 @@ import knes.agent.v2.runtime.V2Memory
 import knes.agent.v2.runtime.V2RunDirectory
 import knes.agent.v2.runtime.Watchdog
 import knes.agent.v2.runtime.ExecutorTrace
+import knes.agent.v2.runtime.Log
 import knes.agent.v2.runtime.Resumer
 import knes.agent.v2.runtime.TurnLog
 import knes.agent.v2.runtime.WatchdogTrace
@@ -50,23 +51,38 @@ fun main(args: Array<String>) {
 
     val run = if (cfg.resumeDir != null) V2RunDirectory.resume(cfg.resumeDir)
              else V2RunDirectory.freshRun()
-    System.err.println("[v2.main] run dir: ${run.root}")
+    Log.main("run dir: ${run.root}")
 
     runBlocking {
         AnthropicSession(anthropicKey).use { anthropic ->
             AnthropicHttp(anthropicKey).use { anthropicHttp ->
-            // Two Gemini clients: Pro for thinking-heavy Advisor + Cartographer,
-            // Flash-lite for the per-turn Executor (5-10× lower latency on
-            // gemini-3.1-flash-lite vs gemini-3.1-pro-preview; Executor only
-            // emits a single button or one tool call so it does not need full
-            // thinking). Override via GEMINI_MODEL (both) or GEMINI_EXECUTOR_MODEL.
+            // Two Gemini clients: Pro for Advisor + Cartographer + Executor.
+            // We previously defaulted the Executor to gemini-3.1-flash-lite
+            // for latency (5-10× faster), but Flash-Lite mis-identified
+            // building positions in the town viewport (called the centre
+            // path "near the Inn", walked Right off the south edge, then
+            // confused Coneria Castle for Coneria Town). Pro reads the
+            // scene reliably and the per-turn cost is acceptable. Override
+            // via GEMINI_MODEL (both) or GEMINI_EXECUTOR_MODEL.
             val executorModel = System.getenv("GEMINI_EXECUTOR_MODEL")?.takeIf { it.isNotBlank() }
-                ?: "gemini-3.1-flash-lite"
+                ?: "gemini-3.1-pro-preview"
             GeminiPro31Client(geminiKey).use { gemini ->
             GeminiPro31Client(geminiKey, modelOverride = executorModel).use { geminiExec ->
+                // Toolset: in-process NES by default, REST-driven remote
+                // (talking to the Compose UI's embedded API server) when
+                // `--remote=<url>` is set. The remote variant skips loadRom
+                // (the UI loads the ROM) and savestate checkpoints (no
+                // /save endpoint yet).
                 val session = EmulatorSession()
-                val toolset = EmulatorToolset(session)
-                require(toolset.loadRom(cfg.rom).ok) { "Failed to load ROM: ${cfg.rom}" }
+                val toolset: EmulatorToolset = if (cfg.remoteUrl != null) {
+                    Log.event("REMOTE mode — RemoteEmulatorToolset → ${cfg.remoteUrl} (ROM must be loaded in UI; /save checkpoints skipped)")
+                    knes.agent.tools.RemoteEmulatorToolset(cfg.remoteUrl, session)
+                } else {
+                    EmulatorToolset(session)
+                }
+                if (cfg.remoteUrl == null) {
+                    require(toolset.loadRom(cfg.rom).ok) { "Failed to load ROM: ${cfg.rom}" }
+                }
                 require(toolset.applyProfile(cfg.profile).ok) { "Failed to apply profile: ${cfg.profile}" }
 
                 // Perception (shared with v1)
@@ -79,7 +95,12 @@ fun main(args: Array<String>) {
 
                 // v2 runtime
                 val memory = V2Memory(run)
-                if (cfg.resumeDir != null) Resumer(session, run, memory).resume()
+                if (cfg.resumeDir != null) {
+                    require(cfg.remoteUrl == null) {
+                        "--resume is not supported with --remote (no save/load over REST yet)"
+                    }
+                    Resumer(session, run, memory).resume()
+                }
                 val snapshotDumper = SnapshotDumper(toolset, run)
                 val watchdog = Watchdog()
 
@@ -124,7 +145,7 @@ fun main(args: Array<String>) {
                 // Agents
                 val advisor = AdvisorAgent(gemini, memory, run, landmarks)
                 val executor = ExecutorAgent(anthropic, sonnet, haiku, tools, memory, run, gemini = geminiExec)
-                System.err.println("[v2.main] LLM models: advisor/cart=${gemini.model} executor=${geminiExec.model}")
+                Log.llm("models: advisor/cart=${gemini.model} executor=${geminiExec.model}")
                 val reviewer = ReviewerAgent(haiku, memory, run)
                 val cartographer = CartographerAgent(
                     gemini, toolset, memory, snapshotDumper, overworldMap, fog, landmarks,
@@ -132,7 +153,7 @@ fun main(args: Array<String>) {
                     run,
                 )
 
-                System.err.println("[v2.main] bootstrap complete — entering campaign loop")
+                Log.main("bootstrap complete — entering campaign loop")
 
                 // Phase 0: bootstrap (boot → Cartographer → first Advisor plan).
                 // CRITICAL ORDERING: boot MUST run before Cartographer. Otherwise
@@ -145,13 +166,13 @@ fun main(args: Array<String>) {
                 // anything.
                 val firstTurn = memory.campaign.lastTurn + 1
                 if (cfg.fresh) {
-                    System.err.println("[v2.main] pre-cart boot: pressing START to leave title")
+                    Log.main("pre-cart boot: pressing START to leave title")
                     pressStart.invoke(emptyMap())
                     waitForStableFrame(toolset)
                     if (cfg.cartographerEnabled) {
                         cartographer.exploreInitialOverworld()
                     } else {
-                        System.err.println("[v2.main] cartographer SKIPPED (use --cart to enable). Using preseeded landmarks.")
+                        Log.cartographer("SKIPPED (use --cart to enable). Using preseeded landmarks.")
                     }
                     waitForStableFrame(toolset)
                     snapshotDumper.dump(0)
@@ -175,6 +196,24 @@ fun main(args: Array<String>) {
                 val recentExecutorOutcomes = ArrayDeque<String>(4)
                 val sonnetModelId = sonnet.modelId
                 var turn = firstTurn
+                // Gold-bleed detector: track last-turn gold and the tool that
+                // executed. If gold drops while the tool is plain `sequence`
+                // (not buyAtShop/restAtInn) the agent has accidentally engaged
+                // an inn/save NPC and is paying 30G per Yes loop. We cancel
+                // with B-mash and force an Advisor replan with explicit cause.
+                // NOTE: the gold drop observed at turn N is caused by the
+                // action taken in turn N-1 (the buy confirms during the
+                // post-A settle frames before turn N's snapshot). So the
+                // attribution must compare prevTool, not the current tool.
+                var prevGold: Int? = null
+                var prevTool: String? = null
+                // Reviewer.auditPlan (every 25 turns) needs hysteresis — a
+                // freshly-issued plan in mid-execution will trip the audit
+                // ("agent at (9,16), target (11,10)") on the first hit and
+                // get replanned away. Require 2 consecutive audits with
+                // issues before triggering a replan. Reset on milestone
+                // advance.
+                var consecutiveAuditHits = 0
                 while (turn <= cfg.maxTurns && !memory.campaign.done) {
                     // Settle transition transients before vision/RAM sampling. Without
                     // this, snapshots can land mid-scroll/mid-map-load (the screen
@@ -191,6 +230,24 @@ fun main(args: Array<String>) {
                     val decision = executor.act(screenshotB64 = snap, ramDigest = ramDigest, turn = turn)
 
                     val outcomeLabel = decision.outcome.javaClass.simpleName
+                    // Per-turn human-readable decision line — the headline
+                    // signal during the talk. Shows what the agent JUST
+                    // decided + outcome + first ~80 chars of LLM reasoning.
+                    Log.turn(
+                        turn = turn,
+                        phase = phase.name,
+                        smX = state.ram["smPlayerX"],
+                        smY = state.ram["smPlayerY"],
+                        tool = decision.tool,
+                        args = decision.args,
+                        outcome = outcomeLabel.lowercase(),
+                        message = when (val o = decision.outcome) {
+                            is ToolOutcome.Ok -> o.message
+                            is ToolOutcome.Fail -> o.message
+                            is ToolOutcome.Reject -> o.reason
+                        },
+                        reasoning = decision.reasoning,
+                    )
                     recentExecutorOutcomes.addLast(outcomeLabel)
                     if (recentExecutorOutcomes.size > 4) recentExecutorOutcomes.removeFirst()
 
@@ -221,10 +278,62 @@ fun main(args: Array<String>) {
                         )
                     )
 
+                    // Gold-bleed detection — see prevGold comment above.
+                    val curGold = (state.ram["goldLow"] ?: 0) +
+                        ((state.ram["goldMid"] ?: 0) shl 8) +
+                        ((state.ram["goldHigh"] ?: 0) shl 16)
+                    // Attribute the gold drop to the tool from the PREVIOUS
+                    // turn (the action that actually caused it). Current
+                    // turn's tool is just the next decision being made.
+                    val attributedTool = prevTool ?: decision.tool
+                    val intentionalSpendTool = attributedTool in setOf("buyAtShop", "restAtInn", "useMenu")
+                    val pg = prevGold
+                    if (pg != null && curGold < pg && !intentionalSpendTool) {
+                        val delta = pg - curGold
+                        // Plausible-shopping suppression: during buy_weapons
+                        // OR arm_party (the buy can latch buy_weapons mid-
+                        // turn and the next turn already shows arm_party as
+                        // the current milestone), with a sequence-driven
+                        // buy menu, weapon purchases legitimately drop gold
+                        // by Coneria shop amounts (5G, 10G, multiples).
+                        // Don't replan those — they are the intended flow
+                        // now that buyAtShop is gone. The inn loop bug
+                        // drops 30G per Yes — we still want to catch that
+                        // when the agent isn't supposed to be shopping.
+                        val currentMs = memory.campaign.milestones
+                            .firstOrNull { it.status == "in_progress" }?.id
+                        val knownBuyAmounts = setOf(5, 10, 15, 20, 25, 30, 35, 40)
+                        val shoppingMilestone = currentMs in setOf("buy_weapons", "arm_party", "enter_weapon_shop")
+                        val plausibleShopping = shoppingMilestone &&
+                            attributedTool == "sequence" &&
+                            delta in knownBuyAmounts
+                        if (plausibleShopping) {
+                            Log.event("gold drop −${delta}G during $currentMs + sequence (attributed=$attributedTool) — plausible weapon purchase, no replan", turn)
+                        } else {
+                            Log.warn("GOLD BLEED $pg → $curGold (−${delta}G) without intentional spend (attributed=$attributedTool, current=${decision.tool}, ms=$currentMs). B-mash + replan.", turn)
+                            // Mash B six times to back out of any open Yes/No or
+                            // shop overlay before the next snapshot.
+                            repeat(6) {
+                                toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 8)
+                                toolset.step(buttons = emptyList(), frames = 12)
+                            }
+                            advisor.plan(
+                                reason = "OBSERVATION: gold dropped -${delta}G at sm=(${state.ram["smPlayerX"]},${state.ram["smPlayerY"]}) while last tool was `${decision.tool}` (no intentional spend). Cause unknown — could be accidental NPC dialog (Yes/No), an inn-stay, a misfired skill, or a legitimate cost we didn't model. Inspect the current screenshot to identify which building/NPC the party is adjacent to (sign text, counter contents) and decide whether to retry, back out, or continue. Do NOT assume it was an inn unless the screenshot confirms a bed/INN sign.",
+                                screenshotB64 = snap, turn = turn,
+                                phase = phase, ram = state.ram,
+                            )
+                        }
+                    }
+                    prevGold = curGold
+                    prevTool = decision.tool
+
                     val milestoneJustAdvanced = advanceMilestones(memory, phase, state.ram, decision, turn)
                     if (milestoneJustAdvanced != null) {
                         val advisorReason = "milestone $milestoneJustAdvanced just done — replan for next"
-                        System.err.println("[v2.main] $advisorReason")
+                        Log.event(advisorReason, turn)
+                        // Fresh plan should get a full grace period from
+                        // the audit-hysteresis counter.
+                        consecutiveAuditHits = 0
                         advisor.plan(
                             reason = advisorReason, screenshotB64 = snap, turn = turn,
                             phase = phase, ram = state.ram,
@@ -233,7 +342,7 @@ fun main(args: Array<String>) {
 
                     if (watchdog.stuckSignal(phase)) {
                         val diag = watchdog.diagnose(phase, recentExecutorOutcomes.toList())
-                        System.err.println("[v2.main] stuck-signal — $diag")
+                        Log.warn("stuck-signal — $diag", turn)
                         advisor.plan(
                             reason = "stuck: $diag", screenshotB64 = snap, turn = turn,
                             phase = phase, ram = state.ram,
@@ -245,16 +354,29 @@ fun main(args: Array<String>) {
 
                     // LLM-driven plan audit — every 25 turns Haiku checks whether
                     // the Advisor's "done" steps actually happened (gold drop,
-                    // weapon equipped, party at target, etc). On reported issues
-                    // we trigger an Advisor replan with the diagnostic.
+                    // weapon equipped, party at target, etc). Hysteresis: a
+                    // single audit hit is usually a transient mid-execution
+                    // observation ("agent at (9,16), target (11,10) — still
+                    // walking"). Only replan if TWO consecutive audits flag
+                    // issues, i.e. the plan has been stuck for ~50 turns.
+                    // Counter resets on milestone advance.
                     if (turn % 25 == 0 && turn > 0) {
                         val issues = reviewer.auditPlan(turn, snap, ramDigest)
                         if (issues.isNotEmpty()) {
-                            advisor.plan(
-                                reason = "Reviewer audit found issues: ${issues.joinToString(" | ").take(160)}",
-                                screenshotB64 = snap, turn = turn,
-                                phase = phase, ram = state.ram,
-                            )
+                            consecutiveAuditHits += 1
+                            if (consecutiveAuditHits >= 2) {
+                                Log.reviewer("auditPlan hits $consecutiveAuditHits consecutive — replanning", turn)
+                                advisor.plan(
+                                    reason = "Reviewer audit (2 consecutive hits): ${issues.joinToString(" | ").take(160)}",
+                                    screenshotB64 = snap, turn = turn,
+                                    phase = phase, ram = state.ram,
+                                )
+                                consecutiveAuditHits = 0
+                            } else {
+                                Log.reviewer("auditPlan issue (1st hit — grace 25t): ${issues.joinToString(" | ").take(120)}", turn)
+                            }
+                        } else {
+                            consecutiveAuditHits = 0
                         }
                     }
 
@@ -272,18 +394,39 @@ fun main(args: Array<String>) {
                                 phase = phase, ram = state.ram,
                             )
                         }
+                        // Stuck-progress detector — catches the case where
+                        // the current milestone has been in_progress for
+                        // many turns without satisfying its predicate, and
+                        // the plan has no further steps (sentinel intentTool
+                        // parking the cursor). Reviewer composes a RAM-aware
+                        // diagnosis (party weapon digest, gold, etc.) and
+                        // we forward it to the Advisor as a replan reason.
+                        // Internal cooldown prevents replan storms.
+                        val stuck = reviewer.checkProgress(turn, state.ram)
+                        if (stuck != null) {
+                            consecutiveAuditHits = 0  // fresh plan deserves a clean audit window
+                            advisor.plan(
+                                reason = stuck.reason,
+                                screenshotB64 = snap, turn = turn,
+                                phase = phase, ram = state.ram,
+                            )
+                        }
                     }
 
-                    if (turn % 100 == 0) {
+                    if (turn % 100 == 0 && cfg.remoteUrl == null) {
+                        // Skip checkpoints in remote mode — the in-process
+                        // `session` isn't driving the emulator, so its
+                        // saveState() snapshot would be garbage (an empty
+                        // NES at boot state, not the Compose UI's frame).
                         val saveBytes = session.saveState()
                         Files.write(run.savestate(turn), saveBytes)
-                        System.err.println("[v2.main] checkpoint saved at T$turn (${saveBytes.size} bytes)")
+                        Log.ok("checkpoint saved (${saveBytes.size} bytes)", turn)
                     }
 
                     turn++
                 }
 
-                System.err.println("[v2.main] done. last_turn=${memory.campaign.lastTurn}")
+                Log.main("done. last_turn=${memory.campaign.lastTurn}")
             }
             }
             }
@@ -342,16 +485,27 @@ private fun advanceMilestones(
             m.status = "done"; m.turnEnd = turn
             val next = ms.firstOrNull { it.status == "pending" }
             if (next != null) { next.status = "in_progress"; next.turnStart = turn }
-            System.err.println("[v2.main] milestone $id done at T$turn; next=${next?.id ?: "(none)"}")
+            Log.ok("milestone ★ $id  done; next=${next?.id ?: "(none)"}", turn)
             advancedId = id
         }
     }
     // Single source of truth — see knes.agent.v2.runtime.MilestonePredicates.
+    //
+    // AT MOST ONE LATCH PER TURN. If multiple predicates already hold
+    // (common in --remote mode where the Compose UI inherited weapons/
+    // position from a previous run), promoting them all in the same
+    // turn would cascade enter_coneria → enter_weapon_shop → buy_weapons
+    // → arm_party in a single frame, which is hard to follow on stage
+    // and skips the Advisor replan hook that should fire per advance.
+    // Instead: latch the FIRST currently-in_progress milestone whose
+    // predicate matches, promote the next pending to in_progress, and
+    // BREAK. The newly-promoted one can latch next turn at the earliest.
     val prereqDone = ms.associate { it.id to (it.status == "done") }
     for (m in ms) {
         if (m.status != "in_progress") continue
         if (knes.agent.v2.runtime.MilestonePredicates.evaluate(m.id, phase, ram, prereqDone)) {
             mark(m.id) { true }
+            break
         }
     }
 

@@ -46,7 +46,7 @@ class AdvisorAgent(
             reason = reason,
         )
         memory.saveCampaign()
-        System.err.println("[v2.advisor] turn=$turn reason=$reason steps=${plan.steps.size}")
+        knes.agent.v2.runtime.Log.advisor("plan(${plan.steps.size} steps) ← $reason", turn)
         run.markIdle()
     }
 
@@ -73,12 +73,9 @@ class AdvisorAgent(
 
             Landmark usage:
             - Overworld landmarks (worldX,worldY) — valid targets for walkTo / interactAt while phase=Overworld.
-              walkTo args are overworld world coords (worldX,worldY space).
-            - Town-overlay landmarks (mapId=0, has localX/localY) — the party first crosses a TOWN_ENTRY
-              tile via walkTo on the overworld; once mapflags.bit0=1 (phase=Town), walkTo args become
-              TOWN-LOCAL coords (smPlayerX/smPlayerY space). E.g. walkTo(11,10) in Town walks the party
-              to local tile (11,10) using Haiku vision per step. Ends in Ok when party is adjacent.
-              After walking adjacent, call buyAtShop.
+            - Town-overlay landmarks (mapId=0, has localX/localY) — once mapflags.bit0=1 (phase=Town),
+              walkTo args become TOWN-LOCAL (smPlayerX/smPlayerY 0-31). walkTo ends Ok when adjacent.
+              The Executor drives any subsequent shop/inn dialog via raw `sequence` taps.
             - True interior landmarks (mapId>0) — interactAt with local coords once inside that mapId.
         """.trimIndent()
     }
@@ -132,22 +129,95 @@ class AdvisorAgent(
 
             Default party order: charSlot 0=Fighter, 1=Thief, 2=BlackBelt, 3=RedMage.
 
-            RECOMMENDED arm_party assignment for the default party in Coneria:
-              charSlot 0 (Fighter)   → buy shop slot 4 (Iron Hammer)   then equip
-              charSlot 1 (Thief)     → buy shop slot 3 (Rapier)        then equip
-              charSlot 2 (BlackBelt) → buy shop slot 2 (Nunchucks)     then equip
-              charSlot 3 (RedMage)   → buy shop slot 3 (Rapier)        then equip
-            Total cost = 40G (well under starting 400G).
+            RECOMMENDED Coneria shopping list — buy a DIVERSE set so the
+            equip phase never gets blocked by class mismatch:
 
-            One-shot plan template for arm_party:
-              [0] walkTo({"x":"11","y":"10"})  — to weapon shop counter
-              [1] buyAtShop({"items":"4,3,2,3","charSlots":"0,1,2,3"})  — bundle
-              [2..5] equipWeapon for each charSlot in turn
+              shop slot 2 (Nunchucks) × 1   — MANDATORY (BlackBelt's only
+                                              non-Staff option; without
+                                              this the BlackBelt cannot
+                                              equip anything except a Staff)
+              shop slot 3 (Rapier)    × 2   — covers Fighter, Thief, RedMage
+              shop slot 4 (Iron Hammer) × 1 — primary for Fighter or RedMage
 
-            If buyAtShop returns a per-pair FAIL "WrongClass: char=N itemSlot=K",
-            the item is incompatible with THAT class only. Re-plan with the same
-            item assigned to a DIFFERENT charSlot that still has no weapon. Do
-            not abandon the item.
+            Total: 4 weapons, cost = 40G (well under starting 400G).
+
+            After purchase, equip pairing for default party:
+              charSlot 0 (Fighter)   → Iron Hammer  (or Rapier as backup)
+              charSlot 1 (Thief)     → Rapier
+              charSlot 2 (BlackBelt) → Nunchucks    (only option)
+              charSlot 3 (RedMage)   → Rapier       (or Hammer as backup)
+
+            RULE: never buy 2 copies of the SAME weapon if that weapon
+            has narrow class compatibility. Two Rapiers is fine (Fighter
+            + Thief or Fighter + RedMage can both use them). Two Knives
+            would lock the BlackBelt out entirely. Two Hammers would
+            lock out the Thief. Aim for at least one weapon per class
+            need; THEN duplicate the cheap broadly-compatible ones if
+            budget allows.
+
+            Plan templates (THREE milestones now — enter_weapon_shop →
+            buy_weapons → arm_party):
+
+            enter_weapon_shop (party at sm=(11,11), phase=Town, mid=0):
+              [0] walkTo({"x":"11","y":"11"})
+                  description: "Walk to sm=(11,11) — the tile directly
+                  SOUTH of the Coneria weapon shopkeeper. Coord is an
+                  anchor — actually navigate by VISION: stay on the main
+                  paved path, head NORTH, look for the 'WEAPON' sign and
+                  a sword/club sprite on the counter. Skip dead-end side-
+                  branches that terminate at the INN (purple 'INN' sign,
+                  west of trunk) or at ARMOR. Stop when adjacent-south of
+                  the WEAPON keeper, facing N. NEVER tap Right or Down off
+                  the southern edge row (smY ≥ 24) — that exits to
+                  Overworld. Milestone latches when the party stands on
+                  sm=(11,11)."
+
+            buy_weapons (≥1 char holds any weapon):
+              [0] interactAt({"x":"11","y":"10"})
+                  description: "Tap A on the WEAPON shopkeeper to open the
+                  shop dialog, then drive the buy menu via raw `sequence`
+                  taps (no buyAtShop tool).
+
+                  *** MANDATORY SHOPPING LIST (40G total, do NOT deviate) ***
+                  This exact basket is required because the equip phase
+                  silently deadlocks if any character has only
+                  wrong-class items in inventory. Two Knives blocks the
+                  BlackBelt; two Hammers blocks the Thief. The list
+                  below ensures EVERY default-party char (Fighter / Thief /
+                  BlackBelt / RedMage) has at least one weapon they can
+                  equip.
+
+                    1. shop slot 2 (Wooden Nunchucks)  for charSlot 2 (BlackBelt)  — MANDATORY
+                    2. shop slot 4 (Iron Hammer)       for charSlot 0 (Fighter)
+                    3. shop slot 3 (Rapier)            for charSlot 1 (Thief)
+                    4. shop slot 3 (Rapier)            for charSlot 3 (RedMage)
+
+                  Total: 4 items, 40G. Buy in the order above (Nunchucks
+                  FIRST so the BlackBelt is guaranteed covered even if
+                  budget or menu state goes sideways later). For each
+                  purchase: Down×N to highlight the shop slot → A →
+                  Down×N to highlight the target charSlot → A → A on
+                  the Yes confirmation. Watch the gold counter drop and
+                  the partyWeaponDigest line update each turn — that's
+                  the source of truth for what's in inventory.
+
+                  When all 4 chars hold their assigned weapon, tap B
+                  several times to exit. Cursor stays on this plan step
+                  through the entire buy phase (sequence ≠ interactAt,
+                  no false advance). The buy_weapons milestone latches
+                  on the FIRST successful purchase (any weapon byte > 0);
+                  the Advisor will replan to arm_party as soon as that
+                  fires, but DO NOT stop buying — the agent should keep
+                  shopping the list until ALL 4 pairs are bought before
+                  exiting the dialog."
+
+            arm_party (≥2 chars have a weapon equipped — bit7 set):
+              [0] intentTool="armCharsViaMenu"  intentArgs={}
+                  description: "Equipping is done VIA RAW SEQUENCE TAPS
+                  by the Executor (see EQUIPPING PLAYBOOK in the Executor
+                  system prompt). Cursor stays on this step until the
+                  arm_party milestone latches at ≥2 equipped chars; the
+                  Advisor will then replan to exit_coneria."
         """.trimIndent()
     }
 
@@ -164,21 +234,27 @@ class AdvisorAgent(
 
         ${landmarksDigest()}
 
-        Output schema (STRICT — every step uses one of the seven tools below; intentArgs values are STRINGS):
+        Output schema (STRICT — every step uses one of the tools below; intentArgs values are STRINGS):
         {"steps":[
           {"index":0,"description":"...","intentTool":"<tool>","intentArgs":{"<key>":"<value>"}},
           ...
         ]}
 
         TOOLS — pick exactly one per step, match arg keys precisely:
-          - boot                          intentArgs: {}                                         (title→party creation→overworld; use for the FIRST step of a fresh campaign)
-          - walkTo                        intentArgs: {"x":"<int>","y":"<int>"}                  (overworld OR indoor; phase auto-detected)
-          - interactAt                    intentArgs: {"x":"<int>","y":"<int>"}                  (walkTo then A — NPC/chest/door)
-          - useMenu                       intentArgs: {"path":"<menu-path>"}                     (FIELD menu only — see grammar below; NOT for title screen)
-          - buyAtShop                     intentArgs: {"items":"0,1,2,3","charSlots":"0,1,2,3"}  (comma-joined int lists, equal length)
-          - equipWeapon                   intentArgs: {"charSlot":"<0-3>","weaponSlot":"<0-3>"}
-          - restAtInn                     intentArgs: {"innMapId":"<int>"}
-          - battleFightAll                intentArgs: {}
+          - boot              intentArgs: {}                                  (title→party→overworld; FIRST step of fresh campaign)
+          - walkTo            intentArgs: {"x":"<int>","y":"<int>"}           (overworld OR indoor; phase auto-detected)
+          - interactAt        intentArgs: {"x":"<int>","y":"<int>"}           (walkTo then A — NPC/chest/door)
+          - useMenu           intentArgs: {"path":"<menu-path>"}              (FIELD menu only — see grammar below)
+          - restAtInn         intentArgs: {"innMapId":"<int>"}
+          - battleFightAll    intentArgs: {}
+          - armCharsViaMenu   intentArgs: {}                                  (SENTINEL — not a real tool. Parks cursor on the
+                                                                              multi-turn "equip via raw taps" phase for arm_party.
+                                                                              Cursor advances only when the milestone latches.)
+
+        Shopping and equipping run through raw `sequence` taps from the
+        Executor (not as Advisor steps). The Advisor authors at most
+        `walkTo` to position, then `interactAt` to open the shop dialog,
+        then `armCharsViaMenu` to mark the equipping phase.
 
         useMenu path grammar (use ONLY these tokens — never raw labels like "NEW GAME" / "FIGHTER"):
           main/<item|magic|equip|status|exit>[/char1|char2|char3|char4][/weapon|armor][/<0-3>]

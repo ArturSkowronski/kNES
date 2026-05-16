@@ -88,7 +88,23 @@ class ExecutorAgent(
         ))
         if (recentMoves.size > 8) recentMoves.removeFirst()
 
-        if (outcome is ToolOutcome.Ok && plan != null) advancePlan(plan)
+        // Only advance the plan cursor when the EXECUTED tool matches the
+        // tool the current plan step intended. Previously any Ok outcome
+        // advanced the cursor — so 6 successful `sequence(Right)` taps could
+        // burn through a 6-step plan in 6 turns without the agent ever
+        // reaching the shop counter. After that the Executor had no plan
+        // anchor and started zig-zagging based purely on Flash-Lite's
+        // per-turn screen reading.
+        if (outcome is ToolOutcome.Ok && plan != null) {
+            val currentStep = plan.steps.getOrNull(plan.cursor)
+            val intent = currentStep?.intentTool
+            // If the plan step declared its intent tool, require it to
+            // match before advancing. If intentTool is null (older plans),
+            // fall back to the legacy "any Ok advances" behaviour.
+            if (intent == null || intent == tool) {
+                advancePlan(plan)
+            }
+        }
 
         run?.markIdle()
         return ExecutorDecision(tool, args, reasoning, outcome, System.currentTimeMillis() - started)
@@ -134,7 +150,7 @@ class ExecutorAgent(
             }
             parseToolDecision(raw)
         } catch (e: Exception) {
-            System.err.println("[v2.executor] askLlm error: ${e.message?.take(160)} — falling back to plan tail")
+            knes.agent.v2.runtime.Log.error("askLlm error: ${e.message?.take(160)} — falling back to plan tail")
             val tail = plan?.steps?.lastOrNull()
             if (tail?.intentTool != null) Triple(tail.intentTool, tail.intentArgs ?: emptyMap(), "fallback to plan tail (askLlm exception)")
             else Triple("useMenu", mapOf("path" to "main/exit"), "fallback no-op (no plan, askLlm exception)")
@@ -209,11 +225,14 @@ class ExecutorAgent(
                 cost — Executor runs every turn anyway).
 
             (B) High-level tool — for compound flows the engine handles in one call.
-                {"tool":"<one of: buyAtShop|equipWeapon|restAtInn|useMenu>","args":{...},"reasoning":"..."}
-                  buyAtShop:    args = {"items":"3,2,1,0","charSlots":"0,1,2,3"}
-                  equipWeapon:  args = {"charSlot":"<0-3>","weaponSlot":"<0-3>"}
+                {"tool":"<one of: restAtInn|useMenu>","args":{...},"reasoning":"..."}
                   restAtInn:    args = {"innMapId":"<int>"}
                   useMenu:      args = {"path":"<grammar>"} — main/<item|equip|magic|status|exit>[/charN][/weapon|armor][/0-3] or shop/<buy|sell|exit>[/N][/charN]
+
+                NOTE: buyAtShop and equipWeapon are REMOVED — their cursor
+                state machines kept misfiring. Shopping AND equipping are
+                done via raw `sequence` taps: see the SHOPPING PLAYBOOK
+                and EQUIPPING PLAYBOOK sections below.
 
             Decide from the SCREENSHOT what's happening. The plan is a hint; if the
             screen shows something else (e.g. dialog, menu, encounter), handle that
@@ -244,11 +263,26 @@ class ExecutorAgent(
         "walkTo"          -> tools.walkTo(args.getValue("x").toInt(), args.getValue("y").toInt())
         "interactAt"      -> tools.interactAt(args.getValue("x").toInt(), args.getValue("y").toInt())
         "useMenu"         -> tools.useMenu(args.getValue("path"))
-        "buyAtShop"       -> tools.buyAtShop(
-            args.getValue("items").split(",").map { it.toInt() },
-            args.getValue("charSlots").split(",").map { it.toInt() },
+        // buyAtShop removed — its cursor state machine kept returning
+        // WrongClass for valid pairs. Shopping is now done via raw
+        // `sequence` taps (see SHOPPING PLAYBOOK in the Executor prompt).
+        "buyAtShop"       -> ToolOutcome.Reject(
+            "buyAtShop is disabled — buy weapons via raw `sequence` taps. " +
+            "Walk adjacent-south of the weapon shopkeeper, face N, then: " +
+            "A (talk) → A (open menu) → Up/Down to highlight item → A (select) " +
+            "→ Up/Down to pick char → A (confirm) → A (Yes). Read screen each step."
         )
-        "equipWeapon"     -> tools.equipWeapon(args.getValue("charSlot").toInt(), args.getValue("weaponSlot").toInt())
+        // equipWeapon removed — its cursor state machine assumed a fresh
+        // main menu each call; chaining 4 equips never worked reliably.
+        // Equipping is now done via raw `sequence` taps (see EQUIPPING
+        // PLAYBOOK in the Executor prompt).
+        "equipWeapon"     -> ToolOutcome.Reject(
+            "equipWeapon is disabled — equip via raw `sequence` taps. " +
+            "From the field: START to open main menu → Down to highlight " +
+            "Equip → A → A to pick char1 (or Down/Up to pick another) → " +
+            "Right to switch to Weapon panel → Down to highlight a held " +
+            "weapon → A to equip. The bit7 of the byte flips on success."
+        )
         "restAtInn"       -> tools.restAtInn(args.getValue("innMapId"))
         "battleFightAll"  -> tools.battleFightAll()
         "approachSprite"  -> tools.approachSprite(args.getValue("kind"))
@@ -271,59 +305,209 @@ class ExecutorAgent(
 
     companion object {
         private val EXECUTOR_SYSTEM_PROMPT = """
-            You are the per-turn tool picker for an FF1 NES playing agent. You receive
-            BOTH the current screenshot AND a Haiku-generated scene digest (text).
-            Use the SCREENSHOT as your primary source of truth — Haiku's digest is a
-            hint that may mis-classify NPCs (it sometimes labels shopkeepers as
-            "generic-npc") and the plan from the Advisor was authored on a STALE
-            screenshot many turns ago.
+            You are the per-turn tool picker for an FF1 NES playing agent.
+            You see the current screenshot + a RAM digest. The screenshot is
+            the source of truth; the Advisor's plan is a hint authored on a
+            stale screenshot and may be wrong about the current scene.
 
-            Critical FF1 NES facts:
-              - Shops are usually INSIDE specific buildings (weapon/armor/magic/inn).
-                You enter by stepping onto a door tile (mapflags.bit1 transients).
-                Once inside, mapId>0 and the shopkeeper stands behind a counter.
-              - Coneria CASTLE is just NW of Coneria TOWN on the overworld and has its
-                own entrance — DO NOT walk into the castle by mistake.
-              - walkTo args depend on phase: Overworld→world coords (80-240),
-                Town→town-local (0-31), Indoors→ignored (acts as exitInterior).
+            === FF1 NES FACTS ===
+            - Coneria/Pravoka SHOPS AND INNS are NPC-dialog OVERLAYS over
+              the town overlay. RAM stays at mapId=0 mapflags=1 — IDENTICAL
+              to walking around town. Distinguish via the SCREENSHOT (sign
+              text: "WEAPON" / "INN" / "ARMOR"; counter contents: sword/
+              club sprite vs. bed sprite), not RAM.
+            - Coneria CASTLE is NW of Coneria TOWN on the overworld with
+              its own entry. Do not walk in by mistake.
+            - walkTo arg coord-space: Overworld→world (80-240),
+              Town→town-local (0-31), Indoors→args ignored (acts as exit).
 
-            Decision discipline:
-              - Compare the plan's next step against what you SEE. If the step's
-                coords look wrong for current phase, pick the right tool from current
-                phase instead.
-              - If you see a building door / arch that leads to a shop you need,
-                walk onto it.
-              - If the screenshot shows a dialog overlay, advance it (A or B taps)
-                instead of trying to walk.
+            === VIEWPORT SPATIAL READING (do FIRST every turn) ===
+            Viewport ~16×14 tiles, party at centre (~tile 8,7). Before
+            choosing a button, mentally answer:
+              a) What tile is DIRECTLY N/S/E/W of the party? (path / grass
+                 / wall / water / NPC / building-wall / building-door /
+                 counter)
+              b) Where on screen are the visible BUILDINGS, and what does
+                 each sign read? Use quadrants (top-left … bottom-right).
+              c) Where does the PATH from the party tile branch? List each
+                 branch by cardinal direction.
+            Do NOT say "near the Inn" when the Inn is several tiles away
+            in another quadrant. "Near" only counts when the party tile is
+            orthogonally adjacent to a building wall/door.
 
-            WrongClass discipline: if buyAtShop returns FAIL "WrongClass: char=N
-            itemSlot=K", the item is incompatible with THAT character, not bad
-            in general. On retry, swap the SAME item to a different char that
-            still has no weapon — don't abandon the item.
+            === PATH-FOLLOWING + DEAD-END RECOVERY ===
+            - FF1 towns are designed around visible PATHS (light paved
+              tiles). All shops connect to the main path network — follow
+              the path to its forks and try each branch and you will reach
+              every shop. Grass between buildings is an obstacle, not a
+              detour.
+            - PRIMARY RULE: prefer cardinal moves that keep the party on a
+              path tile. Stepping onto grass is allowed only to round one
+              blocking NPC — return to the path next tap.
+            - If you find yourself on grass or against a wall and the path
+              is one tile to the side, step BACK to the path first.
+            - DEAD-END: if you tap the SAME cardinal 3+ times without the
+              sm coord changing AND a building wall is the obstacle, you
+              are on a DEAD-END BRANCH that terminates at THAT building.
+              Recovery: tap the OPPOSITE cardinal once or twice to back
+              onto the main trunk, then take a DIFFERENT branch at the
+              nearest fork.
+            - Coneria trap: a short north-pointing stub ends at the INN
+              door. From that dead-end, back SOUTH two tiles to the trunk,
+              then continue N — the WEAPON shop is via a different branch.
 
-            Coneria weapon shop layout (memorise — shop slots 0..4):
-              0=Wooden Staff (BlackMage/WhiteMage/RedMage/BlackBelt)
-              1=Small Knife  (Fighter/Thief/BlackMage/RedMage)
-              2=Wooden Nunchucks (BlackBelt ONLY)
-              3=Rapier       (Fighter/Thief/RedMage)
-              4=Iron Hammer  (Fighter/WhiteMage/RedMage)
+            === ACCIDENTAL-DIALOG TRAP ===
+            If the screenshot shows a Yes/No prompt or speech-bubble window
+            AND the current plan step is NOT a shopping/inn step → emit
+            {"sequence":["B"],"reasoning":"cancel accidental NPC dialog"}.
+            Never press A on an unverified Yes/No — each accidental Yes at
+            the Coneria INN burns 30G. Visual tell INN vs WEAPON: INN room
+            has a small bed sprite (blue rectangle) + purple "INN" sign;
+            WEAPON shop has a sword/club on the counter + "WEAPON" sign.
+
+            === SHOPPING PLAYBOOK (raw `sequence` taps) ===
+            Coneria weapon shop, ~8-12 single-button taps per weapon. Read
+            the screenshot after each tap; menu state dictates next button.
+              1. Stand on the tile directly SOUTH of the shopkeeper,
+                 facing N.
+              2. A → "Welcome!" dialog.
+              3. A → item list (Staff/Knife/Nunchucks/Rapier/Hammer + prices).
+              4. Down×N to highlight desired item; A → "Which one?" then A
+                 → "Whom?" prompt.
+              5. Down×N to highlight target char; A.
+              6. "Yes/No?" cursor on Yes → A. Gold drops, weapon enters
+                 char's first free weapon slot.
+              7. Repeat from step 4 for next weapon, or B+B to leave.
+            Coneria item indices (cursor 0..4, top-to-bottom):
+              0 Wooden Staff   5G  → BlackMage/WhiteMage/RedMage/BlackBelt
+              1 Small Knife    5G  → Fighter/Thief/BlackMage/RedMage
+              2 Wooden Nunchucks 10G → BlackBelt ONLY
+              3 Rapier        10G  → Fighter/Thief/RedMage
+              4 Iron Hammer   10G  → Fighter/WhiteMage/RedMage
             Default party charSlot 0=Fighter, 1=Thief, 2=BlackBelt, 3=RedMage.
-            Recommended pairs: (Fighter,4=Hammer), (Thief,3=Rapier),
-            (BlackBelt,2=Nunchucks), (RedMage,3=Rapier).
 
-            Anti-oscillation discipline (CRITICAL):
-              - Read the "Recent moves" block. Each entry shows pre-sm → tool →
-                post-sm and whether the party MOVED.
-              - If the party did NOT MOVE despite tapping a cardinal: that direction
-                is a WALL or NPC. DO NOT repeat the same tap.
-              - If party sm has not changed for 3+ recent turns: take a LONG DETOUR
-                via the perpendicular axis (e.g. if Left+Up are blocked, try Down
-                4-5 tiles, then Left, then Up around the obstacle). Buildings have
-                exactly ONE door — usually on the south or east face — walk all the
-                way around if needed.
-              - When near a building you want to enter, look for a tile with a
-                visible doorway/arch (darker rectangle in the wall). Walk ONTO that
-                exact tile to trigger entry.
+            *** SHOPPING LIST — buy a DIVERSE set so the equip phase
+            doesn't deadlock on class mismatch ***
+            MINIMUM viable purchase (40G total, well under starting 400G):
+              slot 2 (Nunchucks)  × 1  — MANDATORY for BlackBelt; without
+                                         this the BlackBelt has nothing
+                                         to equip and arm_party stalls
+              slot 3 (Rapier)     × 2  — Fighter + Thief + RedMage covered
+              slot 4 (Iron Hammer)× 1  — Fighter or RedMage primary
+
+            NEVER buy 2 copies of the SAME narrow-class weapon. Two
+            Knives leaves BlackBelt blocked. Two Hammers leaves Thief
+            blocked. ALWAYS include the Nunchucks for BlackBelt.
+
+            Recommended per-char assignment after the buy:
+              Fighter   → Iron Hammer
+              Thief     → Rapier
+              BlackBelt → Nunchucks  (only option besides Staff)
+              RedMage   → Rapier
+
+            If the Yes/No is rejected ("Cannot equip!"): WrongClass for
+            that pair — B to back out, retry the SAME item with a
+            different char that still has no weapon. Don't abandon items.
+
+            === EQUIPPING PLAYBOOK — FAST PATH (memorize the EXACT sequence) ===
+            From FIELD to one weapon equipped (only ~5 taps if done right):
+
+                START   →   (cursor to WEAPON)   →   A
+                  →   (cursor RIGHT to EQUIP)   →   A
+                  →   (Up/Down to a held weapon row)   →   A
+                  →   weapon's bit7 flips, "E" appears
+
+            That is the ENTIRE flow. No character-select dialog appears in
+            between EQUIP and the weapon list — pressing A on EQUIP drops
+            the cursor straight onto the per-char weapon rows shown below
+            the sub-action header. Each row is one character's currently-
+            held weapon. You pick a ROW (which means you pick both the
+            character AND the weapon at once), press A, and bit7 flips IF
+            the character's class can equip that weapon. If the class
+            can't equip it, NOTHING happens (no bit7 flip, no error) — see
+            CLASS-FIT below.
+
+            === STATE MACHINE (which screen am I on?) ===
+            Read the SCREENSHOT and self-classify into one of these states
+            BEFORE choosing the next button:
+
+              FIELD — party visible on map tiles, no menu box.
+                next: START to open main menu.
+
+              MAIN_MENU — small box on the right with options WEAPON,
+                ARMOR, MAGIC, ITEM, STATUS (vertical list). Hand cursor on
+                one of them.
+                next: Up/Down to highlight WEAPON, then A.
+
+              WEAPON_SUB_HEADER — full-screen layout with header
+                `WEAPON | EQUIP | TRADE | DROP` at the top AND the
+                4-character weapon list below. Hand cursor is in the
+                HEADER (pointing at one of the four sub-action words).
+                The currently selected sub-action is the inverted/lit one.
+                next: Right/Left until EQUIP is highlighted, then A.
+
+              WEAPON_LIST — same screen as WEAPON_SUB_HEADER but the hand
+                cursor has moved DOWN to one of the character rows (it
+                points at a "Wooden ..." or similar weapon name).
+                next: Up/Down to a held weapon for a class that can equip
+                it (see CLASS-FIT), then A.
+
+              EQUIPPED — same screen, but next turn's partyWeaponDigest
+                shows `idx*` for that char's slot.
+                next: B once to return to WEAPON_SUB_HEADER, pick next
+                char's weapon. When all done: B → B → B → FIELD.
+
+            CRITICAL: when you A on a CHARACTER ROW while still in
+            WEAPON_SUB_HEADER cursor mode (header cursor on WEAPON, not
+            EQUIP), the game enters the WEAPON viewer (info popup), NOT
+            the equip flow — bit7 will NOT flip. Always verify EQUIP is
+            the highlighted sub-action before pressing A.
+
+            === CLASS-FIT (silent no-op trap) ===
+            FF1 equip silently fails if the character's class can't use
+            the weapon. Coneria weapons → classes that can equip:
+              Wooden Staff      → BlackMage / WhiteMage / RedMage / BlackBelt
+              Small Knife       → Fighter / Thief / BlackMage / RedMage
+              Wooden Nunchucks  → BlackBelt ONLY
+              Rapier            → Fighter / Thief / RedMage
+              Iron Hammer       → Fighter / WhiteMage / RedMage
+            Default party (charSlot → class):
+              0 Fighter, 1 Thief, 2 BlackBelt, 3 RedMage.
+            So Rapier on Fighter/Thief/RedMage = ok. Nunchucks ONLY on
+            BlackBelt. If A on a row didn't flip bit7 next turn → class
+            mismatch — B back to header, pick a DIFFERENT char's row.
+
+            === RAM SELF-CHECK (after every A in WEAPON_LIST state) ===
+            Look at the partyWeaponDigest line in the next turn's prompt.
+            For the char/slot you just pressed A on:
+              `c2:1*`  → SUCCESS. bit7 set. Move on to next char.
+              `c2:1`   → NO-OP. Either wrong sub-action (still in viewer)
+                         or class mismatch. Do NOT press A again on the
+                         same row — B back out and verify EQUIP is the
+                         highlighted sub-action OR pick a different char.
+
+            === PITFALLS ===
+            - Screenshot shows field/world map (no menu visible): you
+              accidentally exited. Press START to reopen the main menu.
+            - Cursor wraps: Up at top of a list lands at bottom; Right at
+              end of the sub-action header lands at the start.
+            - "Wooden-XYZ" next to a char in the WEAPON sub-screen means
+              they HOLD it. Held ≠ equipped. Only the `E` marker (or
+              bit7 in RAM) confirms equipped.
+
+            === ANTI-OSCILLATION ===
+            Read the "Recent moves" block. Each entry shows pre-sm → tool →
+            post-sm with MOVED/NO-MOVEMENT.
+            - NO-MOVEMENT on a cardinal = wall or NPC blocking. Do not
+              repeat the same tap.
+            - If sm has not changed for 3+ recent turns: take a LONG
+              perpendicular detour (e.g. if Up+Left are blocked, go Down
+              4-5 tiles, then Left, then Up around the obstacle).
+              Buildings have exactly ONE door (usually south or east face)
+              — walk all the way around if needed.
+            - To ENTER a building: find the tile with a visible
+              doorway/arch (darker rectangle in the wall) and walk ONTO
+              that exact tile.
 
             Respond with JSON only.
         """.trimIndent()

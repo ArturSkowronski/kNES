@@ -16,6 +16,13 @@ class ReviewerAgent(
 ) {
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = false }
 
+    companion object {
+        /** A milestone in_progress longer than this triggers a stuck-progress replan. */
+        private const val STUCK_THRESHOLD_TURNS = 60
+        /** Don't replan more often than every N turns even if still stuck. */
+        private const val STUCK_REPLAN_COOLDOWN = 30
+    }
+
     /**
      * Read entire Memory (Campaign + on-disk landmarks/warps/blockages),
      * ask Haiku for audit issues, parse JSON, apply REMOVE actions, append
@@ -51,7 +58,7 @@ class ReviewerAgent(
         val raw = try {
             haiku.auditPlan(planDesc, ramDigest, screenshotB64)
         } catch (e: Exception) {
-            System.err.println("[v2.reviewer] auditPlan LLM error: ${e.message?.take(120)}")
+            knes.agent.v2.runtime.Log.error("auditPlan LLM error: ${e.message?.take(120)}", turn)
             run?.markIdle()
             return emptyList()
         }
@@ -63,13 +70,13 @@ class ReviewerAgent(
         val parsed = try {
             json.decodeFromString(IssuesWire.serializer(), extractJson(raw))
         } catch (e: Exception) {
-            System.err.println("[v2.reviewer] auditPlan parse error: ${e.message?.take(80)} raw=${raw.take(120)}")
+            knes.agent.v2.runtime.Log.error("auditPlan parse error: ${e.message?.take(80)} raw=${raw.take(120)}", turn)
             run?.markIdle()
             return emptyList()
         }
         val issues = parsed.issues.map { "step=${it.step}: ${it.problem.take(80)}" }
         if (issues.isNotEmpty()) {
-            System.err.println("[v2.reviewer] AUDIT T$turn found ${issues.size} issues: $issues")
+            knes.agent.v2.runtime.Log.reviewer("AUDIT found ${issues.size} issues: $issues", turn)
             for (issue in issues) memory.appendReviewLine(
                 json.encodeToString(AuditAction.serializer(),
                     AuditAction(turn = turn, kind = "plan_issue", entry = issue, reason = "haiku audit"))
@@ -93,7 +100,7 @@ class ReviewerAgent(
         run?.markActive("reviewer", turn)
         memory.campaign.reviews += ReviewEntry(turn = turn, removed = emptyList(), flagged = emptyList())
         memory.saveCampaign()
-        System.err.println("[v2.reviewer] memory-audit T$turn (placeholder, no LLM)")
+        knes.agent.v2.runtime.Log.reviewer("memory-audit (placeholder, no LLM)", turn)
         run?.markIdle()
     }
 
@@ -114,9 +121,12 @@ class ReviewerAgent(
         val checked = mutableListOf<String>()
         for (m in ms) {
             if (m.status != "done") continue
+            // Event-type milestones describe a transient state — don't
+            // re-verify or we'd regress a legitimate latch.
+            if (m.id in MilestonePredicates.EVENT_TYPE) continue
             checked += m.id
             if (!MilestonePredicates.evaluate(m.id, phase, ram, prereqDone)) {
-                System.err.println("[v2.reviewer] REGRESSION at T$turn: milestone ${m.id} no longer satisfied — reverting to in_progress")
+                knes.agent.v2.runtime.Log.warn("REGRESSION milestone ${m.id} no longer satisfied — reverting to in_progress", turn)
                 m.status = "in_progress"
                 m.turnEnd = null
                 regressed += m.id
@@ -124,10 +134,80 @@ class ReviewerAgent(
         }
         if (regressed.isNotEmpty()) memory.saveCampaign()
         if (checked.isNotEmpty()) {
-            System.err.println("[v2.reviewer] verify T$turn: checked=[${checked.joinToString(",")}] regressed=[${regressed.joinToString(",")}]")
+            knes.agent.v2.runtime.Log.reviewer("verify checked=[${checked.joinToString(",")}] regressed=[${regressed.joinToString(",")}]", turn)
         }
         run?.markIdle()
         return regressed
+    }
+
+    /**
+     * Stuck-progress detector — third Reviewer pass, deterministic (no LLM).
+     *
+     * The previous two passes only catch (a) regression of DONE milestones
+     * and (b) Haiku-flagged plan/RAM contradictions. Neither notices the
+     * pattern where:
+     *   - the current IN_PROGRESS milestone has been so for many turns
+     *   - the Executor has been spamming taps but the predicate isn't satisfied
+     *   - the plan has no further steps to advance the cursor through
+     *
+     * Example seen during demo (T176): arm_party in_progress since T53 (123
+     * turns), 2/4 chars HELD a weapon but 0/4 EQUIPPED — the
+     * `armCharsViaMenu` sentinel kept the cursor parked while the Executor
+     * tunneled into the Equip menu without successfully flipping any bit7.
+     *
+     * Detection: in_progress duration ≥ [STUCK_THRESHOLD_TURNS].
+     * Action: build a RAM-aware diagnosis string (so the Advisor sees
+     * partial-progress numbers like "2/4 held, 0/4 equipped") and return
+     * it. Caller (Main) decides what to do — typically triggers a fresh
+     * Advisor replan with the diagnosis as reason. Includes a cooldown
+     * (lastStuckReplanTurn) so we don't replan-storm.
+     */
+    data class StuckDiagnostic(val milestone: String, val elapsedTurns: Int, val reason: String)
+
+    private var lastStuckReplanTurn: Int = -1
+
+    fun checkProgress(turn: Int, ram: Map<String, Int>): StuckDiagnostic? {
+        val current = memory.campaign.milestones.firstOrNull { it.status == "in_progress" } ?: return null
+        val start = current.turnStart ?: return null
+        val elapsed = turn - start
+        if (elapsed < STUCK_THRESHOLD_TURNS) return null
+        // Cooldown — don't replan every 10 turns while stuck.
+        if (turn - lastStuckReplanTurn < STUCK_REPLAN_COOLDOWN) return null
+        lastStuckReplanTurn = turn
+
+        val party = MilestonePredicates.partyWeaponDigest(ram)
+        val held = (1..4).count { MilestonePredicates.charHoldsAny(it, ram) }
+        val equipped = (1..4).count { MilestonePredicates.charHasEquipped(it, ram) }
+        val gold = ((ram["goldHigh"] ?: 0) shl 16) or
+            ((ram["goldMid"] ?: 0) shl 8) or (ram["goldLow"] ?: 0)
+
+        val tail = when (current.id) {
+            "arm_party" -> "The current plan's `armCharsViaMenu` sentinel keeps the cursor parked " +
+                "while the Executor drives the Equip flow via raw taps — but no weapon byte has flipped " +
+                "bit7 in many turns. ROOT CAUSE per FF1 NES manual: there is NO top-level 'Equip' " +
+                "command. The correct path is START → WEAPON (top-level) → A → then move cursor in " +
+                "the `WEAPON | EQUIP | TRADE | DROP` sub-action header to EQUIP → A → pick char → A → " +
+                "pick held weapon → A. The agent likely got stuck pressing A on chars while the " +
+                "sub-action cursor was still on WEAPON (the default), which opens the viewer, not the " +
+                "equip flow. " +
+                "Decide between: (A) RESET — author a fresh plan whose step 0 is `useMenu` with path " +
+                "`main/exit` to force-close any open menu, then a step that re-enters via START → " +
+                "WEAPON → A → Right (to highlight EQUIP) → A → char → A → weapon-slot → A. " +
+                "(B) PROCEED — accept current partial progress, switch focus to the next milestone " +
+                "(exit_coneria) by authoring its plan now. Choose (B) if equipped>=1 OR held>=2 " +
+                "(party is meaningfully armed; we can finish equipping during grind)."
+            "buy_weapons" -> "Buying via raw taps stalled. Try: B×6 to back fully out of any open shop " +
+                "dialog, then re-approach the WEAPON shopkeeper from the south and re-open via A."
+            "enter_weapon_shop" -> "Reaching sm=(11,11) stalled. Likely dead-end side branch — see " +
+                "DEAD-END RECOVERY in the Executor prompt: tap opposite cardinal twice, try a different fork."
+            else -> "The milestone predicate is not satisfying. Consider authoring a fresh plan with a " +
+                "different approach, or relaxing the goal if some progress has been made."
+        }
+        val reason = "STUCK on milestone ${current.id} for $elapsed turns (since T$start). " +
+            "Live state: $party, $held/4 hold a weapon, $equipped/4 equipped, gold=$gold. $tail"
+
+        knes.agent.v2.runtime.Log.warn("Reviewer.checkProgress: ${current.id} stuck $elapsed turns — triggering replan", turn)
+        return StuckDiagnostic(milestone = current.id, elapsedTurns = elapsed, reason = reason)
     }
 
     private fun digestMemory(): String {
@@ -142,7 +222,7 @@ class ReviewerAgent(
         // entry format: "landmarks:KEY" | "warps:KEY" | "blockages:(x,y)"
         // For first cut just log — full mutation wired in followup once landmark
         // JSON schemas are stable.
-        System.err.println("[v2.reviewer] would remove: $entry")
+        knes.agent.v2.runtime.Log.reviewer("would remove: $entry")
     }
 
     private fun appendCartographerFlag(entry: String, reason: String) {

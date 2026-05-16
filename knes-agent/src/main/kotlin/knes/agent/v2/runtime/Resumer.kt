@@ -11,14 +11,13 @@ class Resumer(
     fun resume() {
         val lastTurn = memory.campaign.lastTurn
         if (lastTurn == 0) {
-            System.err.println("[v2.resume] lastTurn=0 — nothing to resume; running fresh")
+            Log.main("resume: lastTurn=0 — nothing to resume; running fresh")
             return
         }
         val checkpointTurn = (lastTurn / 100) * 100
         val checkpoint = run.savestate(checkpointTurn)
         if (!checkpoint.toFile().exists()) {
-            System.err.println("[v2.resume] WARN: no checkpoint at T$checkpointTurn — starting from emulator boot. " +
-                "Decision replay from T1 not implemented; advisor will plan from observed RAM.")
+            Log.warn("resume: no checkpoint at T$checkpointTurn — starting from boot. Decision replay not implemented; advisor will plan from observed RAM.")
             return
         }
         // PPU pre-warm (per v1 Main pattern)
@@ -26,9 +25,7 @@ class Resumer(
         val ok = session.loadState(Files.readAllBytes(checkpoint))
         require(ok) { "loadState failed for $checkpoint" }
         session.advanceFrames(120)
-        System.err.println("[v2.resume] restored T$checkpointTurn (last_turn=$lastTurn). " +
-            "Replay from T$checkpointTurn to T$lastTurn not implemented yet — emulator at checkpoint, " +
-            "memory at last_turn — Advisor will reconcile via campaign.json digest.")
+        Log.ok("resume: restored T$checkpointTurn (last_turn=$lastTurn). Replay T$checkpointTurn→T$lastTurn not implemented — Advisor will reconcile via campaign.json.")
         // TODO(D2-followup): replay button events from decisions/turn-(checkpointTurn+1).json..turn-lastTurn.json
     }
 }

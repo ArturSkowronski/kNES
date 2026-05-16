@@ -82,7 +82,7 @@ class V2RunDirectory(val root: Path) {
                 link.deleteIfExists()
                 Files.createSymbolicLink(link, target)
             } catch (e: Throwable) {
-                System.err.println("[v2.run-dir] WARN: symlink update failed: ${e.message}")
+                Log.warn("run-dir symlink update failed: ${e.message}")
             }
         }
     }

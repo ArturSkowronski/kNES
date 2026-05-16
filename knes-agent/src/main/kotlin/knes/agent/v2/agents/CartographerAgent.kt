@@ -38,12 +38,12 @@ class CartographerAgent(
         var turnCounter = 0
 
         run?.markActive("cartographer", 0)
-        System.err.println("[v2.cartographer] start: budget=${budgetSeconds}s maxCalls=$maxVisionCalls")
+        knes.agent.v2.runtime.Log.cartographer("start: budget=${budgetSeconds}s maxCalls=$maxVisionCalls")
 
         while (true) {
             val elapsed = (System.currentTimeMillis() - started) / 1000
-            if (elapsed > budgetSeconds) { System.err.println("[v2.cartographer] time budget exceeded ($elapsed s)"); break }
-            if (visionCalls >= maxVisionCalls) { System.err.println("[v2.cartographer] vision call cap reached"); break }
+            if (elapsed > budgetSeconds) { knes.agent.v2.runtime.Log.cartographer("time budget exceeded (${elapsed}s)"); break }
+            if (visionCalls >= maxVisionCalls) { knes.agent.v2.runtime.Log.cartographer("vision call cap reached"); break }
 
             val ram = toolset.getState().ram
             val worldX = ram["worldX"] ?: 0
@@ -53,7 +53,7 @@ class CartographerAgent(
             fog.merge(viewport)
 
             if (fog.allReachableKnown(worldX to worldY)) {
-                System.err.println("[v2.cartographer] frontier exhausted at ($worldX,$worldY)")
+                knes.agent.v2.runtime.Log.cartographer("frontier exhausted at ($worldX,$worldY)")
                 break
             }
 
@@ -66,7 +66,7 @@ class CartographerAgent(
                 "E" -> toolset.tap("RIGHT", 1)
                 "W" -> toolset.tap("LEFT", 1)
                 "DONE" -> break
-                else -> System.err.println("[v2.cartographer] unexpected dir: $direction")
+                else -> knes.agent.v2.runtime.Log.warn("cartographer unexpected dir: $direction")
             }
 
             turnCounter++
@@ -78,12 +78,12 @@ class CartographerAgent(
 
         // Landmark scans (weapon/armor/inn) happen lazily during first Executor
         // visit to each building — keeps Cartographer scope minimal.
-        System.err.println("[v2.cartographer] done: $visionCalls vision calls, $turnCounter steps")
+        knes.agent.v2.runtime.Log.cartographer("done: $visionCalls vision calls, $turnCounter steps")
         run?.markIdle()
     }
 
     suspend fun targetedRepass(flags: List<String>) {
-        System.err.println("[v2.cartographer] targetedRepass: ${flags.size} flags (stub)")
+        knes.agent.v2.runtime.Log.cartographer("targetedRepass: ${flags.size} flags (stub)")
     }
 
     private var cartIter: Int = 0

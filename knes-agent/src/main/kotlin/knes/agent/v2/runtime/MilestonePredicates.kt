@@ -7,6 +7,23 @@ package knes.agent.v2.runtime
  * regressions like a savestate restore that drops weapons).
  */
 object MilestonePredicates {
+    /**
+     * Event-type milestones — predicates describe a transient state that
+     * legitimately ceases to hold after the milestone fires (e.g. party
+     * standing on the shop counter tile; the buy dialog will move them
+     * off it). The Reviewer must NOT re-verify these or it will regress
+     * a real achievement back to in_progress.
+     *
+     * - `enter_coneria` — once we've entered the town, leaving it
+     *    (e.g. to exit south for the overworld) is PROGRESS toward
+     *    `exit_coneria`, not regression. If we kept re-verifying via
+     *    `phase == Town && smY ≤ 25`, the Reviewer would yank the party
+     *    back into Coneria mid-exit, killing the campaign progression.
+     * - `enter_weapon_shop` — the party stands on (11,11) only for the
+     *    moment of entry; the buy dialog itself moves them off the tile.
+     */
+    val EVENT_TYPE: Set<String> = setOf("enter_coneria", "enter_weapon_shop")
+
     /** True iff character `c` holds any non-zero weapon in any of slots 0..3. */
     fun charHoldsAny(c: Int, ram: Map<String, Int>): Boolean =
         (0..3).any { s -> (ram["char${c}_weapon${s}"] ?: 0) != 0 }
@@ -24,6 +41,21 @@ object MilestonePredicates {
         "boot"          -> phase != Phase.Boot
         // Require party meaningfully INSIDE Coneria, not on entry-row tile.
         "enter_coneria" -> phase == Phase.Town && ((ram["smPlayerY"] ?: 30) <= 25)
+        // enter_weapon_shop — party is on the tile directly SOUTH of the
+        // Coneria weapon shopkeeper (preseeded landmark at sm 11,10).
+        // Once latched it does NOT regress (event-type, see EVENT_TYPE
+        // set below) because the party will step away naturally when the
+        // shop dialog opens.
+        "enter_weapon_shop" -> phase == Phase.Town &&
+            (ram["currentMapId"] ?: 0) == 0 &&
+            (ram["smPlayerX"] ?: -1) == 11 &&
+            (ram["smPlayerY"] ?: -1) == 11
+        // buy_weapons — checkpoint between entering town and full
+        // arm-up: any char has any non-zero weapon byte in any slot.
+        // Latches the first successful shop purchase so the Advisor
+        // gets a clean replan signal at the transition from "buy" to
+        // "equip", and the audit-hysteresis counter resets.
+        "buy_weapons"   -> (1..4).any { c -> charHoldsAny(c, ram) }
         // arm_party — at least 2 of 4 chars have a weapon equipped (bit7).
         // Tightened from "any" (latched after 1) but relaxed from "all 4"
         // because BuyAtShop sometimes skips chars due to NPC drift / shop UI

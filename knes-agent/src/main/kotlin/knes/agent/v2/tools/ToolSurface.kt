@@ -542,7 +542,14 @@ class DefaultToolSurface(
         val pre = toolset.getState().ram
         for (b in executed) {
             toolset.tap(button = b, count = 1, pressFrames = 5, gapFrames = 8)
-            toolset.step(buttons = emptyList(), frames = 6)
+            // A / B / START open or close dialog/menu overlays that take
+            // ~30 frames to render. If we only settle 6 frames the next-turn
+            // snapshot lands mid-fade and Gemini sees a half-drawn dialog
+            // while RAM still says "no menu" (Coneria shops/inn don't move
+            // screenState/mapflags). Cardinal moves don't open overlays so
+            // 6 frames is fine for them.
+            val settleFrames = when (b) { "A", "B", "START", "SELECT" -> 30; else -> 6 }
+            toolset.step(buttons = emptyList(), frames = settleFrames)
             // Per-button live screenshot for the viewer (overwrites snapshots/live.png).
             // Lets the viewer see motion at the button granularity instead of waiting
             // for the next per-turn snapshot dump.

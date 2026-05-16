@@ -106,6 +106,21 @@ class HaikuClient(private val http: AnthropicHttp) {
             Be conservative — only flag clear contradictions (e.g. plan says
             "Equipped Rapier for char1" but char1_weapon0 byte has bit7 unset).
             Do NOT speculate about steps that haven't been attempted yet.
+
+            CRITICAL FF1 NES facts (apply before flagging issues):
+            - Coneria/Pravoka SHOPS AND INNS are NPC-dialog OVERLAYS rendered
+              ON TOP of the town overlay. While in a shop's buy menu the
+              party is technically still on the town tile — screenState
+              STAYS 0, mapflags STAYS 1, currentMapId STAYS 0. Do NOT flag
+              "screenState=0 (overworld) so we're not in the shop" — that's
+              FALSE for FF1 shops. Use the SCREENSHOT to tell whether a
+              shop UI is visible.
+            - phase=Town does NOT mean overworld. It means standard map
+              with mapflags.bit0=1 (town/castle/dungeon interior).
+            - The plan-cursor is the Advisor's intent, not ground truth.
+              "Plan says step is DONE but RAM disagrees" is a legitimate
+              issue. "Plan says step is CURRENT" is just the cursor pointing
+              to work-in-progress — never flag a CURRENT step as wrong.
         """.trimIndent()
         return http.generate(
             model = modelId,

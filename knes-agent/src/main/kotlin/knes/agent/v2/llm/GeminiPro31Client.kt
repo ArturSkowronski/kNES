@@ -54,18 +54,71 @@ class GeminiPro31Client(
             append(json.encodeToString(kotlinx.serialization.builtins.ListSerializer(JsonObject.serializer()), parts))
             append("}]}")
         }
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey"
-        val resp = http.post(url) {
-            contentType(ContentType.Application.Json)
-            setBody(body)
-        }.bodyAsText()
-        val candidates = json.parseToJsonElement(resp).jsonObject["candidates"]?.jsonArray
-        return candidates?.firstOrNull()?.jsonObject
+        // Two-tier retry: same model with exponential backoff (5s, 15s, 30s)
+        // for transient 503/UNAVAILABLE; on persistent failure fall back to
+        // gemini-3.1-flash-lite once. Gemini Pro is regularly overloaded
+        // during peak hours — a hard crash on the first 503 kills 100+ turns
+        // of state. Better to take a slow/degraded turn than to die.
+        val backoffsMs = longArrayOf(0L, 5_000L, 15_000L, 30_000L)
+        var lastResp: String? = null
+        for ((i, wait) in backoffsMs.withIndex()) {
+            if (wait > 0) kotlinx.coroutines.delay(wait)
+            val attemptUrl = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey"
+            val resp = try {
+                http.post(attemptUrl) {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }.bodyAsText()
+            } catch (e: Throwable) {
+                knes.agent.v2.runtime.Log.llm("attempt ${i+1}/${backoffsMs.size} ($model) threw: ${e.javaClass.simpleName}: ${e.message?.take(120)}")
+                lastResp = "{\"error\":{\"transport\":\"${e.javaClass.simpleName}\"}}"
+                continue
+            }
+            lastResp = resp
+            val text = extractText(resp)
+            if (text != null) return text
+            val status = extractErrorStatus(resp)
+            if (status == "UNAVAILABLE" || status == "RESOURCE_EXHAUSTED" || status == "INTERNAL") {
+                knes.agent.v2.runtime.Log.llm("attempt ${i+1}/${backoffsMs.size} ($model) returned $status — retrying after ${backoffsMs.getOrNull(i+1) ?: 0}ms")
+                continue
+            }
+            // Non-retryable error — break and let caller see it.
+            break
+        }
+        // All same-model retries exhausted. Try Flash-Lite once if we
+        // weren't already on it.
+        if (!model.contains("flash", ignoreCase = true)) {
+            val fallbackModel = "gemini-3.1-flash-lite"
+            knes.agent.v2.runtime.Log.warn("Gemini $model still failing; falling back to $fallbackModel for this call")
+            val fbUrl = "https://generativelanguage.googleapis.com/v1beta/models/$fallbackModel:generateContent?key=$apiKey"
+            val fbResp = try {
+                http.post(fbUrl) {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }.bodyAsText()
+            } catch (e: Throwable) {
+                throw RuntimeException("Gemini fallback ($fallbackModel) transport error: ${e.javaClass.simpleName}: ${e.message}")
+            }
+            val fbText = extractText(fbResp)
+            if (fbText != null) return fbText
+            throw RuntimeException("Gemini fallback ($fallbackModel) unparseable: ${fbResp.take(500)}")
+        }
+        throw RuntimeException("Gemini response unparseable after retries: ${lastResp?.take(500)}")
+    }
+
+    private fun extractText(resp: String): String? {
+        val parsed = try { json.parseToJsonElement(resp).jsonObject } catch (_: Throwable) { return null }
+        val candidates = parsed["candidates"]?.jsonArray ?: return null
+        return candidates.firstOrNull()?.jsonObject
             ?.get("content")?.jsonObject
             ?.get("parts")?.jsonArray
             ?.firstOrNull()?.jsonObject
             ?.get("text")?.jsonPrimitive?.content
-            ?: throw RuntimeException("Gemini response unparseable: ${resp.take(500)}")
+    }
+
+    private fun extractErrorStatus(resp: String): String? {
+        val parsed = try { json.parseToJsonElement(resp).jsonObject } catch (_: Throwable) { return null }
+        return parsed["error"]?.jsonObject?.get("status")?.jsonPrimitive?.content
     }
 
     override fun close() { http.close() }
