@@ -28,21 +28,21 @@ open class EmulatorToolset(
 ) : ToolSet {
     @Tool
     @LLMDescription("Load a NES ROM from the given file path. Requires the Compose UI with embedded API server running on port 6502.")
-    fun loadRom(path: String): StatusResult {
+    open fun loadRom(path: String): StatusResult {
         val ok = session.loadRom(path)
         return StatusResult(ok, if (ok) "ROM loaded: $path" else "Failed to load ROM: $path")
     }
 
     @Tool
     @LLMDescription("Reset the NES emulator to its initial state")
-    fun reset(): StatusResult {
+    open fun reset(): StatusResult {
         session.reset()
         return StatusResult(true, "reset")
     }
 
     @Tool
     @LLMDescription("Advance emulation by N frames while holding specified buttons. Returns frame count, watched RAM values, and optionally a screenshot.")
-    fun step(buttons: List<String>, frames: Int = 1, screenshot: Boolean = false): StepResult {
+    open fun step(buttons: List<String>, frames: Int = 1, screenshot: Boolean = false): StepResult {
         require(frames in 1..600) { "frames must be 1..600, got $frames" }
         runSteps(listOf(StepRequest(buttons = buttons, frames = frames)))
         return readStepResult(screenshot)
@@ -70,7 +70,7 @@ open class EmulatorToolset(
 
     @Tool
     @LLMDescription("Execute a sequence of button inputs in one call. Each step holds specified buttons for N frames. Returns frame count, RAM, and optionally a screenshot after all steps complete.")
-    fun sequence(steps: List<StepEntry>, screenshot: Boolean = false): StepResult {
+    open fun sequence(steps: List<StepEntry>, screenshot: Boolean = false): StepResult {
         require(steps.isNotEmpty()) { "sequence requires at least one entry" }
         runSteps(steps.map { StepRequest(it.buttons, it.frames) })
         return readStepResult(screenshot)
@@ -116,7 +116,7 @@ open class EmulatorToolset(
 
     @Tool
     @LLMDescription("Apply a game profile (e.g. 'smb' for Super Mario Bros, 'ff1' for Final Fantasy) to enable RAM watching for game-specific variables like HP, gold, position")
-    fun applyProfile(id: String): StatusResult {
+    open fun applyProfile(id: String): StatusResult {
         val profile = GameProfile.get(id) ?: return StatusResult(false, "Unknown profile: $id")
         session.applyProfile(profile)
         ActionRegistry.ensureLoaded(id)
@@ -125,12 +125,12 @@ open class EmulatorToolset(
 
     @Tool
     @LLMDescription("List all available game profiles for RAM watching")
-    fun listProfiles(): List<ProfileSummary> =
+    open fun listProfiles(): List<ProfileSummary> =
         GameProfile.list().map { ProfileSummary(it.id, it.name, it.description) }
 
     @Tool
     @LLMDescription("List available game actions for a profile. Actions are game-specific automation scripts that play like a real NES player — they read the screen and press buttons.")
-    fun listActions(profileId: String? = null): List<ActionDescriptor> {
+    open fun listActions(profileId: String? = null): List<ActionDescriptor> {
         val map = if (profileId != null) {
             ActionRegistry.ensureLoaded(profileId)
             mapOf(profileId to GameAction.listForProfile(profileId))
@@ -142,7 +142,7 @@ open class EmulatorToolset(
 
     @Tool
     @LLMDescription("Execute a game action. Actions play like a real NES player: they read RAM state and press buttons. No memory writes, no cheats. Example: execute_action('ff1', 'battle_fight_all') auto-fights an FF1 battle.")
-    fun executeAction(profileId: String, actionId: String): ActionToolResult {
+    open fun executeAction(profileId: String, actionId: String): ActionToolResult {
         ActionRegistry.ensureLoaded(profileId)
         val action = GameAction.get(profileId, actionId)
             ?: return ActionToolResult(false, "Action not found: $profileId/$actionId")
@@ -153,14 +153,14 @@ open class EmulatorToolset(
 
     @Tool
     @LLMDescription("Press and hold one or more buttons (they stay held until released)")
-    fun press(buttons: List<String>): StatusResult {
+    open fun press(buttons: List<String>): StatusResult {
         controller.setButtons(buttons)
         return StatusResult(true, "held: ${controller.getHeldButtons()}")
     }
 
     @Tool
     @LLMDescription("Release one or more held buttons")
-    fun release(buttons: List<String>): StatusResult {
+    open fun release(buttons: List<String>): StatusResult {
         if (buttons.isEmpty()) controller.releaseAll()
         else buttons.forEach { controller.releaseButton(controller.resolveButton(it)) }
         return StatusResult(true, "released")

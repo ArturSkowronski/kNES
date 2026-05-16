@@ -18,7 +18,7 @@ import java.util.ArrayDeque
 object InteriorFrontier {
     data class Result(
         /** Cardinal direction of the FIRST step on the BFS path to the frontier. */
-        val firstDirection: InteriorMove,
+        val firstDirection: Direction,
         /** BFS distance (in tiles) from `from` to the frontier tile. */
         val distance: Int,
         /** Frontier tile in viewport-world coords. */
@@ -83,13 +83,6 @@ object InteriorFrontier {
         }
         firstDir ?: return null
         val (fwx, fwy) = viewport.localToWorld(foundLx, foundLy)
-        return Result(firstDir.toInteriorMove(), foundDist, fwx to fwy)
-    }
-
-    private fun Direction.toInteriorMove(): InteriorMove = when (this) {
-        Direction.N -> InteriorMove.NORTH
-        Direction.S -> InteriorMove.SOUTH
-        Direction.E -> InteriorMove.EAST
-        Direction.W -> InteriorMove.WEST
+        return Result(firstDir, foundDist, fwx to fwy)
     }
 }

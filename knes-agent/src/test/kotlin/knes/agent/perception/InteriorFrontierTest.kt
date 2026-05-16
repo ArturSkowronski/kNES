@@ -3,6 +3,7 @@ package knes.agent.perception
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
+import knes.agent.pathfinding.Direction
 
 private fun viewport(
     fill: TileType = TileType.GRASS,
@@ -24,7 +25,7 @@ class InteriorFrontierTest : FunSpec({
             if (!(x == 8 && y == 7)) visited.add(x to y)
         }
         val r = InteriorFrontier.nearestUnvisited(vp, visited, from = 8 to 8)
-        r?.firstDirection shouldBe InteriorMove.NORTH
+        r?.firstDirection shouldBe Direction.N
         r?.distance shouldBe 1
     }
 
@@ -48,7 +49,7 @@ class InteriorFrontierTest : FunSpec({
         val r = InteriorFrontier.nearestUnvisited(vp, visited, from = 8 to 8)
         r?.distance shouldBe 1
         // Direction is whichever cardinal neighbour is unvisited and reachable.
-        r?.firstDirection shouldBe InteriorMove.NORTH
+        r?.firstDirection shouldBe Direction.N
     }
 
     test("walls block path to unvisited frontier") {
@@ -59,7 +60,7 @@ class InteriorFrontierTest : FunSpec({
         // (8, 6) unvisited but unreachable. (8, 9) reachable + unvisited.
         val visited = setOf(8 to 8)
         val r = InteriorFrontier.nearestUnvisited(vp, visited, from = 8 to 8)
-        r?.firstDirection shouldBe InteriorMove.SOUTH
+        r?.firstDirection shouldBe Direction.S
         r?.distance shouldBe 1
     }
 
