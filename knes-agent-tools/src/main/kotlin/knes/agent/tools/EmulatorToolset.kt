@@ -26,6 +26,15 @@ open class EmulatorToolset(
     val session: EmulatorSession,
     private val controller: ApiController = session.controller,
 ) : ToolSet {
+
+    companion object {
+        fun local(): EmulatorToolset = EmulatorToolset(EmulatorSession())
+    }
+
+    fun saveSavestate(): ByteArray = session.saveState()
+    fun loadSavestate(bytes: ByteArray): Boolean = session.loadState(bytes)
+    fun advanceFrames(count: Int) = session.advanceFrames(count)
+
     @Tool
     @LLMDescription("Load a NES ROM from the given file path. Requires the Compose UI with embedded API server running on port 6502.")
     open fun loadRom(path: String): StatusResult {

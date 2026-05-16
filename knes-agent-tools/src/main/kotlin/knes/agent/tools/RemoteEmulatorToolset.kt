@@ -51,6 +51,11 @@ class RemoteEmulatorToolset(
     sessionStub: EmulatorSession = EmulatorSession(),
 ) : EmulatorToolset(sessionStub) {
 
+    companion object {
+        fun remote(url: String): RemoteEmulatorToolset = RemoteEmulatorToolset(url)
+    }
+
+
     private val http: HttpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(5))
         .build()
