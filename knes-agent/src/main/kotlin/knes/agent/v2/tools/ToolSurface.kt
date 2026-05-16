@@ -1,6 +1,5 @@
 package knes.agent.v2.tools
 
-import knes.agent.skills.BuyAtShop
 import knes.agent.skills.EquipWeapon
 import knes.agent.skills.ExitInterior
 import knes.agent.skills.PressStartUntilOverworld
@@ -36,7 +35,6 @@ class DefaultToolSurface(
     private val pressStartUntilOverworld: PressStartUntilOverworld,
     private val walkOverworld: WalkOverworldTo,
     private val exitInterior: ExitInterior,
-    private val buyAtShopSkill: BuyAtShop,
     private val equipWeaponSkill: EquipWeapon,
     private val restAtInnSkill: RestAtInn,
     private val haiku: HaikuClient? = null,
