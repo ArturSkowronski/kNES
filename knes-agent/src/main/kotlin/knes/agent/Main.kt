@@ -45,7 +45,7 @@ fun main(args: Array<String>) {
     val anthropicKey = System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() }
         ?: error("ANTHROPIC_API_KEY not set")
     val geminiKey = System.getenv("GEMINI_API_KEY")?.takeIf { it.isNotBlank() }
-        ?: error("GEMINI_API_KEY not set (Gemini 3.1 Pro required for v2)")
+        ?: error("GEMINI_API_KEY not set (Gemini 3.1 Pro required)")
 
     val run = if (cfg.resumeDir != null) RunDirectory.resume(cfg.resumeDir)
              else RunDirectory.freshRun()

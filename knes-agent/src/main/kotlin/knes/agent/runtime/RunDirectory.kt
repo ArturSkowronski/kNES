@@ -65,7 +65,7 @@ class RunDirectory(val root: Path) {
 
         fun freshRun(): RunDirectory {
             val ts = LocalDateTime.now().format(TS_FMT)
-            val dir = runsRoot().resolve("$ts-v2")
+            val dir = runsRoot().resolve("$ts-run")
             val rd = RunDirectory(dir).also { it.ensure() }
             updateLatestSymlink(dir)
             return rd
@@ -77,7 +77,7 @@ class RunDirectory(val root: Path) {
         }
 
         private fun updateLatestSymlink(target: Path) {
-            val link = runsRoot().resolve("latest-v2")
+            val link = runsRoot().resolve("latest")
             try {
                 link.deleteIfExists()
                 Files.createSymbolicLink(link, target)

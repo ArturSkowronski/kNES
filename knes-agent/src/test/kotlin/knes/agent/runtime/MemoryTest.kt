@@ -7,7 +7,7 @@ import java.nio.file.Files
 
 class MemoryTest : StringSpec({
     "campaign + plan + turn-log survive write + reopen" {
-        val tmpRoot = Files.createTempDirectory("v2-mem-test")
+        val tmpRoot = Files.createTempDirectory("memory-test")
         val run = RunDirectory(tmpRoot).also { it.ensure() }
 
         val m1 = Memory(run)
