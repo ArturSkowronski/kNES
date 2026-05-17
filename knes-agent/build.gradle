@@ -12,6 +12,14 @@ application {
     mainClass = 'knes.agent.MainKt'
 }
 
+tasks.named('run') {
+    workingDir = rootProject.projectDir
+    standardInput = System.in
+    if (project.hasProperty('appArgs')) {
+        args(project.property('appArgs').toString().split(' '))
+    }
+}
+
 
 dependencies {
     implementation project(':knes-agent-tools')
