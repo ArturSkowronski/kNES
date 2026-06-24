@@ -8,6 +8,20 @@ build/
 *.jar
 *.war
 *.ear
+*.hprof
+
+# Claude Code scheduler lock
+.claude/scheduled_tasks.lock
+
+# Talk / presentation materials (kept on disk, out of git)
+/presentation/
+/tools/assets/
+docs/*.pdf
+
+# Generated API docs
+docs/openapi.yaml
+docs/redoc.html
+docs/swagger.html
 !gradle/wrapper/gradle-wrapper.jar
 
 # IntelliJ IDEA
