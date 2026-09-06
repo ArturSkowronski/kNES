@@ -76,6 +76,15 @@ The MCP layer is useful but not yet architecturally clean:
 - Return structured machine-readable tool results first, with text summaries as a secondary compatibility layer.
 - Add protocol-focused tests for escaping, required arguments, error mapping, local/remote parity, and screenshot image content.
 
+### P1: Agent Harness
+
+- Treat LLM play as instrumented agent control, not disassembly: expose screenshots, semantic RAM facts, short action primitives, memory, and verifier state.
+- Make `observe` the primary perception call for agents; raw `get_state` and `get_screen` stay as debug/fallback tools.
+- Move game-specific RAM interpretation into versioned profile semantics instead of scattering FF1 constants through runtime agents.
+- Add location confidence, transition detection, collision/passability hints, and event/dialog/menu state to observations.
+- Add benchmark tasks with explicit win conditions: reach Coneria, buy weapon, exit town, survive battle, reach next landmark.
+- Log each observation, decision, action, and verifier result into replayable traces.
+
 ### P2: Accuracy
 
 - Expand mapper support beyond NROM/MMC1 only after the scheduler boundary is clean.
@@ -106,3 +115,5 @@ The MCP layer is useful but not yet architecturally clean:
 - Added structured JSON posting to the MCP REST client.
 - Replaced hand-built JSON payloads in the legacy MCP REST bridge for ROM loading, stepping, taps, sequences, action execution, and press/release calls.
 - Extracted the shared MCP tool name, description, and input-schema catalog used by both in-process and legacy REST modes.
+- Added a shared `AgentObservation` contract for instrumented agent play.
+- Exposed `observe` through in-process MCP and the legacy REST bridge, with optional screenshot image content.

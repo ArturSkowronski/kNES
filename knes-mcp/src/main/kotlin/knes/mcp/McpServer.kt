@@ -137,6 +137,20 @@ fun createMcpServer(): Server {
         CallToolResult(content = listOf(ImageContent(data = result.base64, mimeType = "image/png")))
     }
 
+    // 4b. observe
+    server.addTool(
+        name = McpToolCatalog.observe.name,
+        description = McpToolCatalog.observe.description,
+        inputSchema = McpToolCatalog.observe.inputSchema!!
+    ) { request ->
+        val profileId = request.arguments?.get("profile_id")?.jsonPrimitive?.content
+        val screenshot = request.arguments?.get("screenshot")?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+        val result = toolset.observe(profileId, screenshot)
+        val content = mutableListOf<ContentBlock>(TextContent(json.encodeToString(result)))
+        result.screenshot?.base64?.let { content.add(ImageContent(data = it, mimeType = "image/png")) }
+        CallToolResult(content = content)
+    }
+
     // 5. apply_profile
     server.addTool(
         name = McpToolCatalog.applyProfile.name,

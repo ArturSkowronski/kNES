@@ -14,6 +14,7 @@ class McpToolCatalogTest : FunSpec({
             "sequence",
             "get_state",
             "get_screen",
+            "observe",
             "apply_profile",
             "list_actions",
             "execute_action",
@@ -33,6 +34,7 @@ class McpToolCatalogTest : FunSpec({
         McpToolCatalog.applyProfile.inputSchema?.required shouldBe listOf("profile_id")
         McpToolCatalog.listActions.inputSchema?.required shouldBe listOf("profile_id")
         McpToolCatalog.executeAction.inputSchema?.required shouldBe listOf("profile_id", "action_id")
+        McpToolCatalog.observe.inputSchema?.required shouldBe emptyList()
         McpToolCatalog.press.inputSchema?.required shouldBe listOf("buttons")
         McpToolCatalog.release.inputSchema?.required shouldBe listOf("buttons")
 

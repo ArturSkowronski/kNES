@@ -95,6 +95,18 @@ object McpToolCatalog {
         description = "Capture a screenshot of the current NES frame as a base64-encoded PNG image"
     )
 
+    val observe = McpToolDefinition(
+        name = "observe",
+        description = "Get an agent-oriented semantic observation: frame, phase, position, location hint, watched RAM, CPU registers, held buttons, and optionally a screenshot.",
+        inputSchema = ToolSchema(
+            properties = buildJsonObject {
+                stringProperty("profile_id", "Optional game profile ID used for semantic location hints, e.g. 'ff1'")
+                booleanProperty("screenshot", "If true, include a screenshot in the observation and as an image content block")
+            },
+            required = emptyList()
+        )
+    )
+
     val applyProfile = McpToolDefinition(
         name = "apply_profile",
         description = "Apply a game profile (e.g. 'smb' for Super Mario Bros, 'ff1' for Final Fantasy) to enable RAM watching for game-specific variables like HP, gold, position",
@@ -169,6 +181,7 @@ object McpToolCatalog {
         sequence,
         getState,
         getScreen,
+        observe,
         applyProfile,
         listActions,
         executeAction,

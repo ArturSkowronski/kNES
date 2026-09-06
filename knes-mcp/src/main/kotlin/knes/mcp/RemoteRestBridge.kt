@@ -8,9 +8,18 @@ import io.modelcontextprotocol.kotlin.sdk.types.ImageContent
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
+import knes.agent.tools.results.AgentObservationBuilder
+import knes.agent.tools.results.ScreenPng
+import knes.agent.tools.results.StateSnapshot
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -27,6 +36,7 @@ import kotlinx.serialization.json.putJsonArray
  */
 fun createRemoteMcpServer(): Server {
     val api = RestApiClient()
+    val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
 
     val server = Server(
         serverInfo = Implementation(
@@ -208,6 +218,40 @@ fun createRemoteMcpServer(): Server {
         }
     }
 
+    // 4b. observe
+    server.addTool(
+        name = McpToolCatalog.observe.name,
+        description = McpToolCatalog.observe.description,
+        inputSchema = McpToolCatalog.observe.inputSchema!!
+    ) { request ->
+        val profileId = request.arguments?.get("profile_id")?.jsonPrimitive?.contentOrNull
+        val screenshot = request.arguments?.get("screenshot")?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+
+        val stateResp = api.get("/state")
+        if (!stateResp.ok) {
+            return@addTool CallToolResult(content = listOf(TextContent("observe failed: ${stateResp.body}")), isError = true)
+        }
+
+        val screen = if (screenshot) {
+            val screenResp = api.get("/screen/base64")
+            if (!screenResp.ok) {
+                return@addTool CallToolResult(content = listOf(TextContent("observe screenshot failed: ${screenResp.body}")), isError = true)
+            }
+            screenPngFromRemoteBody(json, screenResp.body)
+        } else {
+            null
+        }
+
+        val result = AgentObservationBuilder.from(
+            stateSnapshotFromRemoteBody(json, stateResp.body),
+            screen = screen,
+            profileId = profileId,
+        )
+        val content = mutableListOf<ContentBlock>(TextContent(json.encodeToString(result)))
+        result.screenshot?.base64?.let { content.add(ImageContent(data = it, mimeType = "image/png")) }
+        CallToolResult(content = content)
+    }
+
     // 5. apply_profile
     server.addTool(
         name = McpToolCatalog.applyProfile.name,
@@ -344,4 +388,29 @@ fun createRemoteMcpServer(): Server {
     }
 
     return server
+}
+
+private fun stateSnapshotFromRemoteBody(json: Json, body: String): StateSnapshot {
+    val obj = json.parseToJsonElement(body).jsonObject
+    val ram = (obj["ram"] as? JsonObject)?.mapValues {
+        it.value.jsonPrimitive.intOrNull ?: 0
+    } ?: emptyMap()
+    val cpu = (obj["cpu"] as? JsonObject)?.mapValues {
+        it.value.jsonPrimitive.intOrNull ?: 0
+    } ?: emptyMap()
+    val heldButtons = (obj["heldButtons"] as? JsonArray ?: obj["buttons"] as? JsonArray)?.mapNotNull {
+        it.jsonPrimitive.contentOrNull
+    } ?: emptyList()
+
+    return StateSnapshot(
+        frame = obj["frame"]?.jsonPrimitive?.intOrNull ?: 0,
+        ram = ram,
+        cpu = cpu,
+        heldButtons = heldButtons,
+    )
+}
+
+private fun screenPngFromRemoteBody(json: Json, body: String): ScreenPng {
+    val obj = json.parseToJsonElement(body).jsonObject
+    return ScreenPng(base64 = obj["image"]?.jsonPrimitive?.contentOrNull ?: "")
 }
