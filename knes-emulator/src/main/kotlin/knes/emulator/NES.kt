@@ -21,11 +21,10 @@ import knes.emulator.ppu.PPU
 import knes.emulator.producers.ChannelRegistryProducer
 import knes.emulator.producers.MapperProducer
 import knes.emulator.rom.ROMData
-import knes.emulator.ui.GUI
 import knes.emulator.utils.PaletteTable
 import java.util.function.Consumer
 
-class NES(var gui: GUI) {
+class NES(private val host: NesHost) {
 
     val ppu: PPU = PPU()
     val papu: PAPU = PAPU(this)
@@ -42,13 +41,13 @@ class NES(var gui: GUI) {
 
     var memoryMapper: MemoryMapper? = null
 
-    val inputHandler: InputHandler = gui.getJoy1()
-    val inputHandler2: InputHandler? = gui.getJoy2()
+    val inputHandler: InputHandler = host.getJoy1()
+    val inputHandler2: InputHandler? = host.getJoy2()
 
     init {
         cpu.init(cpuMemory)
         ppu.init(
-            gui::imageReady,
+            host::imageReady,
             ppuMemory,
             sprMemory,
             cpuMemory,
@@ -140,15 +139,15 @@ class NES(var gui: GUI) {
         }
 
         val rom = ROM(
-            Consumer { percentComplete: Int? -> gui.sendDebugMessage("Load Progress" + (percentComplete ?: 0)) },
-            Consumer { message: String? -> gui.sendErrorMsg(message!!) }
+            Consumer { percentComplete: Int? -> host.sendDebugMessage("Load Progress" + (percentComplete ?: 0)) },
+            Consumer { message: String? -> host.sendErrorMsg(message!!) }
         )
 
         rom.load(file)
 
         if (rom.isValid()) {
             reset()
-            val mapperProducer = MapperProducer(Consumer { message: String? -> gui.sendErrorMsg(message!!) })
+            val mapperProducer = MapperProducer(Consumer { message: String? -> host.sendErrorMsg(message!!) })
             val memoryMapper = mapperProducer.produce(this, rom as ROMData)
 
             memoryMapper.loadROM(rom)
