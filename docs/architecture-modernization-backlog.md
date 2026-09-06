@@ -105,3 +105,4 @@ The MCP layer is useful but not yet architecturally clean:
 - Added a regression test that proves `NES` can be constructed without a `GUI`.
 - Added structured JSON posting to the MCP REST client.
 - Replaced hand-built JSON payloads in the legacy MCP REST bridge for ROM loading, stepping, taps, sequences, action execution, and press/release calls.
+- Extracted the shared MCP tool name, description, and input-schema catalog used by both in-process and legacy REST modes.

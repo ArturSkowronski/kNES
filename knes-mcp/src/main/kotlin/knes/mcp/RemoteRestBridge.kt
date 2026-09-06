@@ -8,7 +8,6 @@ import io.modelcontextprotocol.kotlin.sdk.types.ImageContent
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
-import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -17,7 +16,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
-import kotlinx.serialization.json.putJsonObject
 
 /**
  * Legacy REST-bridge MCP server.
@@ -44,17 +42,9 @@ fun createRemoteMcpServer(): Server {
 
     // 1. load_rom
     server.addTool(
-        name = "load_rom",
-        description = "Load a NES ROM from the given file path. Requires the Compose UI with embedded API server running on port 6502.",
-        inputSchema = ToolSchema(
-            properties = buildJsonObject {
-                putJsonObject("path") {
-                    put("type", "string")
-                    put("description", "Absolute path to the .nes ROM file")
-                }
-            },
-            required = listOf("path")
-        )
+        name = McpToolCatalog.loadRom.name,
+        description = McpToolCatalog.loadRom.description,
+        inputSchema = McpToolCatalog.loadRom.inputSchema!!
     ) { request ->
         val path = request.arguments?.get("path")?.jsonPrimitive?.content
             ?: return@addTool CallToolResult(content = listOf(TextContent("Missing required parameter: path")), isError = true)
@@ -76,26 +66,9 @@ fun createRemoteMcpServer(): Server {
 
     // 2. step
     server.addTool(
-        name = "step",
-        description = "Advance emulation by N frames while holding specified buttons. Returns frame count, watched RAM values, and optionally a screenshot.",
-        inputSchema = ToolSchema(
-            properties = buildJsonObject {
-                putJsonObject("buttons") {
-                    put("type", "array")
-                    putJsonObject("items") { put("type", "string") }
-                    put("description", "Buttons to hold: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT. Empty array = no buttons.")
-                }
-                putJsonObject("frames") {
-                    put("type", "integer")
-                    put("description", "Number of frames to advance (default: 1, 60 frames = 1 second)")
-                }
-                putJsonObject("screenshot") {
-                    put("type", "boolean")
-                    put("description", "If true, include a screenshot of the final frame in the response (default: false)")
-                }
-            },
-            required = listOf()
-        )
+        name = McpToolCatalog.step.name,
+        description = McpToolCatalog.step.description,
+        inputSchema = McpToolCatalog.step.inputSchema!!
     ) { request ->
         val buttons = request.arguments?.get("buttons")?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
         val frames = request.arguments?.get("frames")?.jsonPrimitive?.content?.toIntOrNull() ?: 1
@@ -126,33 +99,9 @@ fun createRemoteMcpServer(): Server {
 
     // 2b. tap
     server.addTool(
-        name = "tap",
-        description = "Press a button N times with configurable timing. Equivalent to repeated step(button, press_frames) + step([], gap_frames) cycles. Returns frame count, RAM, and optionally a screenshot.",
-        inputSchema = ToolSchema(
-            properties = buildJsonObject {
-                putJsonObject("button") {
-                    put("type", "string")
-                    put("description", "Button to press: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT")
-                }
-                putJsonObject("count") {
-                    put("type", "integer")
-                    put("description", "Number of times to press (default: 1)")
-                }
-                putJsonObject("press_frames") {
-                    put("type", "integer")
-                    put("description", "Frames to hold each press (default: 5)")
-                }
-                putJsonObject("gap_frames") {
-                    put("type", "integer")
-                    put("description", "Frames to wait between presses (default: 15)")
-                }
-                putJsonObject("screenshot") {
-                    put("type", "boolean")
-                    put("description", "If true, include a screenshot after all presses complete (default: false)")
-                }
-            },
-            required = listOf("button")
-        )
+        name = McpToolCatalog.tap.name,
+        description = McpToolCatalog.tap.description,
+        inputSchema = McpToolCatalog.tap.inputSchema!!
     ) { request ->
         val button = request.arguments?.get("button")?.jsonPrimitive?.content
             ?: return@addTool CallToolResult(content = listOf(TextContent("Missing: button")), isError = true)
@@ -186,33 +135,9 @@ fun createRemoteMcpServer(): Server {
 
     // 2c. sequence
     server.addTool(
-        name = "sequence",
-        description = "Execute a sequence of button inputs in one call. Each step holds specified buttons for N frames. Returns frame count, RAM, and optionally a screenshot after all steps complete.",
-        inputSchema = ToolSchema(
-            properties = buildJsonObject {
-                putJsonObject("steps") {
-                    put("type", "array")
-                    putJsonObject("items") {
-                        put("type", "object")
-                        putJsonObject("properties") {
-                            putJsonObject("buttons") {
-                                put("type", "array")
-                                putJsonObject("items") { put("type", "string") }
-                            }
-                            putJsonObject("frames") {
-                                put("type", "integer")
-                            }
-                        }
-                    }
-                    put("description", "Array of {buttons, frames} steps to execute in order")
-                }
-                putJsonObject("screenshot") {
-                    put("type", "boolean")
-                    put("description", "If true, include a screenshot after all steps complete (default: false)")
-                }
-            },
-            required = listOf("steps")
-        )
+        name = McpToolCatalog.sequence.name,
+        description = McpToolCatalog.sequence.description,
+        inputSchema = McpToolCatalog.sequence.inputSchema!!
     ) { request ->
         val stepsArray = request.arguments?.get("steps")?.jsonArray
             ?: return@addTool CallToolResult(content = listOf(TextContent("Missing: steps")), isError = true)
@@ -253,8 +178,8 @@ fun createRemoteMcpServer(): Server {
 
     // 3. get_state
     server.addTool(
-        name = "get_state",
-        description = "Get current emulator state: frame count, watched RAM values, CPU registers, and held buttons"
+        name = McpToolCatalog.getState.name,
+        description = McpToolCatalog.getState.description
     ) { _ ->
         val resp = api.get("/state")
         if (resp.ok) {
@@ -266,8 +191,8 @@ fun createRemoteMcpServer(): Server {
 
     // 4. get_screen
     server.addTool(
-        name = "get_screen",
-        description = "Capture a screenshot of the current NES frame as a base64-encoded PNG image"
+        name = McpToolCatalog.getScreen.name,
+        description = McpToolCatalog.getScreen.description
     ) { _ ->
         val resp = api.get("/screen/base64")
         if (resp.ok) {
@@ -285,17 +210,9 @@ fun createRemoteMcpServer(): Server {
 
     // 5. apply_profile
     server.addTool(
-        name = "apply_profile",
-        description = "Apply a game profile (e.g. 'smb' for Super Mario Bros, 'ff1' for Final Fantasy) to enable RAM watching for game-specific variables like HP, gold, position",
-        inputSchema = ToolSchema(
-            properties = buildJsonObject {
-                putJsonObject("profile_id") {
-                    put("type", "string")
-                    put("description", "Profile ID: 'smb' (Super Mario Bros) or 'ff1' (Final Fantasy)")
-                }
-            },
-            required = listOf("profile_id")
-        )
+        name = McpToolCatalog.applyProfile.name,
+        description = McpToolCatalog.applyProfile.description,
+        inputSchema = McpToolCatalog.applyProfile.inputSchema!!
     ) { request ->
         val id = request.arguments?.get("profile_id")?.jsonPrimitive?.content
             ?: return@addTool CallToolResult(content = listOf(TextContent("Missing: profile_id")), isError = true)
@@ -309,17 +226,9 @@ fun createRemoteMcpServer(): Server {
 
     // 5b. list_actions
     server.addTool(
-        name = "list_actions",
-        description = "List available game actions for a profile. Actions are game-specific automation scripts that play like a real NES player — they read the screen and press buttons.",
-        inputSchema = ToolSchema(
-            properties = buildJsonObject {
-                putJsonObject("profile_id") {
-                    put("type", "string")
-                    put("description", "Profile ID (e.g. 'ff1')")
-                }
-            },
-            required = listOf("profile_id")
-        )
+        name = McpToolCatalog.listActions.name,
+        description = McpToolCatalog.listActions.description,
+        inputSchema = McpToolCatalog.listActions.inputSchema!!
     ) { request ->
         val profileId = request.arguments?.get("profile_id")?.jsonPrimitive?.content
             ?: return@addTool CallToolResult(
@@ -338,25 +247,9 @@ fun createRemoteMcpServer(): Server {
 
     // 5c. execute_action
     server.addTool(
-        name = "execute_action",
-        description = "Execute a game action. Actions play like a real NES player: they read RAM state and press buttons. No memory writes, no cheats. Example: execute_action('ff1', 'battle_fight_all') auto-fights an FF1 battle.",
-        inputSchema = ToolSchema(
-            properties = buildJsonObject {
-                putJsonObject("profile_id") {
-                    put("type", "string")
-                    put("description", "Profile ID (e.g. 'ff1')")
-                }
-                putJsonObject("action_id") {
-                    put("type", "string")
-                    put("description", "Action ID (e.g. 'battle_fight_all')")
-                }
-                putJsonObject("screenshot") {
-                    put("type", "boolean")
-                    put("description", "Include screenshot in result (default: true)")
-                }
-            },
-            required = listOf("profile_id", "action_id")
-        )
+        name = McpToolCatalog.executeAction.name,
+        description = McpToolCatalog.executeAction.description,
+        inputSchema = McpToolCatalog.executeAction.inputSchema!!
     ) { request ->
         val profileId = request.arguments?.get("profile_id")?.jsonPrimitive?.content
             ?: return@addTool CallToolResult(
@@ -392,8 +285,8 @@ fun createRemoteMcpServer(): Server {
 
     // 6. list_profiles
     server.addTool(
-        name = "list_profiles",
-        description = "List all available game profiles for RAM watching"
+        name = McpToolCatalog.listProfiles.name,
+        description = McpToolCatalog.listProfiles.description
     ) { _ ->
         val resp = api.get("/profiles")
         if (resp.ok) {
@@ -405,18 +298,9 @@ fun createRemoteMcpServer(): Server {
 
     // 7. press
     server.addTool(
-        name = "press",
-        description = "Press and hold one or more buttons (they stay held until released)",
-        inputSchema = ToolSchema(
-            properties = buildJsonObject {
-                putJsonObject("buttons") {
-                    put("type", "array")
-                    putJsonObject("items") { put("type", "string") }
-                    put("description", "Buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT")
-                }
-            },
-            required = listOf("buttons")
-        )
+        name = McpToolCatalog.press.name,
+        description = McpToolCatalog.press.description,
+        inputSchema = McpToolCatalog.press.inputSchema!!
     ) { request ->
         val buttons = request.arguments?.get("buttons")?.jsonArray?.map { it.jsonPrimitive.content }
             ?: return@addTool CallToolResult(content = listOf(TextContent("Missing: buttons")), isError = true)
@@ -433,18 +317,9 @@ fun createRemoteMcpServer(): Server {
 
     // 8. release
     server.addTool(
-        name = "release",
-        description = "Release one or more held buttons",
-        inputSchema = ToolSchema(
-            properties = buildJsonObject {
-                putJsonObject("buttons") {
-                    put("type", "array")
-                    putJsonObject("items") { put("type", "string") }
-                    put("description", "Buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT")
-                }
-            },
-            required = listOf("buttons")
-        )
+        name = McpToolCatalog.release.name,
+        description = McpToolCatalog.release.description,
+        inputSchema = McpToolCatalog.release.inputSchema!!
     ) { request ->
         val buttons = request.arguments?.get("buttons")?.jsonArray?.map { it.jsonPrimitive.content }
             ?: return@addTool CallToolResult(content = listOf(TextContent("Missing: buttons")), isError = true)
@@ -461,8 +336,8 @@ fun createRemoteMcpServer(): Server {
 
     // 9. reset
     server.addTool(
-        name = "reset",
-        description = "Reset the NES emulator to its initial state"
+        name = McpToolCatalog.reset.name,
+        description = McpToolCatalog.reset.description
     ) { _ ->
         val resp = api.postJson("/reset", "")
         CallToolResult(content = listOf(TextContent(resp.body)))
