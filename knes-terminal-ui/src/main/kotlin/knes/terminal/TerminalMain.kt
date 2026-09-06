@@ -64,21 +64,7 @@ class TerminalMain(enablePpuLogging: Boolean = true) {
         val terminalUI = TerminalUI(nes, screenView)
         // Initialize the UI
 
-        // Check if a ROM file was specified as a command line argument
-        var romPath: String? = null
-        if (args.isNotEmpty()) {
-            romPath = args[0]
-        }
-
-        // If no ROM file was specified, use the default path
-        if (romPath == null) {
-            romPath = "/Users/askowronski/vnes.nes"
-        }
-
-        // If still no ROM file, prompt the user to select one
-        if (romPath == null) {
-            romPath = promptForRomFile()
-        }
+        val romPath = args.firstOrNull() ?: promptForRomFile()
 
         // If we have a ROM file, load it and start the emulator
         if (romPath != null) {

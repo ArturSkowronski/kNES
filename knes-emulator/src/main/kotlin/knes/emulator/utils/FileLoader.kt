@@ -65,9 +65,7 @@ class FileLoader {
 
                     if (total > 0 && ((pos * 100) / total) > progress) {
                         progress = (pos * 100) / total
-                        if (loadProgress != null) {
-                            loadProgress.accept(progress.toInt())
-                        }
+                        loadProgress.accept(progress.toInt())
                     }
                 }
             } else {

@@ -22,6 +22,10 @@ class AdvisorAgent(
     private val run: RunDirectory,
     private val landmarks: LandmarkMemory? = null,
 ) {
+    private companion object {
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+    }
+
     suspend fun plan(
         reason: String,
         screenshotB64: String,
@@ -267,8 +271,7 @@ class AdvisorAgent(
 
     private fun parsePlan(raw: String, milestone: String, turn: Int): Plan {
         val jsonText = extractJsonObject(raw)
-        val parsed = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-            .decodeFromString(PlanWire.serializer(), jsonText)
+        val parsed = json.decodeFromString(PlanWire.serializer(), jsonText)
         return Plan(
             createdAtTurn = turn,
             milestone = milestone,
