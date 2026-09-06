@@ -9,11 +9,14 @@ import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 
 /**
@@ -58,7 +61,12 @@ fun createRemoteMcpServer(): Server {
         if (!api.isAvailable()) {
             return@addTool CallToolResult(content = listOf(TextContent("Cannot connect to kNES API on port 6502. Start the Compose UI and click 'API Server' first.")), isError = true)
         }
-        val resp = api.postJson("/rom", """{"path":"$path"}""")
+        val resp = api.postJson(
+            "/rom",
+            buildJsonObject {
+                put("path", path)
+            }
+        )
         if (resp.ok) {
             CallToolResult(content = listOf(TextContent("ROM loaded: $path")))
         } else {
@@ -92,8 +100,16 @@ fun createRemoteMcpServer(): Server {
         val buttons = request.arguments?.get("buttons")?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
         val frames = request.arguments?.get("frames")?.jsonPrimitive?.content?.toIntOrNull() ?: 1
         val screenshot = request.arguments?.get("screenshot")?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
-        val buttonsJson = buttons.joinToString(",") { "\"$it\"" }
-        val resp = api.postJson("/step", """{"buttons":[$buttonsJson],"frames":$frames,"screenshot":$screenshot}""")
+        val resp = api.postJson(
+            "/step",
+            buildJsonObject {
+                putJsonArray("buttons") {
+                    buttons.forEach { add(it) }
+                }
+                put("frames", frames)
+                put("screenshot", screenshot)
+            }
+        )
         if (resp.ok) {
             val content = mutableListOf<ContentBlock>(TextContent(resp.body))
             if (screenshot) {
@@ -144,7 +160,16 @@ fun createRemoteMcpServer(): Server {
         val pressFrames = request.arguments?.get("press_frames")?.jsonPrimitive?.content?.toIntOrNull() ?: 5
         val gapFrames = request.arguments?.get("gap_frames")?.jsonPrimitive?.content?.toIntOrNull() ?: 15
         val screenshot = request.arguments?.get("screenshot")?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
-        val resp = api.postJson("/tap", """{"button":"$button","count":$count,"pressFrames":$pressFrames,"gapFrames":$gapFrames,"screenshot":$screenshot}""")
+        val resp = api.postJson(
+            "/tap",
+            buildJsonObject {
+                put("button", button)
+                put("count", count)
+                put("pressFrames", pressFrames)
+                put("gapFrames", gapFrames)
+                put("screenshot", screenshot)
+            }
+        )
         if (resp.ok) {
             val content = mutableListOf<ContentBlock>(TextContent(resp.body))
             if (screenshot) {
@@ -193,13 +218,25 @@ fun createRemoteMcpServer(): Server {
             ?: return@addTool CallToolResult(content = listOf(TextContent("Missing: steps")), isError = true)
         val screenshot = request.arguments?.get("screenshot")?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
 
-        val stepsJson = stepsArray.joinToString(",") { step ->
-            val obj = step.jsonObject
-            val buttons = obj["buttons"]?.jsonArray?.joinToString(",") { "\"${it.jsonPrimitive.content}\"" } ?: ""
-            val frames = obj["frames"]?.jsonPrimitive?.content ?: "1"
-            """{"buttons":[$buttons],"frames":$frames}"""
-        }
-        val resp = api.postJson("/step", """{"sequence":[$stepsJson],"screenshot":$screenshot}""")
+        val resp = api.postJson(
+            "/step",
+            buildJsonObject {
+                putJsonArray("sequence") {
+                    stepsArray.forEach { step ->
+                        val obj = step.jsonObject
+                        val buttons = obj["buttons"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
+                        val frames = obj["frames"]?.jsonPrimitive?.content?.toIntOrNull() ?: 1
+                        addJsonObject {
+                            putJsonArray("buttons") {
+                                buttons.forEach { add(it) }
+                            }
+                            put("frames", frames)
+                        }
+                    }
+                }
+                put("screenshot", screenshot)
+            }
+        )
         if (resp.ok) {
             val content = mutableListOf<ContentBlock>(TextContent(resp.body))
             if (screenshot) {
@@ -333,7 +370,9 @@ fun createRemoteMcpServer(): Server {
 
         val resp = api.postJson(
             "/profiles/$profileId/actions/$actionId",
-            """{"screenshot":$screenshot}"""
+            buildJsonObject {
+                put("screenshot", screenshot)
+            }
         )
         if (resp.ok) {
             val content = mutableListOf<ContentBlock>(TextContent(resp.body))
@@ -381,8 +420,14 @@ fun createRemoteMcpServer(): Server {
     ) { request ->
         val buttons = request.arguments?.get("buttons")?.jsonArray?.map { it.jsonPrimitive.content }
             ?: return@addTool CallToolResult(content = listOf(TextContent("Missing: buttons")), isError = true)
-        val json = buttons.joinToString(",") { "\"$it\"" }
-        val resp = api.postJson("/press", """{"buttons":[$json]}""")
+        val resp = api.postJson(
+            "/press",
+            buildJsonObject {
+                putJsonArray("buttons") {
+                    buttons.forEach { add(it) }
+                }
+            }
+        )
         CallToolResult(content = listOf(TextContent(resp.body)))
     }
 
@@ -403,8 +448,14 @@ fun createRemoteMcpServer(): Server {
     ) { request ->
         val buttons = request.arguments?.get("buttons")?.jsonArray?.map { it.jsonPrimitive.content }
             ?: return@addTool CallToolResult(content = listOf(TextContent("Missing: buttons")), isError = true)
-        val json = buttons.joinToString(",") { "\"$it\"" }
-        val resp = api.postJson("/release", """{"buttons":[$json]}""")
+        val resp = api.postJson(
+            "/release",
+            buildJsonObject {
+                putJsonArray("buttons") {
+                    buttons.forEach { add(it) }
+                }
+            }
+        )
         CallToolResult(content = listOf(TextContent(resp.body)))
     }
 

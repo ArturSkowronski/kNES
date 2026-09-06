@@ -11,12 +11,14 @@ The reference shape for a serious NES emulator is:
 - Deterministic execution APIs: step instruction, step frame, reset, load ROM, save/load state, input replay.
 - Accuracy validation through well-known CPU/PPU/APU test ROMs and compatibility lists, not only app smoke tests.
 - Tooling surfaces for debugger, memory watch, trace logs, movie/TAS replay, screenshots, scripting or automation.
+- MCP servers with explicit tool schemas, stable tool/resource contracts, thin handlers over domain services, structured JSON serialization, and observable protocol/transport failures.
 
 References checked:
 
 - MesenCE separates `Core`, `InteropDLL`, platform folders, and `UI`: https://github.com/nesdev-org/MesenCE
 - FCEUX exposes emulator tooling such as Lua scripting and source-level debug builds: https://github.com/TASEmulators/fceux
 - NESdev documentation and test ROM ecosystem remain the practical standard reference for CPU/PPU/APU/mapper behavior: https://www.nesdev.org/wiki/
+- MCP servers expose capabilities through tools, resources, prompts, and transports defined by the Model Context Protocol specification: https://modelcontextprotocol.io/specification/
 
 ## Current Assessment
 
@@ -33,6 +35,14 @@ The main architectural gap is that the "core" is not yet a clean core:
 - Runtime behavior still depends on global mutable `Globals`, which makes deterministic tests and multi-session hosting harder.
 - Module dependencies point upward in places: `knes-api` and `knes-mcp` depend directly on several low-level modules instead of a narrow session/core API.
 - Applet-era code is still first-class in the root app and creates removal warnings on modern JDKs.
+
+The MCP layer is useful but not yet architecturally clean:
+
+- `McpServer.kt` and `RemoteRestBridge.kt` duplicate tool registration instead of sharing one typed tool catalog.
+- Local MCP calls go through `LocalEmulatorToolset`, while remote MCP calls manually adapt to REST endpoints; this makes feature parity fragile.
+- MCP currently exposes tools only. ROM metadata, emulator state snapshots, profile definitions, and debug views would fit MCP resources better than repeated tool-only JSON blobs.
+- Tool handlers still parse arguments inline and return mostly raw text, so schema validation, typed failures, and result evolution are weak.
+- The legacy `NesEmulatorSession` duplicates headless session behavior and needs either migration to the shared session layer or removal.
 
 ## Backlog
 
@@ -56,6 +66,15 @@ The main architectural gap is that the "core" is not yet a clean core:
 - Include ROM identity, mapper id, region/timing mode, controller state, and config in savestate metadata.
 - Add a small replay/movie format for deterministic input scripts independent from API JSON.
 - Add golden tests for save/load/replay determinism.
+
+### P1: MCP Contract Layer
+
+- Extract a typed MCP tool catalog so local and remote modes register the same tool names, input schemas, defaults, and result shapes.
+- Introduce a narrow backend port for emulator operations; implement it once for in-process sessions and once for REST transport.
+- Replace all hand-built JSON payloads with `kotlinx.serialization` models or `JsonElement` builders.
+- Add resources for stable read-only data: loaded ROM metadata, emulator state, active profile, watched RAM definitions, screenshots, and traces.
+- Return structured machine-readable tool results first, with text summaries as a secondary compatibility layer.
+- Add protocol-focused tests for escaping, required arguments, error mapping, local/remote parity, and screenshot image content.
 
 ### P2: Accuracy
 
@@ -84,3 +103,5 @@ The main architectural gap is that the "core" is not yet a clean core:
 - Made legacy `GUI` extend `NesHost`.
 - Changed `NES` to depend on `NesHost` instead of `GUI`.
 - Added a regression test that proves `NES` can be constructed without a `GUI`.
+- Added structured JSON posting to the MCP REST client.
+- Replaced hand-built JSON payloads in the legacy MCP REST bridge for ROM loading, stepping, taps, sequences, action execution, and press/release calls.
