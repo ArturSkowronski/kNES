@@ -217,15 +217,23 @@ scheduling once C1 and C2 are in.
 
 ## Wave D — state and replay
 
-### D1. Versioned savestates with named chunks — **M**
+### D1. Versioned savestates with named chunks — **M** — *done 2026-09-21*
 
 `NES.stateSave` (`NES.kt:93`) writes `putByte(1)` then dumps components positionally;
 `stateLoad` accepts version `1` and nothing else. No ROM identity, mapper id, region,
 controller state or config is recorded, so a savestate silently loads against the wrong
 ROM.
 
-**Done when:** a savestate carries named chunks plus ROM/mapper/region/config metadata,
-and loading it against a different ROM fails loudly.
+**Outcome:** format 2 writes `KNES`, a version, a `RomIdentity` (mapper, PRG/CHR bank
+counts, mirroring, FNV-1a over the program banks) and six length-prefixed named chunks,
+so an unknown chunk from a newer writer can be stepped over instead of derailing the
+read. A state from another ROM raises `SavestateMismatchException`; malformed data still
+returns false. The original positional format is still read, told apart by the magic.
+
+Region and config are **not** in the header. `palEmulation` now lives in `NesConfig`
+(C2), and recording it would raise a question this task should not answer alone: does a
+state saved under PAL refuse to load under NTSC, or reconfigure the machine? Left for
+D2, where replay determinism forces the answer.
 
 ### D2. Replay format + determinism golden tests — **M**
 
