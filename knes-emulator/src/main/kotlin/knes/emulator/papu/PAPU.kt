@@ -32,7 +32,9 @@ import javax.sound.sampled.DataLine
 import javax.sound.sampled.Mixer
 import javax.sound.sampled.SourceDataLine
 
-class PAPU(nes: NES) : PAPU_Applet_Functionality, PAPUAudioContext, PAPUDMCSampler, PAPUClockFrame {
+class PAPU(private val nes: NES) : PAPU_Applet_Functionality, PAPUAudioContext, PAPUDMCSampler, PAPUClockFrame {
+    private val config get() = nes.config
+
     /**
      * @return Current address pointer for sample loading
      */
@@ -248,7 +250,7 @@ class PAPU(nes: NES) : PAPU_Applet_Functionality, PAPUAudioContext, PAPUDMCSampl
 
         if (mixerInfo == null || mixerInfo.size == 0) {
             //System.out.println("No audio mixer available, sound disabled.");
-            Globals.enableSound = false
+            config.enableSound = false
             return
         }
 
@@ -782,10 +784,10 @@ class PAPU(nes: NES) : PAPU_Applet_Functionality, PAPUAudioContext, PAPUDMCSampl
         }
 
         sampleRate = rate
-        sampleTimerMax = ((1024.0 * Globals.CPU_FREQ_NTSC * Globals.preferredFrameRate) /
+        sampleTimerMax = ((1024.0 * Globals.CPU_FREQ_NTSC * config.preferredFrameRate) /
                 (sampleRate * 60.0)).toInt()
 
-        frameTime = ((14915.0 * Globals.preferredFrameRate.toDouble()) / 60.0).toInt()
+        frameTime = ((14915.0 * config.preferredFrameRate.toDouble()) / 60.0).toInt()
 
         sampleTimer = 0
         this.bufferPos = 0

@@ -189,6 +189,7 @@ class PPU : PPUCycles {
     }
 
     private var cycles = 0
+    private lateinit var config: knes.emulator.NesConfig
 
     // Maps to store pixel color counts for debugging
     private val currentFrameColorCounts: MutableMap<Int?, Int?> = HashMap<Int?, Int?>()
@@ -201,8 +202,10 @@ class PPU : PPUCycles {
         cpuMem: Memory,
         cpu: CPU,
         papu: PAPU,
-        palTable: PaletteTable
+        palTable: PaletteTable,
+        config: knes.emulator.NesConfig
     ) {
+        this.config = config
         this.imageReadyHandler = imageReadyHandler
         this.ppuMem = ppuMem
         this.sprMem = sprMem
@@ -391,7 +394,7 @@ class PPU : PPUCycles {
         endFrame()
 
         val tmp = papu.bufferPos
-        if (Globals.enableSound && Globals.timeEmulation && tmp > 0) {
+        if (config.enableSound && config.timeEmulation && tmp > 0) {
             val min_avail = papu.line!!.getBufferSize() - 4 * tmp
 
             var timeToSleep = papu.getMillisToAvailableAbove(min_avail)
@@ -1041,7 +1044,7 @@ class PPU : PPUCycles {
             return
         }
 
-        if (f_spVisibility == 1 && !knes.emulator.utils.Globals.disableSprites) {
+        if (f_spVisibility == 1 && !config.disableSprites) {
             renderSpritesPartially(startScan, scanCount, true)
         }
 
@@ -1060,7 +1063,7 @@ class PPU : PPUCycles {
             }
         }
 
-        if (f_spVisibility == 1 && !knes.emulator.utils.Globals.disableSprites) {
+        if (f_spVisibility == 1 && !config.disableSprites) {
             renderSpritesPartially(startScan, scanCount, false)
         }
 
@@ -1841,7 +1844,7 @@ class PPU : PPUCycles {
 
         // Initialize stuff:
         init(
-            imageReadyHandler, ppuMem, sprMem, cpuMem, cpu, papu, palTable
+            imageReadyHandler, ppuMem, sprMem, cpuMem, cpu, papu, palTable, config
         )
     }
 

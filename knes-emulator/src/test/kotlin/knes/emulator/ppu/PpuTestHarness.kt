@@ -1,5 +1,6 @@
 package knes.emulator.ppu
 
+import knes.emulator.NesConfig
 import knes.emulator.ByteBuffer
 import knes.emulator.Memory
 import knes.emulator.NES
@@ -67,12 +68,9 @@ class PpuTestHarness {
     val sprMemory: Memory
 
     init {
-        Globals.appletMode = false
-        Globals.enableSound = false
-        Globals.palEmulation = false
 
         val gui = StubGUI()
-        nes = NES(gui)
+        nes = NES(gui, NesConfig(appletMode = false, enableSound = false, timeEmulation = false))
         ppu = nes.ppu
         cpuMemory = nes.cpuMemory
         sprMemory = nes.sprMemory

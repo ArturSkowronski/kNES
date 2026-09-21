@@ -1,5 +1,6 @@
 package knes.emulator.mappers
 
+import knes.emulator.NesConfig
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import knes.emulator.NES
@@ -11,9 +12,6 @@ import knes.emulator.utils.HiResTimer
 class MapperMMC1Test : FunSpec({
 
     fun createNES(): NES {
-        Globals.appletMode = false
-        Globals.enableSound = false
-        Globals.palEmulation = false
 
         val noopInput = object : InputHandler {
             override fun getKeyState(padKey: Int): Short = 0x40
@@ -27,7 +25,7 @@ class MapperMMC1Test : FunSpec({
             override fun getTimer(): HiResTimer = HiResTimer()
             override fun imageReady(skipFrame: Boolean, buffer: IntArray) {}
         }
-        return NES(gui)
+        return NES(gui, NesConfig(appletMode = false, enableSound = false, timeEmulation = false))
     }
 
     fun createMapper(nes: NES): MapperMMC1 {

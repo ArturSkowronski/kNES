@@ -25,6 +25,7 @@ import knes.emulator.utils.Globals
 class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPUCycles) : Runnable, CPUIIrqRequester {
     var myThread: Thread? = null
 
+    private lateinit var config: knes.emulator.NesConfig
     private lateinit var mmap: MemoryAccess
     private lateinit var mem: ShortArray
 
@@ -60,8 +61,10 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
 
     // Initialize:
     fun init(
-        cpuMemoryAccess: Memory
+        cpuMemoryAccess: Memory,
+        config: knes.emulator.NesConfig
     ) {
+        this.config = config
         // Get Op data:
 
         opdata = CpuInfo.opData
@@ -225,9 +228,9 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
         var temp: Int
         var add: Int
 
-        val palEmu = Globals.palEmulation
-        val emulateSound = Globals.enableSound
-        val asApplet = Globals.appletMode
+        val palEmu = config.palEmulation
+        val emulateSound = config.enableSound
+        val asApplet = config.appletMode
         stopRunning = false
 
         while (true) {

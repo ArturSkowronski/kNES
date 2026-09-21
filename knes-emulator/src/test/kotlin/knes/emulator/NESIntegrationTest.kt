@@ -13,9 +13,7 @@ import java.io.File
 class NESIntegrationTest : FunSpec({
 
     test("nestest ROM passes all CPU tests in automated mode") {
-        Globals.appletMode = false
-        Globals.enableSound = false
-        Globals.palEmulation = false
+        // Config is per instance now; nothing here leaks into another test.
 
         val noopInput = object : InputHandler {
             override fun getKeyState(padKey: Int): Short = 0x40
@@ -31,7 +29,7 @@ class NESIntegrationTest : FunSpec({
             override fun imageReady(skipFrame: Boolean, buffer: IntArray) {}
         }
 
-        val nes = NES(gui)
+        val nes = NES(gui, NesConfig(appletMode = false, enableSound = false, timeEmulation = false))
 
         // Find nestest.nes in test resources
         val romUrl = this::class.java.classLoader.getResource("nestest.nes")

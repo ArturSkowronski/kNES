@@ -1,5 +1,6 @@
 package knes.emulator.e2e
 
+import knes.emulator.NesConfig
 import knes.emulator.NES
 import knes.emulator.input.InputHandler
 import knes.emulator.ui.GUI
@@ -23,10 +24,6 @@ class EmulatorTestHarness(romPath: String) {
     init {
         // appletMode = true is required so that PPU cycles execute on each cpu.step(),
         // which causes imageReady() to fire at the end of each VBlank — giving us real frames.
-        Globals.appletMode = true
-        Globals.enableSound = false
-        Globals.palEmulation = false
-        Globals.timeEmulation = false
 
         val gui = object : GUI {
             override fun sendErrorMsg(message: String) {}
@@ -40,7 +37,7 @@ class EmulatorTestHarness(romPath: String) {
             }
         }
 
-        nes = NES(gui)
+        nes = NES(gui, NesConfig.HEADLESS)
 
         val loaded = nes.loadRom(romPath)
         if (!loaded) {
