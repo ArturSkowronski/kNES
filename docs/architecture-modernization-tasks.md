@@ -233,6 +233,13 @@ inverting that is C3c.
 step an instruction, then advance the PPU and APU by what it cost. This is what makes a
 single execution model possible. *Depends on C3b.*
 
+The free-running path this changes had almost no coverage — everything else in the suite
+drives the emulator a step at a time. `FreeRunningExecutionTest` writes down what has to
+survive: the loop runs on its own thread, stops and stays stopped, the frame callback
+fires off the caller's thread, starting twice does not leave two loops, and the
+stop/restart handshake `stateSave` relies on keeps working. Seven tests, sub-second, and
+checked five times over for flakiness before landing.
+
 **C3d — delete the second execution model — M.** Once C3c lands, `steppedExecution` stops
 being a mode: the UIs drive frames through the coordinator like everything else, and
 `stepFrame` no longer needs to refuse. *Depends on C3c.*
