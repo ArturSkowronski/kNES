@@ -4,7 +4,7 @@
 
 kNES is a Nintendo Entertainment System (NES) emulator written in Kotlin, forked from the vNES Java emulator. This project was created primarily for fun and educational purposes, allowing developers to learn about emulation techniques and NES hardware while enjoying classic games.
 
-![Tests](https://github.com/ArturSkowronski/kNES/actions/workflows/test.yml/badge.svg)
+![Java CI](https://github.com/ArturSkowronski/kNES/actions/workflows/build.yml/badge.svg)
 
 ## About This Project
 

@@ -1,5 +1,7 @@
 package knes.mcp
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -8,6 +10,7 @@ import java.net.URL
  * MCP tools delegate to the running Compose UI's embedded API server.
  */
 class RestApiClient(private val baseUrl: String = "http://localhost:6502") {
+    private val json = Json { encodeDefaults = true }
 
     fun get(path: String): ApiResponse {
         val conn = URL("$baseUrl$path").openConnection() as HttpURLConnection
@@ -27,6 +30,9 @@ class RestApiClient(private val baseUrl: String = "http://localhost:6502") {
         conn.outputStream.use { it.write(body.toByteArray()) }
         return readResponse(conn)
     }
+
+    fun postJson(path: String, body: JsonElement): ApiResponse =
+        postJson(path, json.encodeToString(JsonElement.serializer(), body))
 
     fun postText(path: String, body: String): ApiResponse {
         val conn = URL("$baseUrl$path").openConnection() as HttpURLConnection

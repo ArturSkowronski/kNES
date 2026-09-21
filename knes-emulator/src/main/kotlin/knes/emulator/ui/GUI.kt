@@ -13,8 +13,7 @@
 
 package knes.emulator.ui
 
-import knes.emulator.input.InputHandler
-import knes.emulator.utils.HiResTimer
+import knes.emulator.NesHost
 
 /**
  * UI interface for the knes.emulator.NES emulator.
@@ -23,16 +22,4 @@ import knes.emulator.utils.HiResTimer
  * It combines both platform-agnostic UI functionality and legacy UI requirements.
  */
 
-interface GUI {
-
-    // Methods from UiInfoMessageBus
-    fun sendErrorMsg(message: String)
-    fun sendDebugMessage(message: String)
-    fun destroy()
-
-    // GUI-specific methods
-    fun getJoy1(): InputHandler
-    fun getJoy2(): InputHandler?
-    fun getTimer(): HiResTimer
-    fun imageReady(skipFrame: Boolean, buffer: IntArray)
-}
+interface GUI : NesHost

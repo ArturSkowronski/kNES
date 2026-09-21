@@ -247,8 +247,7 @@ class ExecutorAgent(
         val start = raw.indexOf('{'); val end = raw.lastIndexOf('}')
         require(start in 0 until end) { "no JSON object in llm response: ${raw.take(200)}" }
         val jsonText = raw.substring(start, end + 1)
-        val parsed = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-            .decodeFromString(ToolWire.serializer(), jsonText)
+        val parsed = json.decodeFromString(ToolWire.serializer(), jsonText)
         val reasoning = "llm: ${parsed.reasoning?.take(80) ?: ""}"
         if (!parsed.sequence.isNullOrEmpty()) {
             // Encode the sequence list as the args map under "buttons" key so
@@ -304,6 +303,8 @@ class ExecutorAgent(
     )
 
     companion object {
+        private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+
         private val EXECUTOR_SYSTEM_PROMPT = """
             You are the per-turn tool picker for an FF1 NES playing agent.
             You see the current screenshot + a RAM digest. The screenshot is

@@ -62,7 +62,7 @@ class MockAudioContext : PAPUAudioContext {
     )
 
     override fun getLengthMax(value: Int): Int = lengthLookup[value shr 3]
-    override fun clockFrameCounter(cycles: Int) {}
+    override fun clockFrameCounter(cycleCount: Int) {}
     override fun updateChannelEnable(value: Int) {}
 }
 

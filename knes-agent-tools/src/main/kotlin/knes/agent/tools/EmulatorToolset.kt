@@ -11,6 +11,12 @@ interface EmulatorToolset {
     fun sequence(steps: List<StepEntry>, screenshot: Boolean = false): StepResult
     fun getState(): StateSnapshot
     fun getScreen(): ScreenPng
+    fun observe(profileId: String? = null, screenshot: Boolean = false): AgentObservation {
+        val state = getState()
+        val screen = if (screenshot) getScreen() else null
+        return AgentObservationBuilder.from(state, screen, profileId)
+    }
+
     fun applyProfile(id: String): StatusResult
     fun listProfiles(): List<ProfileSummary>
     fun listActions(profileId: String? = null): List<ActionDescriptor>

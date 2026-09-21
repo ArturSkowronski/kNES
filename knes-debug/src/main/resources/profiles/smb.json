@@ -20,5 +20,20 @@
     "timer3": {"address": "0x07FA", "description": "Timer digit 3 (ones)"},
     "screenPage": {"address": "0x006D", "description": "Current screen page (horizontal scroll)"},
     "enemyActive": {"address": "0x000F", "description": "Number of active enemies on screen"}
+  },
+  "semantics": {
+    "version": 1,
+    "position": {
+      "localX": ["playerX"],
+      "localY": ["playerY"]
+    },
+    "phases": [
+      {"phase": "Boot", "when": [
+        {"field": "gameState", "equals": 0, "default": 0}
+      ]},
+      {"phase": "Overworld", "when": [
+        {"field": "gameState", "notEquals": 0}
+      ]}
+    ]
   }
 }

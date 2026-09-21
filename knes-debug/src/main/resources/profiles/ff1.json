@@ -132,5 +132,54 @@
     "enemy2_hpHigh": {"address": "0x6BEA", "description": "Enemy 2 HP (high byte)", "hidden": true},
     "enemy2_dead": {"address": "0x6BED", "description": "Enemy 2 dead flag"},
     "enemyCount": {"address": "0x6C93", "description": "Total enemy count in battle"}
+  },
+  "semantics": {
+    "version": 1,
+    "position": {
+      "worldX": ["worldX"],
+      "worldY": ["worldY"],
+      "localX": ["smPlayerX", "localX"],
+      "localY": ["smPlayerY", "localY"]
+    },
+    "phases": [
+      {"phase": "Boot", "when": [
+        {"field": "char1_hpLow", "equals": 0, "default": 0},
+        {"field": "worldX", "equals": 0, "default": 0}
+      ]},
+      {"phase": "Battle", "when": [
+        {"field": "screenState", "equals": 104}
+      ]},
+      {"phase": "MenuStuck", "when": [
+        {"field": "menuState", "notEquals": 0}
+      ]},
+      {"phase": "Overworld", "when": [
+        {"field": "currentMapId", "equals": 0},
+        {"field": "mapflags", "bitClear": 1, "default": 0}
+      ]},
+      {"phase": "Town", "when": [
+        {"field": "currentMapId", "equals": 0},
+        {"field": "mapflags", "bitSet": 1}
+      ]},
+      {"phase": "Indoors", "when": [
+        {"field": "currentMapId", "atLeast": 0}
+      ]}
+    ],
+    "landmarks": [
+      {
+        "id": "ff1.coneria", "name": "Coneria", "phases": ["Town"],
+        "worldX": {"min": 140, "max": 154}, "worldY": {"min": 150, "max": 162},
+        "confidence": 0.90, "reason": "FF1 town overlay near known Coneria world anchor"
+      },
+      {
+        "id": "ff1.coneria_region", "name": "Coneria region", "phases": ["Overworld", "Battle"],
+        "worldX": {"min": 140, "max": 154}, "worldY": {"min": 150, "max": 162},
+        "confidence": 0.80, "reason": "World coordinates match known Coneria starting region"
+      },
+      {
+        "id": "ff1.coneria_interior", "name": "Coneria interior", "phases": ["Indoors"],
+        "worldX": {"min": 140, "max": 154}, "worldY": {"min": 150, "max": 162},
+        "confidence": 0.70, "reason": "Interior while world anchor remains near Coneria"
+      }
+    ]
   }
 }

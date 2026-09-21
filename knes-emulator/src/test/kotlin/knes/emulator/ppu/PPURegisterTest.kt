@@ -188,7 +188,7 @@ class PPURegisterTest : FunSpec({
 
         test("bits 5-7 = 0b100: f_color = 4") {
             val h = PpuTestHarness()
-            h.ppu.updateControlReg2(0x80.toInt())  // bit 7 only
+            h.ppu.updateControlReg2(0x80)  // bit 7 only
             val status = h.ppu.statusRegsToInt()
             (status shr 6 and 0x7) shouldBe 4
         }
