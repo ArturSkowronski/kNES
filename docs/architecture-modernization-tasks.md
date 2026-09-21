@@ -229,9 +229,19 @@ console by N CPU cycles" and calls the PPU and APU itself; `CPU.emulate` asks to
 caught up with instead of poking two components. Still called from the CPU's loop —
 inverting that is C3c.
 
-**C3c — invert the drive — L.** Move the loop out of the CPU so the coordinator drives:
-step an instruction, then advance the PPU and APU by what it cost. This is what makes a
-single execution model possible. *Depends on C3b.*
+**C3c — invert the drive — L — *done 2026-09-22*.** The emulation loop lives on `NES`,
+not inside `CPU.emulate`: free-running is now `stepInstruction()` called repeatedly,
+which is exactly what stepped execution already was. One execution model.
+
+The worry was cost — `emulate` caches registers in locals across iterations, so stepping
+pays to save and restore them. Measured instead of assumed: **~34M instructions/second
+stepped**, against the ~0.9M a real NES needs. Forty times the headroom.
+
+It also collapsed two sources of truth. `NES.isRunning` was a flag while
+`cpu.isRunning` was "is the thread alive", and `stateSave` consulted one while
+`stateLoad` consulted the other. `isRunning` is now derived from the emulation thread,
+and the applet's `beginExecution` delegates to `startEmulation` instead of reaching past
+it.
 
 The free-running path this changes had almost no coverage — everything else in the suite
 drives the emulator a step at a time. `FreeRunningExecutionTest` writes down what has to
@@ -240,9 +250,11 @@ fires off the caller's thread, starting twice does not leave two loops, and the
 stop/restart handshake `stateSave` relies on keeps working. Seven tests, sub-second, and
 checked five times over for flakiness before landing.
 
-**C3d — delete the second execution model — M.** Once C3c lands, `steppedExecution` stops
-being a mode: the UIs drive frames through the coordinator like everything else, and
-`stepFrame` no longer needs to refuse. *Depends on C3c.*
+**C3d — delete the second execution model — S, ready.** C3c made this nearly free:
+every path that wants frames now goes through `stepInstruction`, so `steppedExecution`
+has shrunk to "clock the PPU or not" and nothing in production sets it false. Removing
+it drops the flag from `NesConfig`, the check from `stepFrame`, and the tests that
+exercise the mode. Held back only so the inversion could be reviewed on its own.
 
 **C3e — fix PAL properly — S.** With the schedule in one place, PAL becomes 3.2 dots per
 CPU cycle on the PPU's side rather than a fifth-instruction correction on the CPU's.
