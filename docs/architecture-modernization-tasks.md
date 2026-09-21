@@ -235,12 +235,19 @@ Region and config are **not** in the header. `palEmulation` now lives in `NesCon
 state saved under PAL refuse to load under NTSC, or reconfigure the machine? Left for
 D2, where replay determinism forces the answer.
 
-### D2. Replay format + determinism golden tests — **M**
+### D2. Replay format + determinism golden tests — **M** — *done 2026-09-21*
 
-A small input-script format independent of the API JSON, plus save→load→replay golden
-tests.
+`knes-replay 1`: a text script of `<frames> <buttons>` lines with `#` comments, carrying
+the `RomIdentity` it was recorded against. Text rather than JSON because a replay is
+something a person reads in a diff and a bisect points at, and the API's request shapes
+should be free to change without invalidating recorded runs.
 
-**Depends on:** C1, D1.
+`EmulatorSession.play(replay)` refuses a script recorded on another ROM, the same way
+savestates do.
+
+The determinism tests come in pairs: one asserts two runs of the same script agree, and
+a companion asserts that *different* input produces a different run — otherwise
+"deterministic" is indistinguishable from "nothing happens".
 
 ---
 
