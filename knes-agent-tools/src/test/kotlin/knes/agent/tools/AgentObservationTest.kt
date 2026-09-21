@@ -130,4 +130,65 @@ class AgentObservationTest : FunSpec({
         observation.position.localY shouldBe 120
         observation.location shouldBe null
     }
+
+    test("an observation reports when the engine is mid-transition") {
+        val settled = AgentObservationBuilder.from(
+            StateSnapshot(
+                frame = 10,
+                ram = mapOf("currentMapId" to 0, "mapflags" to 1, "char1_hpLow" to 35, "worldX" to 146),
+                cpu = emptyMap(),
+                heldButtons = emptyList()
+            ),
+            profileId = "ff1"
+        )
+        settled.transitioning shouldBe false
+
+        val mid = AgentObservationBuilder.from(
+            StateSnapshot(
+                frame = 11,
+                ram = mapOf("currentMapId" to 0, "mapflags" to 3, "char1_hpLow" to 35, "worldX" to 146),
+                cpu = emptyMap(),
+                heldButtons = emptyList()
+            ),
+            profileId = "ff1"
+        )
+        mid.transitioning shouldBe true
+    }
+
+    test("the transition flag does not change where the party is") {
+        // mapflags bit1 rides on top of bit0; if it changed location identity, every
+        // dialog would read as a move.
+        val town = mapOf("currentMapId" to 0, "mapflags" to 1, "char1_hpLow" to 35, "worldX" to 146)
+        val townMidDialog = town + ("mapflags" to 3)
+
+        fun observe(ram: Map<String, Int>) = AgentObservationBuilder.from(
+            StateSnapshot(frame = 1, ram = ram, cpu = emptyMap(), heldButtons = emptyList()),
+            profileId = "ff1"
+        )
+
+        observe(town).locationId shouldBe observe(townMidDialog).locationId
+    }
+
+    test("locationId distinguishes places that share a map id") {
+        fun observe(ram: Map<String, Int>) = AgentObservationBuilder.from(
+            StateSnapshot(frame = 1, ram = ram, cpu = emptyMap(), heldButtons = emptyList()),
+            profileId = "ff1"
+        )
+        val base = mapOf("char1_hpLow" to 35, "worldX" to 146)
+
+        val town = observe(base + mapOf("currentMapId" to 0, "mapflags" to 1)).locationId
+        val overworld = observe(base + mapOf("currentMapId" to 0, "mapflags" to 0)).locationId
+        val interior = observe(base + mapOf("currentMapId" to 8, "mapflags" to 1)).locationId
+
+        (town == overworld) shouldBe false
+        (town == interior) shouldBe false
+    }
+
+    test("without a profile there is nothing to say about transitions or location") {
+        val observation = AgentObservationBuilder.from(
+            StateSnapshot(frame = 1, ram = mapOf("mapflags" to 3), cpu = emptyMap(), heldButtons = emptyList())
+        )
+        observation.transitioning shouldBe false
+        observation.locationId shouldBe emptyList()
+    }
 })

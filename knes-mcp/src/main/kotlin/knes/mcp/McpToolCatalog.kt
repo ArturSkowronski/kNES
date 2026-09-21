@@ -97,7 +97,7 @@ object McpToolCatalog {
 
     val observe = McpToolDefinition(
         name = "observe",
-        description = "Get an agent-oriented semantic observation: frame, phase, position, location hint, watched RAM, CPU registers, held buttons, and optionally a screenshot. Phase, position and location come from the profile's semantics, so pass profile_id to get them.",
+        description = "Get an agent-oriented semantic observation: frame, phase, position, location hint, whether the engine is mid-transition, an opaque location id, watched RAM, CPU registers, held buttons, and optionally a screenshot. Everything interpreted comes from the profile's semantics, so pass profile_id to get it. When transitioning is true the rest of the observation is not settled — step and observe again before acting.",
         inputSchema = ToolSchema(
             properties = buildJsonObject {
                 stringProperty("profile_id", "Game profile ID whose semantics interpret the RAM, e.g. 'ff1'. Without it, phase and location are not inferred.")

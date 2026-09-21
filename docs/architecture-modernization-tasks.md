@@ -295,12 +295,22 @@ defaults to `true`, which is a poor default for a headless-first project.
 
 ## Wave G — agent harness
 
-### G1. Richer observations — **M**
+### G1. Richer observations — **M** — *partly done 2026-09-21*
 
-Add transition detection, collision/passability hints, and event/dialog/menu state to
-`AgentObservation`. Location confidence already landed with profile semantics.
+`AgentObservation` gained `transitioning` and an opaque `locationId`, both from profile
+signals. A caller detects a transition by diffing `locationId` between observations
+rather than re-deriving the game's rules.
 
-**Depends on:** A1.
+**Not done, and why:**
+
+- *Separate dialog/menu state.* FF1 raises one flag for a map change, a dialog and an
+  open menu alike. No verified RAM signal separates them, so a `menuOpen` field would be
+  invented semantics — the same mistake A1 backed out of. It needs disassembly evidence
+  first.
+- *Collision/passability hints.* These need tile data, which nothing on the
+  `EmulatorToolset` port exposes. The agent's pathfinders read maps through
+  `MapSession`, well above the port. Either the port grows a tile-reading operation or
+  this stays agent-side; that is a port decision, not an observation one.
 
 ### G2. Benchmark tasks with explicit win conditions — **M**
 
