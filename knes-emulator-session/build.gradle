@@ -3,7 +3,6 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.serialization' version '2.3.20'
 }
 
-ext.knesJvmTarget = '11'
 apply from: "$rootDir/gradle/conventions/kotlin-module.gradle"
 
 repositories {

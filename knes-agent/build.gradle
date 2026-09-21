@@ -4,7 +4,6 @@ plugins {
     id 'application'
 }
 
-ext.knesJvmTarget = '17'
 apply from: "$rootDir/gradle/conventions/kotlin-module.gradle"
 
 repositories {

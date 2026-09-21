@@ -3,12 +3,10 @@
  *
  * Applied as:
  *
- *     ext.knesJvmTarget = '11'   // optional, defaults to 17
  *     apply from: "$rootDir/gradle/conventions/kotlin-module.gradle"
  *
- * The JVM target is the only thing modules disagree about — see the Java 11 vs 17 split
- * in docs/architecture-modernization-tasks.md (task F2), a decision this file
- * deliberately does not make for them.
+ * Every module targets Java 17. The core used to sit on 11 while the tooling was on 17,
+ * with nothing recording why; task F2 settled it on 17 throughout.
  *
  * Scope is Kotlin/JVM settings only. Test framework selection stays with the module:
  * not every module runs on the JUnit Platform, and applying it everywhere breaks the
@@ -21,7 +19,7 @@
  * extra build.
  */
 
-def knesTarget = (project.findProperty('knesJvmTarget') ?: '17').toString()
+def knesTarget = '17'
 
 repositories {
     mavenCentral()
