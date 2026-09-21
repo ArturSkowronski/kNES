@@ -54,6 +54,10 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
 
     // Misc vars:
     var cyclesToHalt: Int = 0
+
+    /** CPU cycles consumed by the most recent [step]. Undefined before the first one. */
+    var lastStepCycles: Int = 0
+        private set
     var stopRunning: Boolean = false
     var crash: Boolean = false
     var singleStep: Boolean = false
@@ -1136,6 +1140,7 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
                 papuClockFrame.clockFrameCounter(cycleCount)
             }
             if (singleStep) {
+                lastStepCycles = cycleCount
                 stopRunning = true
             }
         } // End of run loop.

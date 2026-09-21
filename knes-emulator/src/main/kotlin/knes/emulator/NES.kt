@@ -43,6 +43,18 @@ class NES @JvmOverloads constructor(
     var isRunning: Boolean = false
     var isRomLoaded: Boolean = false
 
+    /**
+     * Frames the PPU has completed since construction.
+     *
+     * Counted here rather than in whatever host happens to be attached, so a frame
+     * boundary is observable without a host and without consulting [NesConfig.appletMode].
+     */
+    var frameCount: Long = 0L
+        private set
+
+    /** Called at each frame boundary, after the host has been handed the image. */
+    var onFrame: ((Long) -> Unit)? = null
+
     var memoryMapper: MemoryMapper? = null
 
     val inputHandler: InputHandler = host.getJoy1()
@@ -51,7 +63,7 @@ class NES @JvmOverloads constructor(
     init {
         cpu.init(cpuMemory, config)
         ppu.init(
-            host::imageReady,
+            ::onImageReady,
             ppuMemory,
             sprMemory,
             cpuMemory,
@@ -65,6 +77,62 @@ class NES @JvmOverloads constructor(
         papu.irqRequester = cpu
         palTable.init()
         cpu.clearCPUMemory()
+    }
+
+    private fun onImageReady(skipFrame: Boolean, buffer: IntArray) {
+        frameCount++
+        host.imageReady(skipFrame, buffer)
+        onFrame?.invoke(frameCount)
+    }
+
+    /**
+     * Run exactly one CPU instruction.
+     *
+     * @return CPU cycles it consumed.
+     */
+    fun stepInstruction(): Int {
+        cpu.step()
+        return cpu.lastStepCycles
+    }
+
+    /**
+     * Run whole instructions until at least [cycles] CPU cycles have passed.
+     *
+     * @return cycles actually consumed, which overshoots when the last instruction
+     *   straddles the target — instructions are not divisible.
+     */
+    fun stepCpuCycles(cycles: Int): Int {
+        var consumed = 0
+        while (consumed < cycles) {
+            consumed += stepInstruction()
+        }
+        return consumed
+    }
+
+    /**
+     * Run until the PPU completes the next frame.
+     *
+     * Requires the CPU loop to be driving the PPU — see [NesConfig.appletMode], which
+     * despite its name selects stepped execution rather than anything applet-specific.
+     * Without it the PPU is clocked elsewhere, this would never return, and a clear
+     * failure beats a hang.
+     *
+     * @return CPU cycles the frame took.
+     */
+    fun stepFrame(maxCycles: Int = MAX_CYCLES_PER_FRAME): Int {
+        check(config.appletMode) {
+            "stepFrame requires NesConfig.appletMode = true, which is what makes the CPU " +
+                "loop clock the PPU; otherwise no frame boundary is ever reached here."
+        }
+        val target = frameCount + 1
+        var consumed = 0
+        while (frameCount < target) {
+            consumed += stepInstruction()
+            check(consumed <= maxCycles) {
+                "stepFrame ran $consumed cycles without completing a frame (limit $maxCycles)"
+            }
+        }
+        return consumed
     }
 
     fun stateLoad(buf: ByteBuffer): Boolean {
@@ -184,5 +252,10 @@ class NES @JvmOverloads constructor(
 
     fun beginExecution() {
         cpu.beginExecution()
+    }
+
+    companion object {
+        /** An NTSC frame is ~29780 CPU cycles; the ceiling only exists to turn a hang into an error. */
+        const val MAX_CYCLES_PER_FRAME: Int = 200_000
     }
 }
