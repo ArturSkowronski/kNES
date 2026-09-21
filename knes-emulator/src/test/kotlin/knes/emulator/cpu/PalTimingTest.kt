@@ -6,10 +6,7 @@ import knes.emulator.NesConfig
 
 private fun steppedNopCycles(palEmulation: Boolean): Int {
     val harness = CpuTestHarness()
-    harness.cpu.init(
-        harness.memory,
-        NesConfig(enableSound = false, palEmulation = palEmulation),
-    )
+    harness.cpu.init(harness.memory, NesConfig(enableSound = false, palEmulation = palEmulation))
     harness.cpu.setMapper(TestMemoryAccess(harness.memory))
     harness.cpu.reset()
 
@@ -21,18 +18,34 @@ private fun steppedNopCycles(palEmulation: Boolean): Int {
     return total
 }
 
+/**
+ * PAL adds a CPU cycle every fifth instruction. The counter tracking "every fifth" used
+ * to be a local in `CPU.emulate`, so it reset on every entry: the correction fired only
+ * while one `emulate` call ran many instructions, and never under stepping. Once the
+ * emulation loop moved out of the CPU (C3c) every instruction became its own call, and
+ * the correction stopped firing anywhere at all.
+ *
+ * These pin that it now applies the same way however the CPU is driven.
+ */
 class PalTimingTest : FunSpec({
 
-    test("PAL's extra cycle never fires under stepping — this should change with C3e") {
-        // PAL adds a CPU cycle every fifth instruction, so ten stepped NOPs ought to
-        // cost 22. They cost 20, because the counter that tracks "every fifth" is a
-        // local in CPU.emulate and step() re-enters emulate() per instruction, resetting
-        // it before it can ever reach five.
-        //
-        // Harmless today: every stepped configuration in this repo is NTSC. Pinned so
-        // that whoever moves the schedule out of the CPU loop (C3c) and fixes PAL
-        // properly (C3e) sees this assertion flip.
-        steppedNopCycles(palEmulation = true) shouldBe 20
+    test("PAL costs more than NTSC over the same instructions") {
+        // Ten NOPs: 20 cycles, plus two extra for the fifth and tenth instruction.
+        steppedNopCycles(palEmulation = true) shouldBe 22
         steppedNopCycles(palEmulation = false) shouldBe 20
+    }
+
+    test("the extra cycle lands every fifth instruction, not in a clump") {
+        val harness = CpuTestHarness()
+        harness.cpu.init(harness.memory, NesConfig(enableSound = false, palEmulation = true))
+        harness.cpu.setMapper(TestMemoryAccess(harness.memory))
+        harness.cpu.reset()
+
+        val perInstruction = (1..10).map {
+            harness.execute(0xEA)
+            harness.cpu.lastStepCycles
+        }
+
+        perInstruction shouldBe listOf(2, 2, 2, 2, 3, 2, 2, 2, 2, 3)
     }
 })

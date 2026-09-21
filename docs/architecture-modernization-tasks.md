@@ -261,18 +261,23 @@ providing the test isolation it looked like it might be.
 `Globals.appletMode`, which fed it, is now read by nothing in the emulator. The applet
 still writes it; removing that belongs with F3.
 
-**C3e — fix PAL properly — S.** With the schedule in one place, PAL becomes 3.2 dots per
-CPU cycle on the PPU's side rather than a fifth-instruction correction on the CPU's.
-*Depends on C3c, and needs a PAL test ROM to verify.*
+**C3e — fix PAL properly — S — *half done 2026-09-22*.**
 
-Found while doing C3b: **PAL's extra cycle never fires under stepped execution.** The
-counter tracking "every fifth instruction" is a local in `CPU.emulate`, and `step()`
-re-enters `emulate()` per instruction, resetting it before it can reach five. Ten stepped
-NOPs cost 20 cycles under PAL, the same as NTSC, where they should cost 22. Harmless
-today because every stepped configuration in this repo is NTSC, and pinned by
-`PalTimingTest` so the assertion flips when C3c/C3e fix it. It is a good illustration of
-what two execution models cost: the same config produces different timing depending on
-who owns the loop.
+The correction now actually fires. The counter tracking "every fifth instruction" was a
+local in `CPU.emulate`, resetting on every entry, so it only worked while one `emulate`
+call ran many instructions — and **C3c killed it outright**, because moving the loop out
+made every instruction its own call. `PalTimingTest` did not catch that: it only
+exercised stepping, where the correction had never worked. `PalEmulationTest` now drives
+the emulator the way callers do and asserts a PAL console spends more cycles than an NTSC
+one on the same work.
+
+The extra cycles come to ~0.196 per instruction rather than exactly 0.2, because
+iterations that service an interrupt skip the correction. Pre-existing, and the honest
+range is what the test asserts.
+
+**Still open:** the real fix — PAL as 3.2 dots per CPU cycle on the PPU's side rather than
+a fifth-instruction correction on the CPU's. It needs a PAL test ROM to verify, which the
+repo does not have, so it would be a change nobody could check.
 
 ## Wave D — state and replay
 
