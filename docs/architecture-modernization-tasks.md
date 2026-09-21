@@ -40,14 +40,20 @@ for `knes-agent-tools`. `knes-agent/src/main` still hardcodes FF1 in ~10 files:
 
 | File | What is hardcoded |
 |---|---|
-| `tools/ToolSurface.kt` | `mapflags` bit0/bit1 transition waits, `currentMapId` checks |
+| ~~`tools/ToolSurface.kt`~~ | *done 2026-09-21 — reads `GameSemantics` instead* |
 | `Main.kt:117,234,461` | `currentMapId`, `smPlayerX/Y`, `mapflags and 0x02` |
 | `runtime/MilestonePredicates.kt` | milestone predicates over raw RAM |
 | `pathfinding/ViewportPathfinder.kt`, `InteriorPathfinder.kt` | coordinate-space assumptions |
 | `runtime/Memory.kt`, `agents/CartographerAgent.kt`, `llm/HaikuClient.kt` | landmark + coord semantics |
 
-Do it as one PR per concern, not one big one. Suggested order: `ToolSurface` (biggest
-payoff — it gates every skill), then `MilestonePredicates`, then the pathfinders.
+Do it as one PR per concern, not one big one. Suggested order: ~~`ToolSurface`~~ (done),
+then `MilestonePredicates`, then the pathfinders.
+
+`ToolSurface` needed four game signals that phases and landmarks did not cover, now in
+`ProfileSemantics.signals`: `transitioning` (is the engine mid-transition),
+`locationIdentity` (which map/overlay are we on), `menuFingerprint` (did my taps do
+anything), plus the existing position mapping. Agents reach them through the
+`GameSemantics` facade in knes-agent-tools, so knes-agent never imports knes-debug.
 
 **Done when:** adding a second FF1-era game needs no edit under `knes-agent/src/main`.
 **Depends on:** A1.

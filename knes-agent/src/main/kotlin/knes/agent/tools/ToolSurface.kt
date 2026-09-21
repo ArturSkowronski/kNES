@@ -9,6 +9,8 @@ import knes.agent.skills.WalkOverworldTo
 import knes.agent.tools.EmulatorToolset
 import knes.agent.llm.HaikuClient
 import knes.agent.runtime.Phase
+import knes.agent.tools.results.AgentPhase
+import knes.agent.tools.results.GameSemantics
 
 sealed class ToolOutcome {
     data class Ok(val message: String = "", val data: Map<String, String> = emptyMap()) : ToolOutcome()
@@ -32,6 +34,7 @@ interface ToolSurface {
 class DefaultToolSurface(
     private val toolset: EmulatorToolset,
     private val phaseProvider: () -> Phase,
+    private val semantics: GameSemantics,
     private val pressStartUntilOverworld: PressStartUntilOverworld,
     private val walkOverworld: WalkOverworldTo,
     private val exitInterior: ExitInterior,
@@ -46,9 +49,9 @@ class DefaultToolSurface(
 
     override suspend fun walkTo(x: Int, y: Int): ToolOutcome = when (phaseProvider()) {
         Phase.Overworld -> wrap(walkOverworld.invoke(mapOf("targetX" to "$x", "targetY" to "$y", "maxSteps" to "32")))
-            .also { if (it is ToolOutcome.Ok) settleMapflagsTransient() }
+            .also { if (it is ToolOutcome.Ok) settleTransition() }
         Phase.Indoors   -> wrap(exitInterior.invoke(mapOf("maxSteps" to "64")))
-            .also { if (it is ToolOutcome.Ok) settleMapflagsTransient() }
+            .also { if (it is ToolOutcome.Ok) settleTransition() }
         // Town overlay (mapId=0, mapflags.bit0=1): in-town movement via
         // Haiku-vision per step + RAM verification. Caller passes target
         // *local* coords (smPlayerX/smPlayerY space), not overworld.
@@ -87,20 +90,18 @@ class DefaultToolSurface(
     }
 
     /**
-     * Wait for the mapflags bit1 transition transient to clear after a successful
-     * walk. Pattern from ExitTownEmpirical.kt:104: mapflags bit1 = "dialog/menu
-     * active in transition"; resolves within ~300 frames once the engine commits
-     * to the new map/overlay. Without this, Smoke 1 v3/v4/v5 fired buyAtShop
-     * immediately after walkTo while mapflags=2 (bit0=0, bit1=1) and BuyAtShop's
-     * standard-map check failed with "NotInShop: mapflags.bit0=0, mapId=0".
+     * Wait out the engine's transition transient after a successful walk. The profile
+     * decides what "in transition" means; for FF1 it resolves within ~300 frames once
+     * the engine commits to the new map/overlay. Without this, Smoke 1 v3/v4/v5 fired
+     * buyAtShop mid-transition and BuyAtShop's standard-map check failed with
+     * "NotInShop: mapflags.bit0=0, mapId=0".
      *
-     * Polls in 60-frame chunks up to ~5 seconds wallclock. Idempotent if bit1
-     * is already clear.
+     * Polls in 60-frame chunks up to ~5 seconds wallclock. Idempotent if the game is
+     * already settled, and a no-op for a profile that cannot report transitions.
      */
-    private suspend fun settleMapflagsTransient() {
+    private suspend fun settleTransition() {
         repeat(5) {
-            val mf = toolset.getState().ram["mapflags"] ?: 0
-            if ((mf and 0x02) == 0) return
+            if (!semantics.isTransitioning(toolset.getState().ram)) return
             toolset.step(buttons = emptyList(), frames = 60)
         }
     }
@@ -123,8 +124,7 @@ class DefaultToolSurface(
         val haiku = this.haiku ?: return ToolOutcome.Reject(
             "townWalkVision: Haiku not wired (DefaultToolSurface haiku=null)"
         )
-        val startMapId = toolset.getState().ram["currentMapId"] ?: 0
-        val startMapflagsBit0 = (toolset.getState().ram["mapflags"] ?: 0) and 0x01
+        val startLocation = semantics.locationIdentity(toolset.getState().ram)
         val avoidCardinals = mutableMapOf<Pair<Int, Int>, MutableSet<String>>()
         var steps = 0
         var consecutiveStuck = 0
@@ -134,9 +134,8 @@ class DefaultToolSurface(
         val stuckLimit = 8
         while (steps < maxSteps) {
             val r = toolset.getState().ram
-            val curMapId = r["currentMapId"] ?: 0
-            val curMapflagsBit0 = (r["mapflags"] ?: 0) and 0x01
-            if (curMapId != startMapId || curMapflagsBit0 != startMapflagsBit0) {
+            val curLocation = semantics.locationIdentity(r)
+            if (curLocation != startLocation) {
                 // Transition mid-loop. Two cases:
                 //   (a) Indoors (mapId>0) — castle / shop / inn interior. Cannot
                 //       same-loop recover; the door is one-way and the party
@@ -149,9 +148,9 @@ class DefaultToolSurface(
                 if (lc != null && ls != null) {
                     avoidCardinals.getOrPut(ls) { mutableSetOf() }.add(lc)
                 }
-                if (curMapId > 0) {
+                if (semantics.phase(r) == AgentPhase.Indoors) {
                     return ToolOutcome.Reject(
-                        "townWalk: stepped into interior mapId=$curMapId from sm=$ls via $lc " +
+                        "townWalk: stepped into an interior (location=$curLocation) from sm=$ls via $lc " +
                         "(avoid recorded); call walkTo from Indoors to exit, then reapproach. " +
                         "transitionsRecovered=$transitionsRecovered"
                     )
@@ -161,9 +160,7 @@ class DefaultToolSurface(
                     toolset.tap(button = back, count = 1, pressFrames = 12, gapFrames = 8)
                     toolset.step(buttons = emptyList(), frames = 60)
                     val r2 = toolset.getState().ram
-                    val mfBit0Now = (r2["mapflags"] ?: 0) and 0x01
-                    val mIdNow = r2["currentMapId"] ?: 0
-                    if (mIdNow == startMapId && mfBit0Now == startMapflagsBit0) {
+                    if (semantics.locationIdentity(r2) == startLocation) {
                         transitionsRecovered++
                         consecutiveStuck = 0
                         steps += 1
@@ -176,11 +173,11 @@ class DefaultToolSurface(
                 }
                 return ToolOutcome.Reject(
                     "townWalk: left town overlay mid-loop and walk-back failed " +
-                    "(now mid=$curMapId/mfBit0=$curMapflagsBit0). transitionsRecovered=$transitionsRecovered"
+                    "(now location=$curLocation, started at $startLocation). transitionsRecovered=$transitionsRecovered"
                 )
             }
-            val sx = r["smPlayerX"] ?: 0
-            val sy = r["smPlayerY"] ?: 0
+            val (sx, sy) = semantics.localPosition(r)
+                ?: return ToolOutcome.Reject("townWalk: profile '${semantics.profileId}' has no local position mapping")
             val dx = tx - sx
             val dy = ty - sy
             if (sx == tx && sy == ty)
@@ -200,18 +197,16 @@ class DefaultToolSurface(
                 toolset.tap(button = finalDir, count = 1, pressFrames = 12, gapFrames = 8)
                 toolset.step(buttons = emptyList(), frames = 12)
                 val r3 = toolset.getState().ram
-                val nx = r3["smPlayerX"] ?: sx
-                val ny = r3["smPlayerY"] ?: sy
-                val mfNow = r3["mapflags"] ?: 0
-                val midNow = r3["currentMapId"] ?: 0
+                val (nx, ny) = semantics.localPosition(r3) ?: (sx to sy)
+                val locationNow = semantics.locationIdentity(r3)
                 if (nx == tx && ny == ty) {
                     return ToolOutcome.Ok("townWalk: reached EXACT ($tx,$ty) in ${steps + 1} steps (recoveries=$transitionsRecovered)")
                 }
-                if (midNow != startMapId || (mfNow and 0x01) != startMapflagsBit0) {
+                if (locationNow != startLocation) {
                     // Step triggered a transition — likely entered a building.
                     // Don't try to walk-back; caller wants this (shop entry).
                     return ToolOutcome.Ok(
-                        "townWalk: stepped into transition at ($tx,$ty) — now mid=$midNow/mf=$mfNow " +
+                        "townWalk: stepped into transition at ($tx,$ty) — now location=$locationNow " +
                         "(recoveries=$transitionsRecovered)"
                     )
                 }
@@ -228,15 +223,13 @@ class DefaultToolSurface(
                 ?: return ToolOutcome.Fail("townWalk: no direction (Haiku=$dir, dx=$dx dy=$dy) after $steps steps")
 
             val forbidden = avoidCardinals[sx to sy] ?: emptySet()
-            val tried = tryCardinals(primary, dx, dy, sx, sy, forbidden)
+            val tried = tryCardinals(primary, dx, dy, sx, sy, startLocation, forbidden)
             steps += tried.tapsUsed
             // Track last attempt for transition-recovery bookkeeping.
             lastSm = sx to sy
             lastCardinal = tried.tried.lastOrNull()
             val r2 = toolset.getState().ram
-            val sx2 = r2["smPlayerX"] ?: 0
-            val sy2 = r2["smPlayerY"] ?: 0
-            val moved = (sx2 != sx || sy2 != sy)
+            val moved = semantics.localPosition(r2) != (sx to sy)
             if (!moved) {
                 consecutiveStuck++
                 if (consecutiveStuck >= stuckLimit)
@@ -246,7 +239,7 @@ class DefaultToolSurface(
             }
         }
         val r = toolset.getState().ram
-        return ToolOutcome.Fail("townWalk: maxSteps=$maxSteps reached, sm=(${r["smPlayerX"]},${r["smPlayerY"]}) target=($tx,$ty) recoveries=$transitionsRecovered")
+        return ToolOutcome.Fail("townWalk: maxSteps=$maxSteps reached, sm=${semantics.localPosition(r)} target=($tx,$ty) recoveries=$transitionsRecovered")
     }
 
     private data class CardinalTryResult(val tried: List<String>, val tapsUsed: Int)
@@ -258,6 +251,7 @@ class DefaultToolSurface(
      */
     private suspend fun tryCardinals(
         primary: String, dx: Int, dy: Int, sx: Int, sy: Int,
+        startLocation: List<Int>,
         forbidden: Set<String> = emptySet(),
     ): CardinalTryResult {
         val perps = perpendicularsOf(primary, dx, dy)
@@ -272,14 +266,11 @@ class DefaultToolSurface(
             tapsUsed++
             tried += btn
             val r = toolset.getState().ram
-            val nx = r["smPlayerX"] ?: 0
-            val ny = r["smPlayerY"] ?: 0
+            val (nx, ny) = semantics.localPosition(r) ?: break
             if (nx != sx || ny != sy) break
-            // Early-out on transition mid-tap: if mapflags/mapId changed, stop
-            // exploring more cardinals — the outer loop will record + recover.
-            val mfNow = (r["mapflags"] ?: 0) and 0x01
-            val midNow = r["currentMapId"] ?: 0
-            if (mfNow == 0 || midNow > 0) break
+            // Early-out on transition mid-tap: once we are somewhere else, stop
+            // exploring cardinals — the outer loop will record + recover.
+            if (startLocation.isNotEmpty() && semantics.locationIdentity(r) != startLocation) break
         }
         return CardinalTryResult(tried, tapsUsed)
     }
@@ -312,15 +303,8 @@ class DefaultToolSurface(
         else -> null
     }
 
-    private suspend fun snapshotMenuRam(): List<Int> {
-        val r = toolset.getState().ram
-        return listOf(
-            r["screenState"] ?: 0,
-            r["menuCursor"] ?: 0,
-            r["menuHandX"] ?: 0,
-            r["menuHandY"] ?: 0,
-        )
-    }
+    private suspend fun snapshotMenuRam(): List<Int> =
+        semantics.menuFingerprint(toolset.getState().ram)
 
     /**
      * Per-pair single-purchase state machine. Bypasses v1 BuyAtShop entirely
@@ -569,14 +553,14 @@ class DefaultToolSurface(
             }
         }
         val post = toolset.getState().ram
-        val sm = "(${post["smPlayerX"] ?: '?'},${post["smPlayerY"] ?: '?'})"
-        val w  = "(${post["worldX"] ?: '?'},${post["worldY"] ?: '?'})"
+        val sm = "${semantics.localPosition(post)}"
+        val w = "${semantics.worldPosition(post)}"
         val truncNote = if (truncated > 0) " [truncated $truncated extra: max=$MAX/turn]" else ""
         return ToolOutcome.Ok(
             "sequence: tapped ${executed.size} buttons$truncNote; sm=$sm world=$w " +
-            "mid=${post["currentMapId"] ?: '?'} mf=${post["mapflags"] ?: '?'}",
+            "location=${semantics.locationIdentity(post)}",
             mapOf(
-                "preSm" to "(${pre["smPlayerX"]},${pre["smPlayerY"]})",
+                "preSm" to "${semantics.localPosition(pre)}",
                 "postSm" to sm,
             )
         )
