@@ -234,8 +234,13 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
 
         val timing = knes.emulator.ConsoleTiming.of(config)
         val palEmu = timing.addsExtraCycles
-        val emulateSound = config.enableSound
-        val clocksPpu = config.steppedExecution
+        val clock = knes.emulator.ConsoleClock(
+            timing = timing,
+            ppu = ppucycles,
+            apu = papuClockFrame,
+            clocksPpu = config.steppedExecution,
+            clocksApu = config.enableSound,
+        )
         stopRunning = false
 
         while (true) {
@@ -1132,14 +1137,7 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
                 }
             }
 
-            if (clocksPpu) {
-                ppucycles.setCycles(cycleCount * timing.ppuDotsPerCpuCycle)
-                ppucycles.emulateCycles()
-            }
-
-            if (emulateSound) {
-                papuClockFrame.clockFrameCounter(cycleCount)
-            }
+            clock.advance(cycleCount)
             if (singleStep) {
                 lastStepCycles = cycleCount
                 stopRunning = true
