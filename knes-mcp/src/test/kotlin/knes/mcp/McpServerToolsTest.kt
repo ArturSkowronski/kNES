@@ -11,6 +11,11 @@ import knes.agent.tools.EmulatorToolset
 import knes.agent.tools.results.*
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
@@ -84,5 +89,45 @@ class McpServerToolsTest : FunSpec({
         val text = (result.content.first() as TextContent).text!!
         text shouldContain "\"frame\":7"
         text shouldContain "\"worldX\":146"
+    }
+
+    test("results carry typed structured content alongside the text block") {
+        val server = createMcpServer { RecordingToolset() }
+
+        val state = callTool(server, "get_state", buildJsonObject { })
+        state.structuredContent!!["frame"]!!.jsonPrimitive.int shouldBe 7
+        state.structuredContent!!["ram"]!!.jsonObject["worldX"]!!.jsonPrimitive.int shouldBe 146
+
+        val observation = callTool(server, "observe", buildJsonObject { put("profile_id", "ff1") })
+        observation.structuredContent!!["phase"]!!.jsonPrimitive.content shouldBe "Overworld"
+    }
+
+    test("a list result is wrapped, because structured content must be an object") {
+        val server = createMcpServer { RecordingToolset() }
+
+        val profiles = callTool(server, "list_profiles", buildJsonObject { })
+
+        profiles.structuredContent!!["profiles"]!!.jsonArray.size shouldBe 1
+    }
+
+    test("the text block is unchanged by structured content") {
+        // An LLM reading tool results is a client too. Structured content is additive;
+        // it must not quietly replace what the text channel used to carry.
+        val server = createMcpServer { RecordingToolset() }
+
+        val text = (callTool(server, "get_state", buildJsonObject { }).content.first() as TextContent).text!!
+
+        text shouldContain "\"frame\":7"
+        text shouldContain "\"worldX\":146"
+    }
+
+    test("a failed call reports the error in both channels") {
+        val server = createMcpServer { FailingToolset() }
+
+        val result = callTool(server, "load_rom", buildJsonObject { put("path", "/nope.nes") })
+
+        result.isError shouldBe true
+        result.structuredContent!!["ok"]!!.jsonPrimitive.boolean shouldBe false
+        (result.content.first() as TextContent).text!! shouldContain "no such rom"
     }
 })
