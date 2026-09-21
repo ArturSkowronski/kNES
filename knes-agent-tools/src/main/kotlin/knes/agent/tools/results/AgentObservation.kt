@@ -36,6 +36,23 @@ data class AgentObservation(
     val phase: AgentPhase,
     val position: AgentPosition,
     val location: LocationHint? = null,
+    /**
+     * The engine is mid-transition, so the rest of this observation is not settled yet.
+     *
+     * For FF1 this covers a map change, a dialog and an open menu alike — the game uses
+     * one flag for all three, and no verified RAM signal separates them. Acting on a
+     * snapshot taken while this is true is what made `buyAtShop` fail with
+     * "NotInShop" in the Smoke 1 runs.
+     */
+    val transitioning: Boolean = false,
+    /**
+     * Opaque identity of the map or overlay the party is on.
+     *
+     * Compare it against an earlier observation's to detect that the party moved
+     * somewhere else. Empty when the profile cannot say. Deliberately opaque: a caller
+     * that reads the numbers is back to knowing the game's RAM layout.
+     */
+    val locationId: List<Int> = emptyList(),
     val ram: Map<String, Int>,
     val cpu: Map<String, Int>,
     val heldButtons: List<String>,
@@ -73,6 +90,8 @@ object AgentObservationBuilder {
             location = semantics?.landmarkFor(phase.name, state.ram)?.let {
                 LocationHint(it.id, it.name, it.confidence, it.reason)
             },
+            transitioning = semantics?.signals?.isTransitioning(state.ram) ?: false,
+            locationId = semantics?.signals?.locationIdentity(state.ram) ?: emptyList(),
             ram = state.ram,
             cpu = state.cpu,
             heldButtons = state.heldButtons,
