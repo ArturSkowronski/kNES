@@ -1,5 +1,6 @@
 package knes.emulator.cpu
 
+import knes.emulator.NesConfig
 import knes.emulator.Memory
 import knes.emulator.papu.PAPUClockFrame
 import knes.emulator.ppu.PPUCycles
@@ -12,10 +13,6 @@ class CpuTestHarness {
     private val programBase = 0x8000
 
     init {
-        Globals.appletMode = false
-        Globals.enableSound = false
-        Globals.palEmulation = false
-
         val noopPapu = object : PAPUClockFrame {
             override fun clockFrameCounter(cycleCount: Int) {}
         }
@@ -25,7 +22,7 @@ class CpuTestHarness {
         }
 
         cpu = CPU(noopPapu, noopPpu)
-        cpu.init(memory)
+        cpu.init(memory, NesConfig(appletMode = false, enableSound = false))
         cpu.setMapper(TestMemoryAccess(memory))
         cpu.reset()
         cpu.REG_PC_NEW = programBase - 1

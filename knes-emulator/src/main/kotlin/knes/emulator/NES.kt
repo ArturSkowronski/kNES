@@ -24,7 +24,11 @@ import knes.emulator.rom.ROMData
 import knes.emulator.utils.PaletteTable
 import java.util.function.Consumer
 
-class NES(private val host: NesHost) {
+class NES @JvmOverloads constructor(
+    private val host: NesHost,
+    /** Per-instance runtime flags. Defaults to the legacy [knes.emulator.utils.Globals] singleton. */
+    val config: NesConfig = NesConfig.fromGlobals(),
+) {
 
     val ppu: PPU = PPU()
     val papu: PAPU = PAPU(this)
@@ -45,7 +49,7 @@ class NES(private val host: NesHost) {
     val inputHandler2: InputHandler? = host.getJoy2()
 
     init {
-        cpu.init(cpuMemory)
+        cpu.init(cpuMemory, config)
         ppu.init(
             host::imageReady,
             ppuMemory,
@@ -53,7 +57,8 @@ class NES(private val host: NesHost) {
             cpuMemory,
             cpu,
             papu,
-            palTable
+            palTable,
+            config
         )
 
         papu.init(ChannelRegistryProducer())
@@ -171,7 +176,7 @@ class NES(private val host: NesHost) {
         cpu.clearCPUMemory()
 
         cpu.reset()
-        cpu.init(cpuMemory)
+        cpu.init(cpuMemory, config)
         ppu.reset()
         palTable.reset()
         papu.reset(this)

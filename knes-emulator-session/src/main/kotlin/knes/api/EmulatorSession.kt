@@ -2,9 +2,9 @@ package knes.api
 
 import knes.emulator.ByteBuffer
 import knes.emulator.NES
+import knes.emulator.NesConfig
 import knes.emulator.input.InputHandler
 import knes.emulator.ui.GUI
-import knes.emulator.utils.Globals
 import knes.emulator.utils.HiResTimer
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
@@ -44,11 +44,6 @@ class EmulatorSession(externalNes: NES? = null) {
             nes = externalNes
             romLoaded = externalNes.isRomLoaded
         } else {
-            Globals.appletMode = true
-            Globals.enableSound = false
-            Globals.palEmulation = false
-            Globals.timeEmulation = false
-
             val inputHandler = object : InputHandler {
                 override fun getKeyState(padKey: Int): Short = controller.getKeyState(padKey)
             }
@@ -67,7 +62,7 @@ class EmulatorSession(externalNes: NES? = null) {
                 }
             }
 
-            nes = NES(gui)
+            nes = NES(gui, NesConfig.HEADLESS)
         }
     }
 

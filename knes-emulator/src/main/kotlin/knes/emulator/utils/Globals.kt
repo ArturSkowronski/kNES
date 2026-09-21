@@ -13,6 +13,17 @@
 
 package knes.emulator.utils
 
+/**
+ * Legacy process-wide settings.
+ *
+ * The runtime flags here are read once, through [knes.emulator.NesConfig.fromGlobals],
+ * when a host builds a [knes.emulator.NES] without passing its own config. Nothing
+ * inside the emulator reads them during emulation any more — pass a `NesConfig` instead,
+ * or two emulators in one JVM cannot disagree.
+ *
+ * The keycode and control maps are desktop/applet input configuration and are not
+ * emulator state at all.
+ */
 object Globals {
     @JvmField
     var CPU_FREQ_NTSC: Double = 1789772.5

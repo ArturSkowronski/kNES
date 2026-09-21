@@ -175,7 +175,7 @@ without applet-mode flags.
 
 Add all three at the `NES`/session layer and make the frame boundary a first-class event.
 
-### C2. `Globals` → per-instance `NesConfig` — **L**
+### C2. `Globals` → per-instance `NesConfig` — **L** — *done 2026-09-21*
 
 `Globals` is a singleton holding `appletMode`, `palEmulation`, `enableSound`,
 `disableSprites`, `timeEmulation`, `preferredFrameRate`, plus keycode/control maps
@@ -185,8 +185,22 @@ CPU, PPU, PAPU, `EmulatorSession`, both UIs and the applet.
 Two emulator instances in one JVM cannot currently disagree about region or sound. That
 blocks parallel agent runs and makes tests order-dependent.
 
-**Done when:** `Globals` is gone or reduced to true constants, and a test runs two NES
-instances with different `NesConfig` side by side.
+**Outcome:** `NES` takes a `NesConfig` and hands it to CPU, PPU and PAPU. The only
+`Globals` reads left inside the emulator are `NesConfig.fromGlobals()` — the bridge that
+keeps desktop hosts working — plus `CPU_FREQ_NTSC` and `debug`, which are constants.
+`EmulatorSession` no longer mutates the singleton at all; it passes `NesConfig.HEADLESS`.
+
+Five test harnesses used to configure themselves by writing to `Globals` in an `init`
+block, which made results depend on what an earlier test had left behind. Each now
+states its own config.
+
+`Globals.memoryFlushValue` was **not** carried over: the applet sets it and nothing in
+the emulator ever reads it. Carrying it would have implied it does something. Worth a
+look separately — the applet's comment says it exists to make a hacked SMB1 boot.
+
+Still on `Globals`: the Compose UI and applet frame pacing, and the applet's keycode and
+control maps. The maps are input configuration, not emulator state. Migrating the UIs is
+follow-up work, and F3 (demote the applet) overlaps it.
 
 ### C3. One console-clock coordinator — **XL, split first**
 
