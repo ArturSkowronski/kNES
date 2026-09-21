@@ -91,4 +91,39 @@ class ProfileSemanticsTest : FunSpec({
             ProfileSemantics.register("smb", original)
         }
     }
+
+    test("FF1 signals answer the questions tools ask") {
+        val ff1 = ProfileSemantics.get("ff1")!!.signals
+
+        ff1.isTransitioning(mapOf("mapflags" to 2)) shouldBe true
+        ff1.isTransitioning(mapOf("mapflags" to 3)) shouldBe true
+        ff1.isTransitioning(mapOf("mapflags" to 1)) shouldBe false
+        ff1.isTransitioning(emptyMap()) shouldBe false
+
+        // Town overlay and overworld share a map id, so identity must carry the flag bit.
+        val town = mapOf("currentMapId" to 0, "mapflags" to 1)
+        val overworld = mapOf("currentMapId" to 0, "mapflags" to 0)
+        val interior = mapOf("currentMapId" to 8, "mapflags" to 1)
+        ff1.locationIdentity(town) shouldBe listOf(0, 1)
+        (ff1.locationIdentity(town) == ff1.locationIdentity(overworld)) shouldBe false
+        (ff1.locationIdentity(town) == ff1.locationIdentity(interior)) shouldBe false
+
+        // The transition bit must not change identity, or every walk looks like a move.
+        ff1.locationIdentity(mapOf("currentMapId" to 0, "mapflags" to 3)) shouldBe listOf(0, 1)
+
+        ff1.menuFingerprint(mapOf("screenState" to 0x68, "menuCursor" to 2)) shouldBe listOf(0x68, 2, 0, 0)
+    }
+
+    test("a profile without signals answers nothing rather than guessing") {
+        val smb = ProfileSemantics.get("smb")!!.signals
+        smb.isTransitioning(mapOf("gameState" to 1)) shouldBe false
+        smb.locationIdentity(mapOf("gameState" to 1)) shouldBe emptyList()
+        smb.menuFingerprint(mapOf("gameState" to 1)) shouldBe emptyList()
+    }
+
+    test("a masked field reads only its own bits") {
+        RamField(field = "mapflags", mask = 1).read(mapOf("mapflags" to 3)) shouldBe 1
+        RamField(field = "mapflags").read(mapOf("mapflags" to 3)) shouldBe 3
+        RamField(field = "missing", default = 7).read(emptyMap()) shouldBe 7
+    }
 })

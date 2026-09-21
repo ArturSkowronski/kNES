@@ -164,6 +164,21 @@
         {"field": "currentMapId", "atLeast": 0}
       ]}
     ],
+    "signals": {
+      "transitioning": [
+        {"field": "mapflags", "bitSet": 2}
+      ],
+      "locationIdentity": [
+        {"field": "currentMapId"},
+        {"field": "mapflags", "mask": 1}
+      ],
+      "menuFingerprint": [
+        {"field": "screenState"},
+        {"field": "menuCursor"},
+        {"field": "menuHandX"},
+        {"field": "menuHandY"}
+      ]
+    },
     "landmarks": [
       {
         "id": "ff1.coneria", "name": "Coneria", "phases": ["Town"],

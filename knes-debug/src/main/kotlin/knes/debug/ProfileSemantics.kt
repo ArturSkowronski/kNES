@@ -23,7 +23,8 @@ data class ProfileSemantics(
     val unknownPhase: String = "Unknown",
     val position: PositionMapping = PositionMapping(),
     val phases: List<PhaseRule> = emptyList(),
-    val landmarks: List<LandmarkRule> = emptyList()
+    val landmarks: List<LandmarkRule> = emptyList(),
+    val signals: SignalMapping = SignalMapping()
 ) {
     /** First matching rule wins, so order [phases] most-specific first. */
     fun phaseFor(ram: Map<String, Int>): String =
@@ -60,6 +61,39 @@ data class ProfileSemantics(
                 null
             }
         }
+    }
+}
+
+/**
+ * Game facts that are neither a phase nor a place, but that tools have to ask about:
+ * is the game mid-transition, which map are we on, and is a menu open.
+ *
+ * Without these, every tool ends up reading raw RAM addresses and the game leaks back
+ * into the runtime.
+ */
+@Serializable
+data class SignalMapping(
+    /** All conditions hold while the game is mid-transition and its RAM cannot be trusted. */
+    val transitioning: List<RamCondition> = emptyList(),
+    /** Fields that together answer "which map or overlay are we on"; a change means we moved. */
+    val locationIdentity: List<RamField> = emptyList(),
+    /** Fields that together fingerprint menu/dialog state, for detecting a no-op interaction. */
+    val menuFingerprint: List<RamField> = emptyList()
+) {
+    fun isTransitioning(ram: Map<String, Int>): Boolean =
+        transitioning.isNotEmpty() && transitioning.all { it.matches(ram) }
+
+    fun locationIdentity(ram: Map<String, Int>): List<Int> = locationIdentity.map { it.read(ram) }
+
+    fun menuFingerprint(ram: Map<String, Int>): List<Int> = menuFingerprint.map { it.read(ram) }
+}
+
+/** One watched field, optionally narrowed to some of its bits. */
+@Serializable
+data class RamField(val field: String, val mask: Int? = null, val default: Int = 0) {
+    fun read(ram: Map<String, Int>): Int {
+        val value = ram[field] ?: default
+        return if (mask != null) value and mask else value
     }
 }
 

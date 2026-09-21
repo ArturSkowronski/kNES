@@ -25,6 +25,7 @@ import knes.agent.llm.GeminiPro31Client
 import knes.agent.llm.HaikuClient
 import knes.agent.llm.SonnetClient
 import knes.agent.runtime.Phase
+import knes.agent.tools.results.GameSemantics
 import knes.agent.runtime.SnapshotDumper
 import knes.agent.runtime.Memory
 import knes.agent.runtime.RunDirectory
@@ -128,6 +129,7 @@ fun main(args: Array<String>) {
                 val tools = DefaultToolSurface(
                     toolset = toolset,
                     phaseProvider = { Phase.fromRam(toolset.getState().ram, cfg.profile) },
+                    semantics = GameSemantics.of(cfg.profile),
                     pressStartUntilOverworld = pressStart,
                     walkOverworld = walkOverworld,
                     exitInterior = exitInterior,
