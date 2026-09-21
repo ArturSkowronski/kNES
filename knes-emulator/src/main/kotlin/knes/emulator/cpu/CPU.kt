@@ -55,6 +55,15 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
     // Misc vars:
     var cyclesToHalt: Int = 0
 
+    /**
+     * Instructions since PAL emulation last added its extra cycle.
+     *
+     * A field, not a local in [emulate]. As a local it reset on every entry, so the
+     * correction only ever fired while one `emulate` call ran many instructions — and
+     * once the emulation loop moved out of the CPU it stopped firing at all.
+     */
+    private var palCnt = 0
+
     /** CPU cycles consumed by the most recent [step]. Undefined before the first one. */
     var lastStepCycles: Int = 0
         private set
@@ -226,7 +235,6 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
         var opaddr: Int
         var addrMode: Int
         var addr = 0
-        var palCnt = 0
         var cycleCount: Int
         var cycleAdd: Int
         var temp: Int
