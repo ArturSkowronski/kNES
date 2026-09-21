@@ -24,6 +24,16 @@ interface EmulatorToolset {
     fun press(buttons: List<String>): StatusResult
     fun release(buttons: List<String>): StatusResult
 
+    /**
+     * The most recent [count] instructions the CPU executed, oldest first.
+     *
+     * Tracing is off until something asks for it, so the first call returns what has
+     * happened since — nothing. It is a developer-facing window into the emulator, not a
+     * gameplay tool, which is why it is a resource rather than a tool.
+     */
+    fun traceTail(count: Int = 64): List<TracedInstruction> =
+        error("instruction trace is only available on an in-process emulator")
+
     fun saveSavestate(): ByteArray
     fun loadSavestate(bytes: ByteArray): Boolean
     fun advanceFrames(count: Int)

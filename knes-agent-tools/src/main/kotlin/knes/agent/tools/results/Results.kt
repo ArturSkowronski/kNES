@@ -41,3 +41,7 @@ data class ActionDescriptor(
 
 @Serializable
 data class ActionToolResult(val ok: Boolean, val message: String, val data: Map<String, String> = emptyMap())
+
+/** One executed instruction, as reported by the emulator's instruction trace. */
+@Serializable
+data class TracedInstruction(val pc: Int, val opcode: Int, val cycles: Int)

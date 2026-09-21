@@ -33,8 +33,9 @@ object McpResources {
     const val PROFILES_URI = "knes://emulator/profiles"
     const val WATCHED_RAM_URI = "knes://profiles/watched-ram"
     const val SEMANTICS_URI = "knes://profiles/semantics"
+    const val TRACE_URI = "knes://emulator/trace"
 
-    val uris: List<String> = listOf(STATE_URI, PROFILES_URI, WATCHED_RAM_URI, SEMANTICS_URI)
+    val uris: List<String> = listOf(STATE_URI, PROFILES_URI, WATCHED_RAM_URI, SEMANTICS_URI, TRACE_URI)
 
     fun register(server: Server, backend: () -> EmulatorToolset, json: Json) {
         server.addResource(
@@ -67,6 +68,20 @@ object McpResources {
         }
 
         server.addResource(
+            uri = TRACE_URI,
+            name = "Recent instructions",
+            description =
+                "The instructions the CPU most recently executed, oldest first, each with " +
+                    "its program counter, opcode and cycle count. Tracing switches on the " +
+                    "first time this is read, so the first read is empty. In-process only.",
+            mimeType = "application/json",
+        ) { request ->
+            // A resource rather than a tool on purpose: this is something to look at, not
+            // an action, and the tool surface is meant to shrink rather than grow.
+            request.text(json.encodeToString(backend().traceTail(TRACE_LENGTH)))
+        }
+
+        server.addResource(
             uri = SEMANTICS_URI,
             name = "Profile semantics",
             description =
@@ -77,6 +92,9 @@ object McpResources {
             request.text(json.encodeToString(semantics(json)))
         }
     }
+
+    /** Enough history to see how execution reached somewhere, without flooding a reply. */
+    private const val TRACE_LENGTH = 64
 
     /** Address maps are plain data classes, so they are rendered rather than serialized. */
     private fun watchedRam(): JsonObject = buildJsonObject {

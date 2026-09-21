@@ -1,6 +1,7 @@
 package knes.api
 
 import knes.emulator.ByteBuffer
+import knes.emulator.InstructionTrace
 import knes.emulator.NES
 import knes.emulator.NesConfig
 import knes.emulator.input.InputHandler
@@ -105,6 +106,17 @@ class EmulatorSession(externalNes: NES? = null) {
     }
 
     fun readMemory(addr: Int): Int = nes.cpuMemory.load(addr).toInt() and 0xFF
+
+    /**
+     * The most recent [count] instructions the CPU executed, oldest first.
+     *
+     * Tracing is switched on the first time this is called, so a run that never asks
+     * pays nothing — and that first call reports an empty trace.
+     */
+    fun traceTail(count: Int): List<TraceEntry> {
+        val trace = nes.trace ?: InstructionTrace().also { nes.trace = it }
+        return trace.tail(count).map { TraceEntry(it.pc, it.opcode, it.cycles) }
+    }
 
     /**
      * Serialize current emulator state (CPU regs + RAM, PPU memory + regs, OAM, mapper
