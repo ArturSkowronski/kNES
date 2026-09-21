@@ -44,11 +44,14 @@ for `knes-agent-tools`. `knes-agent/src/main` still hardcodes FF1 in ~10 files:
 | `Main.kt:117,234,461` | `currentMapId`, `smPlayerX/Y`, `mapflags and 0x02` |
 | ~~`runtime/MilestonePredicates.kt`~~ | *done 2026-09-21 — now `campaign/Ff1Campaign`* |
 | `pathfinding/ViewportPathfinder.kt`, `InteriorPathfinder.kt` | coordinate-space assumptions |
+| ~~`runtime/StrategyContext.kt`~~ | *done 2026-09-21 — folded into `Ff1Campaign`* |
 | `runtime/Memory.kt`, `agents/CartographerAgent.kt`, `llm/HaikuClient.kt` | landmark + coord semantics |
 
 Do it as one PR per concern, not one big one. Suggested order: ~~`ToolSurface`~~ (done),
-then ~~`MilestonePredicates`~~ (done), then the pathfinders, then `StrategyContext`'s
-weapon-byte helpers and the remaining `smPlayerX/Y` reads in the three agents.
+then ~~`MilestonePredicates`~~ (done), then ~~`StrategyContext`~~ (done). The pathfinders
+turned out to be clean already — the only FF1 mention in them is a comment. What is left
+is the `smPlayerX/Y` prompt-building reads in the three agents, plus `Memory`,
+`CartographerAgent` and `HaikuClient`.
 
 Correction to the done-when: "no edit under `knes-agent/src/main`" is not reachable for
 campaign logic without inventing a generic RPG party model. A campaign is a game's goal

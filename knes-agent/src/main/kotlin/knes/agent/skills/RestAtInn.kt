@@ -1,6 +1,6 @@
 package knes.agent.skills
 
-import knes.agent.runtime.StrategyContext
+import knes.agent.campaign.Ff1Campaign
 import knes.agent.tools.EmulatorToolset
 
 /**
@@ -31,8 +31,8 @@ class RestAtInn(private val toolset: EmulatorToolset) : Skill {
                 message = "InnNotFound: not inside inn (currentMapId=${pre["currentMapId"]} " +
                     "expected=$innInteriorMapId)", ramAfter = pre)
         }
-        val preGold = StrategyContext.totalGold(pre)
-        val preHpPct = StrategyContext.minHpPct(pre)
+        val preGold = Ff1Campaign.gold(pre)
+        val preHpPct = Ff1Campaign.minHpPct(pre)
         val startFrame = toolset.getState().frame
 
         var taps = 0
@@ -41,8 +41,8 @@ class RestAtInn(private val toolset: EmulatorToolset) : Skill {
             taps++
             val state = toolset.getState()
             val ram = state.ram
-            val curGold = StrategyContext.totalGold(ram)
-            val curHpPct = StrategyContext.minHpPct(ram)
+            val curGold = Ff1Campaign.gold(ram)
+            val curHpPct = Ff1Campaign.minHpPct(ram)
             val framesElapsed = state.frame - startFrame
             if (curGold < preGold && curHpPct == 100 && preHpPct < 100) {
                 return SkillResult(
@@ -65,7 +65,7 @@ class RestAtInn(private val toolset: EmulatorToolset) : Skill {
         return SkillResult(
             ok = false,
             message = "InnNotFound: $maxTaps taps elapsed without gold/hp change " +
-                "(gold=${StrategyContext.totalGold(final.ram)}, minHp%=${StrategyContext.minHpPct(final.ram)})",
+                "(gold=${Ff1Campaign.gold(final.ram)}, minHp%=${Ff1Campaign.minHpPct(final.ram)})",
             framesElapsed = final.frame - startFrame, ramAfter = final.ram,
         )
     }

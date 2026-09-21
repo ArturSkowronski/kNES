@@ -1,5 +1,6 @@
 package knes.agent.tools
 
+import knes.agent.campaign.Ff1Campaign
 import knes.agent.skills.EquipWeapon
 import knes.agent.skills.ExitInterior
 import knes.agent.skills.PressStartUntilOverworld
@@ -322,8 +323,8 @@ class DefaultToolSurface(
      */
     private suspend fun buyOnePair(itemSlot: Int, forCharSlot: Int): Pair<Boolean, String> {
         val pre = toolset.getState().ram
-        val preGold = knes.agent.runtime.StrategyContext.totalGold(pre)
-        val preInvBytes = (0..3).map { knes.agent.runtime.StrategyContext.weaponSlot(pre, forCharSlot + 1, it) }
+        val preGold = Ff1Campaign.gold(pre)
+        val preInvBytes = (0..3).map { Ff1Campaign.weaponSlot(pre, forCharSlot + 1, it) }
         // 1. Fully close any open dialog (B×6) + idle so we start "facing keeper, no menu".
         repeat(6) { toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 10) }
         toolset.step(buttons = emptyList(), frames = 24)
@@ -352,8 +353,8 @@ class DefaultToolSurface(
             toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 15)
             dismiss++
             val ram = toolset.getState().ram
-            val curGold = knes.agent.runtime.StrategyContext.totalGold(ram)
-            val curInvBytes = (0..3).map { knes.agent.runtime.StrategyContext.weaponSlot(ram, forCharSlot + 1, it) }
+            val curGold = Ff1Campaign.gold(ram)
+            val curInvBytes = (0..3).map { Ff1Campaign.weaponSlot(ram, forCharSlot + 1, it) }
             val invDelta = curInvBytes.zip(preInvBytes).any { (cur, pre) -> cur != pre && cur != 0 }
             if (curGold < preGold && invDelta) {
                 repeat(6) { toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 10) }

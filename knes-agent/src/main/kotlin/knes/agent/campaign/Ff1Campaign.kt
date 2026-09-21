@@ -1,6 +1,7 @@
 package knes.agent.campaign
 
 import knes.agent.runtime.Phase
+import kotlin.math.roundToInt
 
 /**
  * Final Fantasy 1: reach Coneria, arm the party, leave town, start grinding.
@@ -75,12 +76,41 @@ object Ff1Campaign : Campaign {
     override fun gold(ram: Map<String, Int>): Int =
         (ram["goldLow"] ?: 0) or ((ram["goldMid"] ?: 0) shl 8) or ((ram["goldHigh"] ?: 0) shl 16)
 
+    // --- Party and item queries used by the FF1 skills -------------------------------
+
+    /** Raw weapon byte for a character (1-based) and slot, or 0 when the slot is empty. */
+    fun weaponSlot(ram: Map<String, Int>, char: Int, slot: Int): Int =
+        ram["char${char}_weapon${slot}"] ?: 0
+
+    /** The item id inside a weapon byte, with the equipped flag stripped. */
+    fun weaponId(weapon: Int): Int = weapon and ITEM_ID_MASK
+
+    /** Whether a weapon byte is equipped rather than merely carried. */
+    fun isEquipped(weapon: Int): Boolean = (weapon and EQUIPPED_BIT) != 0
+
+    /**
+     * Health of the worst-off party member, as a percentage. Characters whose HP is not
+     * being watched are skipped; a party with nothing readable reports 100 so a caller
+     * never mistakes "no data" for "everyone is dying".
+     */
+    fun minHpPct(ram: Map<String, Int>): Int = party()
+        .mapNotNull { c ->
+            val current = read16(ram, "char${c}_hpLow", "char${c}_hpHigh") ?: return@mapNotNull null
+            val max = read16(ram, "char${c}_maxHpLow", "char${c}_maxHpHigh") ?: return@mapNotNull null
+            if (max == 0) null else (100.0 * current / max).roundToInt()
+        }
+        .minOrNull() ?: 100
+
+    private fun read16(ram: Map<String, Int>, lowKey: String, highKey: String): Int? {
+        val low = ram[lowKey] ?: return null
+        val high = ram[highKey] ?: return null
+        return (high shl 8) or low
+    }
+
     private fun party() = 1..PARTY_SIZE
 
     private fun weapons(c: Int, ram: Map<String, Int>): List<Int> =
         WEAPON_SLOTS.mapNotNull { s -> (ram["char${c}_weapon${s}"] ?: 0).takeIf { it != 0 } }
-
-    private fun isEquipped(weapon: Int) = (weapon and EQUIPPED_BIT) != 0
 
     private fun holdsAny(c: Int, ram: Map<String, Int>) = weapons(c, ram).isNotEmpty()
 
