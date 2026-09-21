@@ -357,12 +357,22 @@ rather than re-deriving the game's rules.
 Reach Coneria, buy a weapon, equip it, exit town, survive a battle, reach the next
 landmark. Each needs a machine-checkable predicate, reusable by the Reviewer.
 
-### G3. Replayable decision traces — **M**
+### G3. Replayable decision traces — **M** — *done 2026-09-21*
 
-Log every observation, decision, action and verifier result in a form that can be
-replayed without an LLM.
+`TurnLog` already carried observation, decision and verifier result; what it could not do
+is replay, because the tools it records are vision-driven. `ReplayRecorder` wraps any
+`EmulatorToolset` and records the layer below: buttons per frame, as a `knes-replay`
+script (D2). A run reproduces exactly, with no model involved.
 
-**Depends on:** D2.
+**Finding: `press` does not hold.** The MCP `press` tool says buttons "stay held until
+released". They do not: `step`, `tap` and `sequence` all go through
+`controller.setButtons`, which releases everything else first. A hold only survives
+`advanceFrames`, the one call that moves frames without touching the controller.
+
+The recorder mirrors the real behaviour, not the documented one — a recorder that
+believed the docs would emit replays that do not reproduce the run. Whether to fix the
+behaviour or the documentation is open: changing it alters what any agent relying on
+`press` does, and there is no smoke run in CI to catch that.
 
 ### G4. Unblock `arm_party` / EQUIP — **L**
 
