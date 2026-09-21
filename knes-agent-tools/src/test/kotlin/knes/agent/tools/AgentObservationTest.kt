@@ -83,4 +83,51 @@ class AgentObservationTest : FunSpec({
         observation.phase shouldBe AgentPhase.Battle
         observation.location?.id shouldBe "ff1.coneria_region"
     }
+
+    test("without a profile nothing is interpreted, but raw state still passes through") {
+        val observation = AgentObservationBuilder.from(
+            StateSnapshot(
+                frame = 90,
+                ram = mapOf("currentMapId" to 0, "mapflags" to 1, "worldX" to 146, "worldY" to 158),
+                cpu = mapOf("pc" to 0x8000),
+                heldButtons = listOf("B")
+            )
+        )
+
+        observation.profileId shouldBe null
+        observation.phase shouldBe AgentPhase.Unknown
+        observation.position.worldX shouldBe null
+        observation.location shouldBe null
+        observation.frame shouldBe 90
+        observation.cpu["pc"] shouldBe 0x8000
+        observation.heldButtons shouldBe listOf("B")
+    }
+
+    test("a profile without semantics is reported as not applied") {
+        val observation = AgentObservationBuilder.from(
+            StateSnapshot(frame = 1, ram = emptyMap(), cpu = emptyMap(), heldButtons = emptyList()),
+            profileId = "no-such-game"
+        )
+
+        observation.profileId shouldBe null
+        observation.phase shouldBe AgentPhase.Unknown
+    }
+
+    test("interpretation is driven by profile semantics, not by the builder") {
+        val observation = AgentObservationBuilder.from(
+            StateSnapshot(
+                frame = 5,
+                ram = mapOf("gameState" to 1, "playerX" to 72, "playerY" to 120),
+                cpu = emptyMap(),
+                heldButtons = emptyList()
+            ),
+            profileId = "smb"
+        )
+
+        observation.profileId shouldBe "smb"
+        observation.phase shouldBe AgentPhase.Overworld
+        observation.position.localX shouldBe 72
+        observation.position.localY shouldBe 120
+        observation.location shouldBe null
+    }
 })

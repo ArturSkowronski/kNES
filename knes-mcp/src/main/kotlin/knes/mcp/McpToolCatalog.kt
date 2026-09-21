@@ -97,10 +97,10 @@ object McpToolCatalog {
 
     val observe = McpToolDefinition(
         name = "observe",
-        description = "Get an agent-oriented semantic observation: frame, phase, position, location hint, watched RAM, CPU registers, held buttons, and optionally a screenshot.",
+        description = "Get an agent-oriented semantic observation: frame, phase, position, location hint, watched RAM, CPU registers, held buttons, and optionally a screenshot. Phase, position and location come from the profile's semantics, so pass profile_id to get them.",
         inputSchema = ToolSchema(
             properties = buildJsonObject {
-                stringProperty("profile_id", "Optional game profile ID used for semantic location hints, e.g. 'ff1'")
+                stringProperty("profile_id", "Game profile ID whose semantics interpret the RAM, e.g. 'ff1'. Without it, phase and location are not inferred.")
                 booleanProperty("screenshot", "If true, include a screenshot in the observation and as an image content block")
             },
             required = emptyList()

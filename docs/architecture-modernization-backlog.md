@@ -117,3 +117,6 @@ The MCP layer is useful but not yet architecturally clean:
 - Extracted the shared MCP tool name, description, and input-schema catalog used by both in-process and legacy REST modes.
 - Added a shared `AgentObservation` contract for instrumented agent play.
 - Exposed `observe` through in-process MCP and the legacy REST bridge, with optional screenshot image content.
+- Added versioned `ProfileSemantics` so phase rules, position field mappings, and landmark anchors live in profile JSON.
+- Rewrote `AgentObservationBuilder` on top of profile semantics, removing the FF1 constants from the agent tooling.
+- Gave both bundled profiles semantics, so the rules are exercised by more than one game.
