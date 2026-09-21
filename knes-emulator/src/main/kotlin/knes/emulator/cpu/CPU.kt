@@ -232,7 +232,8 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
         var temp: Int
         var add: Int
 
-        val palEmu = config.palEmulation
+        val timing = knes.emulator.ConsoleTiming.of(config)
+        val palEmu = timing.addsExtraCycles
         val emulateSound = config.enableSound
         val clocksPpu = config.steppedExecution
         stopRunning = false
@@ -1125,14 +1126,14 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
             // ----------------------------------------------------------------------------------------------------
             if (palEmu) {
                 palCnt++
-                if (palCnt == 5) {
+                if (palCnt == timing.extraCycleEvery) {
                     palCnt = 0
                     cycleCount++
                 }
             }
 
             if (clocksPpu) {
-                ppucycles.setCycles(cycleCount * 3)
+                ppucycles.setCycles(cycleCount * timing.ppuDotsPerCpuCycle)
                 ppucycles.emulateCycles()
             }
 
