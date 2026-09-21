@@ -2,7 +2,7 @@ package knes.agent.agents
 
 import knes.agent.perception.LandmarkMemory
 import knes.agent.runtime.LandmarkContext
-import knes.agent.llm.GeminiPro31Client
+import knes.agent.llm.VisionLlm
 import knes.agent.campaign.Campaign
 import knes.agent.tools.results.GameSemantics
 import knes.agent.campaign.NoCampaign
@@ -19,7 +19,7 @@ import knes.agent.runtime.RunDirectory
  * boundaries. ~2% of total LLM calls.
  */
 class AdvisorAgent(
-    private val gemini: GeminiPro31Client,
+    private val vision: VisionLlm,
     private val memory: Memory,
     private val run: RunDirectory,
     private val landmarks: LandmarkMemory? = null,
@@ -39,7 +39,7 @@ class AdvisorAgent(
     ) {
         run.markActive("advisor", turn)
         val prompt = buildPrompt(reason, phase, ram)
-        val raw = gemini.generate(prompt, imageB64 = screenshotB64)
+        val raw = vision.generate(prompt, imageB64 = screenshotB64)
         runCatching {
             run.promptFile(turn, "advisor").toFile().writeText(
                 "=== PROMPT (Gemini Pro 3.1) ===\n$prompt\n\n=== RESPONSE ===\n$raw"

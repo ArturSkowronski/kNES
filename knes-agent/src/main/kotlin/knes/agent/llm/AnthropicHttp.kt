@@ -28,7 +28,11 @@ import kotlinx.serialization.json.putJsonObject
  * Mirrors GeminiPro31Client's HTTP style. Reused by HaikuClient (scene
  * description from screenshot) and SonnetClient (tool decision, text-only).
  */
-class AnthropicHttp(private val apiKey: String) : AutoCloseable {
+class AnthropicHttp(private val apiKey: String) : ChatLlm {
+    override val providerName: String get() = "anthropic"
+    override val fastModel: String = "claude-haiku-4-5-20251001"
+    override val strongModel: String = "claude-sonnet-4-6"
+
     private val http = HttpClient(CIO) {
         install(HttpTimeout) {
             requestTimeoutMillis = 120_000
@@ -37,12 +41,12 @@ class AnthropicHttp(private val apiKey: String) : AutoCloseable {
     }
     private val json = Json { ignoreUnknownKeys = true }
 
-    suspend fun generate(
+    override suspend fun generate(
         model: String,
         systemPrompt: String,
         userText: String,
-        imageB64: String? = null,
-        maxTokens: Int = 800,
+        imageB64: String?,
+        maxTokens: Int,
     ): String {
         val body = buildJsonObject {
             put("model", model)

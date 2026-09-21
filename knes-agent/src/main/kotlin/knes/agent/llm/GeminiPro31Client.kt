@@ -24,7 +24,7 @@ import kotlinx.serialization.json.jsonPrimitive
 class GeminiPro31Client(
     private val apiKey: String,
     modelOverride: String? = null,
-) : AutoCloseable {
+) : VisionLlm {
     // gemini-3-pro thinking mode often takes 20–60s. Default ktor timeout is far
     // too tight. Match v1 GeminiVisionConsult's 120s budget (we bump higher because v2
     // Advisor prompts include campaign history and can be longer).
@@ -35,11 +35,11 @@ class GeminiPro31Client(
         }
     }
     private val json = Json { ignoreUnknownKeys = true }
-    val model = modelOverride
+    override val model = modelOverride
         ?: System.getenv("GEMINI_MODEL")?.takeIf { it.isNotBlank() }
         ?: "gemini-3.1-pro-preview"
 
-    suspend fun generate(prompt: String, imageB64: String? = null): String {
+    override suspend fun generate(prompt: String, imageB64: String?): String {
         val parts = buildList<JsonObject> {
             add(JsonObject(mapOf("text" to kotlinx.serialization.json.JsonPrimitive(prompt))))
             if (imageB64 != null) {

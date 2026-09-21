@@ -6,7 +6,7 @@ import knes.agent.perception.FogOfWar
 import knes.agent.perception.LandmarkMemory
 import knes.agent.perception.OverworldMap
 import knes.agent.tools.EmulatorToolset
-import knes.agent.llm.GeminiPro31Client
+import knes.agent.llm.VisionLlm
 import knes.agent.runtime.SnapshotDumper
 import knes.agent.runtime.Memory
 import knes.agent.runtime.RunDirectory
@@ -23,7 +23,7 @@ import knes.agent.runtime.RunDirectory
  * (per repo's feedback_locate_party_first.md).
  */
 class CartographerAgent(
-    private val gemini: GeminiPro31Client,
+    private val vision: VisionLlm,
     private val toolset: EmulatorToolset,
     private val memory: Memory,
     private val snapshotDumper: SnapshotDumper,
@@ -100,7 +100,7 @@ class CartographerAgent(
             Party world-coords: ($x, $y).
             Return ONLY the letter: N or S or E or W, or DONE if no unexplored frontier.
         """.trimIndent()
-        val raw = gemini.generate(prompt, imageB64 = snap).trim()
+        val raw = vision.generate(prompt, imageB64 = snap).trim()
         runCatching {
             run?.promptFile(0, "cart-%02d".format(cartIter))?.toFile()?.writeText(
                 "=== CARTOGRAPHER iter $cartIter — Gemini Pro 3.1 vision ===\n" +

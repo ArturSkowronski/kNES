@@ -1,6 +1,5 @@
 package knes.agent
 
-import knes.agent.llm.AnthropicSession
 import knes.agent.pathfinding.InteriorPathfinder
 import knes.agent.pathfinding.ViewportPathfinder
 import knes.agent.perception.FogOfWar
@@ -20,8 +19,7 @@ import knes.agent.agents.AdvisorAgent
 import knes.agent.agents.CartographerAgent
 import knes.agent.agents.ExecutorAgent
 import knes.agent.agents.ReviewerAgent
-import knes.agent.llm.AnthropicHttp
-import knes.agent.llm.GeminiPro31Client
+import knes.agent.llm.LlmProvider
 import knes.agent.llm.HaikuClient
 import knes.agent.llm.SonnetClient
 import knes.agent.runtime.Phase
@@ -44,30 +42,17 @@ import java.nio.file.Files
 
 fun main(args: Array<String>) {
     val cfg = Config.parse(args)
-    val anthropicKey = System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() }
-        ?: error("ANTHROPIC_API_KEY not set")
-    val geminiKey = System.getenv("GEMINI_API_KEY")?.takeIf { it.isNotBlank() }
-        ?: error("GEMINI_API_KEY not set (Gemini 3.1 Pro required)")
+    val provider = LlmProvider.fromEnvironment()
+    Log.llm("provider: ${provider.describe()}")
 
     val run = if (cfg.resumeDir != null) RunDirectory.resume(cfg.resumeDir)
              else RunDirectory.freshRun()
     Log.main("run dir: ${run.root}")
 
     runBlocking {
-        AnthropicSession(anthropicKey).use { anthropic ->
-            AnthropicHttp(anthropicKey).use { anthropicHttp ->
-            // Two Gemini clients: Pro for Advisor + Cartographer + Executor.
-            // We previously defaulted the Executor to gemini-3.1-flash-lite
-            // for latency (5-10× faster), but Flash-Lite mis-identified
-            // building positions in the town viewport (called the centre
-            // path "near the Inn", walked Right off the south edge, then
-            // confused Coneria Castle for Coneria Town). Pro reads the
-            // scene reliably and the per-turn cost is acceptable. Override
-            // via GEMINI_MODEL (both) or GEMINI_EXECUTOR_MODEL.
-            val executorModel = System.getenv("GEMINI_EXECUTOR_MODEL")?.takeIf { it.isNotBlank() }
-                ?: "gemini-3.1-pro-preview"
-            GeminiPro31Client(geminiKey).use { gemini ->
-            GeminiPro31Client(geminiKey, modelOverride = executorModel).use { geminiExec ->
+        provider.chat().use { chat ->
+            provider.planningVision(chat).use { vision ->
+            provider.executorVision(chat).use { executorVision ->
                 // Toolset: in-process NES by default, REST-driven remote
                 // (talking to the Compose UI's embedded API server) when
                 // `--remote=<url>` is set. The remote variant skips loadRom
@@ -130,8 +115,8 @@ fun main(args: Array<String>) {
                 val restAtInn = RestAtInn(toolset)
                 val pressStart = PressStartUntilOverworld(toolset, semantics)
 
-                val sonnet = SonnetClient(anthropicHttp)
-                val haiku = HaikuClient(anthropicHttp)
+                val sonnet = SonnetClient(chat)
+                val haiku = HaikuClient(chat)
                 val tools = DefaultToolSurface(
                     toolset = toolset,
                     phaseProvider = { Phase.fromRam(toolset.getState().ram, cfg.profile) },
@@ -147,12 +132,12 @@ fun main(args: Array<String>) {
 
                 // Agents
                 val campaign = Campaign.of(cfg.profile)
-                val advisor = AdvisorAgent(gemini, memory, run, landmarks, campaign, semantics)
-                val executor = ExecutorAgent(anthropic, sonnet, haiku, tools, memory, run, gemini = geminiExec, campaign = campaign)
-                Log.llm("models: advisor/cart=${gemini.model} executor=${geminiExec.model}")
+                val advisor = AdvisorAgent(vision, memory, run, landmarks, campaign, semantics)
+                val executor = ExecutorAgent(sonnet, haiku, tools, memory, run, vision = executorVision, campaign = campaign)
+                Log.llm("models: advisor/cart=${vision.model} executor=${executorVision.model} fast=${chat.fastModel}")
                 val reviewer = ReviewerAgent(haiku, memory, run, campaign)
                 val cartographer = CartographerAgent(
-                    gemini, toolset, memory, snapshotDumper, overworldMap, fog, landmarks,
+                    vision, toolset, memory, snapshotDumper, overworldMap, fog, landmarks,
                     cfg.cartographerBudgetSeconds, cfg.cartographerMaxVisionCalls,
                     run, semantics,
                 )
@@ -429,7 +414,6 @@ fun main(args: Array<String>) {
                 }
 
                 Log.main("done. last_turn=${memory.campaign.lastTurn}")
-            }
             }
             }
         }

@@ -3,8 +3,7 @@ package knes.agent.agents
 import knes.agent.campaign.Campaign
 import knes.agent.campaign.NoCampaign
 
-import knes.agent.llm.AnthropicSession
-import knes.agent.llm.GeminiPro31Client
+import knes.agent.llm.VisionLlm
 import knes.agent.llm.HaikuClient
 import knes.agent.llm.SonnetClient
 import knes.agent.runtime.Plan
@@ -29,13 +28,12 @@ data class ExecutorDecision(
  * Haiku, Sonnet reads the text digest).
  */
 class ExecutorAgent(
-    private val anthropic: AnthropicSession,
     private val sonnet: SonnetClient,  // kept for fallback / future toggle, currently unused
     private val haiku: HaikuClient,
     private val tools: ToolSurface,
     private val memory: Memory,
     private val run: RunDirectory? = null,
-    private val gemini: GeminiPro31Client? = null,
+    private val vision: VisionLlm? = null,
     private val campaign: Campaign = NoCampaign,
 ) {
     private val recentOutcomes = ArrayDeque<String>(4)
@@ -141,9 +139,9 @@ class ExecutorAgent(
             // are accurate.
             val userText = buildSonnetUserText(plan, scene = "", ramDigest)
             val combinedPrompt = "$EXECUTOR_SYSTEM_PROMPT\n\n$userText"
-            val raw = (gemini?.generate(combinedPrompt, imageB64 = screenshotB64)
+            val raw = (vision?.generate(combinedPrompt, imageB64 = screenshotB64)
                 ?: sonnet.decideTool(EXECUTOR_SYSTEM_PROMPT, userText, imageB64 = screenshotB64))
-            val modelTag = if (gemini != null) "GEMINI" else "SONNET"
+            val modelTag = if (vision != null) vision.model else sonnet.modelId
             runCatching {
                 run?.promptFile(currentTurn, "executor")?.toFile()?.writeText(
                     "=== $modelTag SYSTEM ===\n$EXECUTOR_SYSTEM_PROMPT\n\n" +
