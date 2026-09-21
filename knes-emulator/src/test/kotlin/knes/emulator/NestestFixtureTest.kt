@@ -14,10 +14,10 @@ import java.io.File
  * mode", where it runs its opcode suite with no PPU and writes a result code to `$0002`
  * (official opcodes) and `$0003` (unofficial ones), zero meaning pass.
  *
- * **Automated mode does not currently engage here** — see the last test. Until it does,
- * a zero in those bytes says nothing, because the harness zeroes RAM before the run.
- * Every assertion below is therefore about what the ROM demonstrably does, and the
- * result bytes are only checked alongside evidence that the ROM ran at all.
+ * Automated mode only engages if the reset interrupt queued by `loadRom` is drained
+ * before the program counter is aimed at `$C000` — otherwise it is serviced first and
+ * the CPU goes to the reset vector instead. [NES.jumpTo] does that. Getting it wrong is
+ * why this fixture spent a long time asserting a result code that was never written.
  */
 private const val RESULT_OFFICIAL = 0x0002
 private const val RESULT_UNOFFICIAL = 0x0003
@@ -36,18 +36,15 @@ private fun host() = object : NesHost {
     override fun imageReady(skipFrame: Boolean, buffer: IntArray) {}
 }
 
-private class Nestest(config: NesConfig = NesConfig.HEADLESS) {
-    val nes = NES(host(), config)
+private class Nestest(aimAtAutomatedMode: Boolean = true) {
+    val nes = NES(host(), NesConfig.HEADLESS)
 
     init {
         val rom = File("src/test/resources/nestest.nes")
         check(rom.exists()) { "missing fixture: ${rom.absolutePath}" }
         check(nes.loadRom(rom.absolutePath)) { "nestest.nes failed to load" }
-        // Zero RAM so the run is deterministic. Note the cost: a result byte of zero now
-        // means "passed" or "never written", and only other evidence separates them.
         for (address in 0 until 0x0800) nes.cpuMemory.write(address, 0x00.toShort())
-        nes.cpu.REG_PC_NEW = AUTOMATED_ENTRY - 1
-        nes.cpu.status = 0x24
+        if (aimAtAutomatedMode) nes.jumpTo(AUTOMATED_ENTRY)
     }
 
     fun run(instructions: Int = 30_000): Nestest {
@@ -62,7 +59,7 @@ private class Nestest(config: NesConfig = NesConfig.HEADLESS) {
     fun reaches(pc: IntRange, instructions: Int = 30_000): Boolean {
         repeat(instructions) {
             nes.stepInstruction()
-            if (nes.cpu.REG_PC_NEW in pc) return true
+            if (nes.programCounter in pc) return true
         }
         return false
     }
@@ -70,36 +67,32 @@ private class Nestest(config: NesConfig = NesConfig.HEADLESS) {
 
 class NestestFixtureTest : FunSpec({
 
-    test("the ROM actually executes") {
-        // Without this, every other assertion in this file is vacuous.
+    test("automated mode is entered") {
+        Nestest().reaches(AUTOMATED_TARGET..AUTOMATED_TARGET + 4, instructions = 16) shouldBe true
+    }
+
+    test("the opcode suite actually runs") {
+        // Without this, a zero result code cannot be told from a run that never started:
+        // the harness zeroes RAM itself.
         Nestest().run().ramWritten() shouldBeGreaterThan 0
     }
 
-    test("neither result byte reports a failure") {
-        val nestest = Nestest().run()
-
-        // Necessary but not sufficient — see the suite comment. Kept so a run that
-        // starts writing a failure code is noticed.
-        nestest.result(RESULT_OFFICIAL) shouldBe 0x00
-        nestest.result(RESULT_UNOFFICIAL) shouldBe 0x00
+    test("all official opcode tests pass") {
+        Nestest().run().result(RESULT_OFFICIAL) shouldBe 0x00
     }
 
-    test("an unclocked PPU parks the ROM in the vblank wait, so it runs nothing") {
-        // $C008 is `LDA $2002 / BPL -5`, the standard wait for vblank. With
-        // steppedExecution = false the CPU loop never clocks the PPU, $2002 never signals, and
-        // the ROM spins there forever. That is the configuration this fixture used to
-        // run under, which is why its result assertion passed while proving nothing.
-        val nestest = Nestest(NesConfig(steppedExecution = false, enableSound = false, timeEmulation = false)).run()
-
-        nestest.ramWritten() shouldBe 0
-        nestest.result(RESULT_OFFICIAL) shouldBe 0x00
+    test("all unofficial opcode tests pass") {
+        // Read into a local and never asserted, before this fixture was repaired.
+        Nestest().run().result(RESULT_UNOFFICIAL) shouldBe 0x00
     }
 
-    test("automated mode is not reached — this test should start failing once it is") {
-        // $C000 holds `JMP $C5F5` into the opcode suite. Execution never arrives there,
-        // so the suite never runs and the result bytes keep their zero-fill. Making it
-        // arrive is the real work of backlog task E1; when that lands, this assertion
-        // flips and the checks above can become a genuine accuracy claim.
-        Nestest().reaches(AUTOMATED_TARGET - 1..AUTOMATED_TARGET + 5) shouldBe false
+    test("skipping the interrupt drain misses automated mode entirely") {
+        // Assigning the program counter by hand without draining sends the CPU to the
+        // reset vector: the ROM runs its normal boot and parks in the vblank wait.
+        // This is what the fixture used to do.
+        val nestest = Nestest(aimAtAutomatedMode = false)
+        nestest.nes.cpu.REG_PC_NEW = AUTOMATED_ENTRY - 1
+
+        nestest.reaches(AUTOMATED_TARGET..AUTOMATED_TARGET + 4) shouldBe false
     }
 })

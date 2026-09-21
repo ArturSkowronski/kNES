@@ -253,26 +253,32 @@ a companion asserts that *different* input produces a different run — otherwis
 
 ## Wave E — accuracy and debug tooling
 
-### E1. Turn `nestest.nes` into a real fixture — **M** — *finding logged 2026-09-21, work still open*
+### E1. Turn `nestest.nes` into a real fixture — **M** — *done 2026-09-21*
 
-**The accuracy test proved nothing.** `NESIntegrationTest` ran nestest with
-`appletMode = false`, which means the CPU loop never clocks the PPU. The ROM parks in
-the vblank wait at `$C008` (`LDA $2002 / BPL -5`) and spins. After 30 000 instructions
-the entire 2 KB of CPU RAM is **untouched** — so `$0002 == 0x00` held only because the
-test zeroed RAM beforehand. It also read `$0003` into a local and never asserted it.
+**kNES passes nestest — official and unofficial opcode tests both report `0x00`.** It
+always did. The fixture was broken, not the emulator.
 
-Clocking the PPU makes the ROM execute — RAM and stack change — but nestest's automated
-entry is still never reached: `$C000` holds `JMP $C5F5` and execution never arrives at
-`$C5F5`, so the opcode suite does not run in either configuration.
+The story, because it cost two passes to get right:
 
-`NestestFixtureTest` replaces it and states only what is verified: the ROM executes,
-neither result byte reports a failure, an unclocked PPU runs nothing, and automated mode
-is not reached. That last one is written as an assertion that **fails once someone fixes
-it**, which is the prompt to tighten the rest into a real accuracy claim.
+1. The original test ran with the PPU unclocked, so the ROM parked in the vblank wait at
+   `$C008` and never touched RAM. `$0002 == 0x00` held only because the test zeroed RAM
+   itself. It also read `$0003` and never asserted it.
+2. Clocking the PPU made the ROM execute, but automated mode was still never reached, and
+   from reading the code it was not obvious why. JMP absolute worked fine in isolation.
+3. The instruction trace from E3 showed `C000: 4C (2)` — two cycles for a three-cycle
+   instruction, landing at `$C005`. **`loadRom` leaves a reset interrupt pending**, and it
+   is serviced before the next instruction, discarding a hand-assigned program counter and
+   sending the CPU to the reset vector.
 
-**Still to do:** find why the `$C000` entry does not take (a PC-convention problem in the
-harness, or a CPU bug — unknown), then assert the opcode results for real. Golden-log
-comparison additionally needs the reference `nestest.log`, which is not in the repo.
+`NES.jumpTo` drains the pending interrupt first, so the lesson lives in the API rather
+than in a comment. With it, the trace reads `C000: 4C (3) | C5F5: A2 (2) | ...` — straight
+into the opcode suite — and both result bytes come back zero.
+
+A test pins the trap: assigning the program counter without draining misses automated mode
+entirely.
+
+**Still open:** golden-log comparison against the reference `nestest.log`, which is not in
+the repo.
 
 ### E2. Mappers beyond NROM/MMC1 — **L**
 
@@ -282,10 +288,18 @@ ones (`roms/` currently holds FF1 dumps that cannot ship).
 
 **Depends on:** C3.
 
-### E3. Debug API: breakpoints, watchpoints, trace ring buffer — **L**
+### E3. Debug API: breakpoints, watchpoints, trace ring buffer — **L** — *partly done 2026-09-21*
 
-Promote memory watch, nametable reads, CPU registers and trace logging into a stable API
-usable from API/MCP/UI. Keep agent strategy out of it.
+`InstructionTrace` (a ring of pc/opcode/cycles, off by default and allocated only when
+switched on), `NES.breakpoints` + `runUntilBreakpoint`, `NES.programCounter` and
+`NES.opcodeAt` — the last reading through the mapper, the way the CPU does, because above
+`$2000` raw CPU memory is a different view and a debugger reading it describes
+instructions that never ran.
+
+It earned its keep immediately: see E1 below.
+
+**Still open:** watchpoints, which need the memory layer instrumented, and exposing any
+of this through the API/MCP surface.
 
 ---
 

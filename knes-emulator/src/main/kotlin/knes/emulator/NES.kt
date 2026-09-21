@@ -55,6 +55,25 @@ class NES @JvmOverloads constructor(
     /** Called at each frame boundary, after the host has been handed the image. */
     var onFrame: ((Long) -> Unit)? = null
 
+    /**
+     * Records executed instructions when set. Null — the default — costs nothing.
+     *
+     * Only [stepInstruction] and what builds on it feed this; free-running emulation
+     * does not, because the check does not belong in the CPU's hot loop.
+     */
+    var trace: InstructionTrace? = null
+
+    /** Program counters [runUntilBreakpoint] stops at. */
+    val breakpoints: MutableSet<Int> = mutableSetOf()
+
+    /**
+     * The address the next instruction will be fetched from.
+     *
+     * The CPU stores this internally as `REG_PC_NEW`, trailing the real counter by one;
+     * every caller that got that wrong read the wrong instruction.
+     */
+    val programCounter: Int get() = (cpu.REG_PC_NEW + 1) and 0xFFFF
+
     var memoryMapper: MemoryMapper? = null
 
     /** Identity of the ROM currently loaded, for checking a savestate belongs here. */
@@ -95,8 +114,50 @@ class NES @JvmOverloads constructor(
      * @return CPU cycles it consumed.
      */
     fun stepInstruction(): Int {
+        val recorder = trace
+        val pc = if (recorder != null) programCounter else 0
+        val opcode = if (recorder != null) opcodeAt(pc) else 0
         cpu.step()
-        return cpu.lastStepCycles
+        val cycles = cpu.lastStepCycles
+        recorder?.record(pc, opcode, cycles)
+        return cycles
+    }
+
+    /**
+     * Point execution at [address].
+     *
+     * Drains a pending interrupt first. Straight after a reset one is queued, and it is
+     * serviced *before* the next instruction — so assigning the program counter by hand
+     * and stepping sends the CPU to the reset vector instead, silently discarding the
+     * address. A test harness that did exactly that is why nestest's automated mode
+     * appeared unreachable for months.
+     */
+    fun jumpTo(address: Int) {
+        if (cpu.irqRequested) stepInstruction()
+        cpu.REG_PC_NEW = (address - 1) and 0xFFFF
+    }
+
+    /**
+     * The opcode byte at [address] as the CPU would fetch it — through the mapper, not
+     * out of raw CPU memory. Above `$2000` those are different views, and reading the
+     * wrong one is how a debugger ends up describing an instruction that never ran.
+     */
+    fun opcodeAt(address: Int): Int =
+        (memoryMapper?.load(address and 0xFFFF)?.toInt() ?: cpuMemory.load(address and 0xFFFF).toInt()) and 0xFF
+
+    /**
+     * Run instructions until the program counter reaches a breakpoint, or until
+     * [maxInstructions] have run.
+     *
+     * @return the program counter stopped at, or null if the budget ran out first.
+     */
+    fun runUntilBreakpoint(maxInstructions: Int = DEFAULT_BREAKPOINT_BUDGET): Int? {
+        repeat(maxInstructions) {
+            stepInstruction()
+            val pc = programCounter
+            if (pc in breakpoints) return pc
+        }
+        return null
     }
 
     /**
@@ -338,5 +399,8 @@ class NES @JvmOverloads constructor(
     companion object {
         /** An NTSC frame is ~29780 CPU cycles; the ceiling only exists to turn a hang into an error. */
         const val MAX_CYCLES_PER_FRAME: Int = 200_000
+
+        /** Roughly a second of CPU time — enough to reach anything a breakpoint is useful for. */
+        const val DEFAULT_BREAKPOINT_BUDGET: Int = 1_000_000
     }
 }
