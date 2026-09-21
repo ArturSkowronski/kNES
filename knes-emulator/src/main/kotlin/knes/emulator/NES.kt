@@ -47,7 +47,7 @@ class NES @JvmOverloads constructor(
      * Frames the PPU has completed since construction.
      *
      * Counted here rather than in whatever host happens to be attached, so a frame
-     * boundary is observable without a host and without consulting [NesConfig.appletMode].
+     * boundary is observable without a host and without consulting the execution mode.
      */
     var frameCount: Long = 0L
         private set
@@ -116,17 +116,15 @@ class NES @JvmOverloads constructor(
     /**
      * Run until the PPU completes the next frame.
      *
-     * Requires the CPU loop to be driving the PPU — see [NesConfig.appletMode], which
-     * despite its name selects stepped execution rather than anything applet-specific.
-     * Without it the PPU is clocked elsewhere, this would never return, and a clear
-     * failure beats a hang.
+     * Requires [NesConfig.steppedExecution]: without it the PPU is clocked elsewhere,
+     * this would never return, and a clear failure beats a hang.
      *
      * @return CPU cycles the frame took.
      */
     fun stepFrame(maxCycles: Int = MAX_CYCLES_PER_FRAME): Int {
-        check(config.appletMode) {
-            "stepFrame requires NesConfig.appletMode = true, which is what makes the CPU " +
-                "loop clock the PPU; otherwise no frame boundary is ever reached here."
+        check(config.steppedExecution) {
+            "stepFrame requires NesConfig.steppedExecution = true, which is what makes the " +
+                "CPU loop clock the PPU; otherwise no frame boundary is ever reached here."
         }
         val target = frameCount + 1
         var consumed = 0

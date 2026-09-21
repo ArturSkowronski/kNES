@@ -86,10 +86,10 @@ class NestestFixtureTest : FunSpec({
 
     test("an unclocked PPU parks the ROM in the vblank wait, so it runs nothing") {
         // $C008 is `LDA $2002 / BPL -5`, the standard wait for vblank. With
-        // appletMode = false the CPU loop never clocks the PPU, $2002 never signals, and
+        // steppedExecution = false the CPU loop never clocks the PPU, $2002 never signals, and
         // the ROM spins there forever. That is the configuration this fixture used to
         // run under, which is why its result assertion passed while proving nothing.
-        val nestest = Nestest(NesConfig(appletMode = false, enableSound = false, timeEmulation = false)).run()
+        val nestest = Nestest(NesConfig(steppedExecution = false, enableSound = false, timeEmulation = false)).run()
 
         nestest.ramWritten() shouldBe 0
         nestest.result(RESULT_OFFICIAL) shouldBe 0x00

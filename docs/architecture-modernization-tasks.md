@@ -315,7 +315,15 @@ root, `knes-api`, `knes-mcp`, `knes-agent`, `knes-agent-tools`, `knes-compose-ui
 The 11/17 line runs straight through the core/tooling boundary, which may well be
 deliberate — write the reason down either way.
 
-### F3. Demote or remove the applet — **M**
+### F3. Demote or remove the applet — **M** — *partly done 2026-09-21*
+
+`NesConfig.appletMode` is renamed `steppedExecution`, which is what it actually controls:
+whether the CPU loop clocks the PPU. Nothing applet-specific was ever involved — the
+applet merely happened to be the host that needed it on. A test pins the behaviour so
+the name stays honest: same instruction count, frames only when it is set.
+
+`Globals.appletMode` keeps its name, since the applet writes to it and it maps across in
+`fromGlobals`. Removing the applet itself is still open.
 
 `knes-applet-ui` plus `src/main/java/knes/launcher/AppletLauncher.java` keep applet-era
 code first-class and produce removal warnings on modern JDKs. `Globals.appletMode`
