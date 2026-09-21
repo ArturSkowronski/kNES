@@ -57,6 +57,10 @@ class NES @JvmOverloads constructor(
 
     var memoryMapper: MemoryMapper? = null
 
+    /** Identity of the ROM currently loaded, for checking a savestate belongs here. */
+    var romIdentity: RomIdentity? = null
+        private set
+
     val inputHandler: InputHandler = host.getJoy1()
     val inputHandler2: InputHandler? = host.getJoy2()
 
@@ -135,50 +139,122 @@ class NES @JvmOverloads constructor(
         return consumed
     }
 
+    /**
+     * Restore a savestate.
+     *
+     * Reads both the current format and the original positional one, told apart by the
+     * magic. A state from a different ROM raises [SavestateMismatchException] rather
+     * than quietly restoring a machine it does not describe; malformed data returns
+     * false, as before.
+     */
     fun stateLoad(buf: ByteBuffer): Boolean {
         var continueEmulation = false
-        val success: Boolean
-
         if (cpu.isRunning) {
             continueEmulation = true
             stopEmulation()
         }
 
-        if (buf.readByte().toInt() == 1) {
-            cpuMemory.stateLoad(buf)
-            ppuMemory.stateLoad(buf)
-            sprMemory.stateLoad(buf)
-            cpu.stateLoad(buf)
-            memoryMapper?.stateLoad(buf)
-            ppu.stateLoad(buf)
-            success = true
+        val start = buf.getPos()
+        val magic = runCatching { buf.readStringAscii(Savestate.MAGIC.length) }.getOrNull()
+        val success = if (magic == Savestate.MAGIC) {
+            loadVersioned(buf)
         } else {
-            success = false
+            buf.goTo(start)
+            loadLegacy(buf)
         }
 
         if (continueEmulation) {
             startEmulation()
         }
-
         return success
     }
 
+    private fun loadVersioned(buf: ByteBuffer): Boolean {
+        if (buf.readInt() != Savestate.VERSION) return false
+
+        val stored = RomIdentity(
+            mapperId = buf.readInt(),
+            prgBanks = buf.readInt(),
+            chrBanks = buf.readInt(),
+            mirroring = buf.readInt(),
+            contentHash = buf.readInt(),
+        )
+        val current = romIdentity
+        if (current != null && stored != current) {
+            throw SavestateMismatchException(
+                "savestate belongs to a different ROM: state=$stored, loaded=$current"
+            )
+        }
+
+        val chunks = buf.readInt()
+        repeat(chunks) {
+            val name = buf.readStringAscii(buf.readInt())
+            val length = buf.readInt()
+            val end = buf.getPos() + length
+            when (name) {
+                Savestate.CHUNK_CPU_RAM -> cpuMemory.stateLoad(buf)
+                Savestate.CHUNK_PPU_RAM -> ppuMemory.stateLoad(buf)
+                Savestate.CHUNK_SPR_RAM -> sprMemory.stateLoad(buf)
+                Savestate.CHUNK_CPU -> cpu.stateLoad(buf)
+                Savestate.CHUNK_MAPPER -> memoryMapper?.stateLoad(buf)
+                Savestate.CHUNK_PPU -> ppu.stateLoad(buf)
+                // Unknown chunk from a newer writer: its length lets us step over it.
+            }
+            buf.goTo(end)
+        }
+        return true
+    }
+
+    private fun loadLegacy(buf: ByteBuffer): Boolean {
+        if (buf.readByte().toInt() != Savestate.LEGACY_VERSION) return false
+        cpuMemory.stateLoad(buf)
+        ppuMemory.stateLoad(buf)
+        sprMemory.stateLoad(buf)
+        cpu.stateLoad(buf)
+        memoryMapper?.stateLoad(buf)
+        ppu.stateLoad(buf)
+        return true
+    }
+
+    /**
+     * Write a savestate in the current format: magic, version, ROM identity, then
+     * length-prefixed named chunks so a reader can skip what it does not recognise.
+     */
     fun stateSave(buf: ByteBuffer) {
         val continueEmulation = this.isRunning
         stopEmulation()
 
-        // Version:
-        buf.putByte(1.toShort())
+        buf.putStringAscii(Savestate.MAGIC)
+        buf.putInt(Savestate.VERSION)
 
-        // Let units save their state:
-        cpuMemory.stateSave(buf)
-        ppuMemory.stateSave(buf)
-        sprMemory.stateSave(buf)
-        cpu.stateSave(buf)
-        memoryMapper?.stateSave(buf)
-        ppu.stateSave(buf)
+        val identity = romIdentity ?: RomIdentity(0, 0, 0, 0, 0)
+        buf.putInt(identity.mapperId)
+        buf.putInt(identity.prgBanks)
+        buf.putInt(identity.chrBanks)
+        buf.putInt(identity.mirroring)
+        buf.putInt(identity.contentHash)
 
-        // Continue emulation:
+        val chunks = listOf<Pair<String, () -> Unit>>(
+            Savestate.CHUNK_CPU_RAM to { cpuMemory.stateSave(buf) },
+            Savestate.CHUNK_PPU_RAM to { ppuMemory.stateSave(buf) },
+            Savestate.CHUNK_SPR_RAM to { sprMemory.stateSave(buf) },
+            Savestate.CHUNK_CPU to { cpu.stateSave(buf) },
+            Savestate.CHUNK_MAPPER to { memoryMapper?.stateSave(buf); Unit },
+            Savestate.CHUNK_PPU to { ppu.stateSave(buf) },
+        )
+        buf.putInt(chunks.size)
+        for ((name, write) in chunks) {
+            buf.putInt(name.length)
+            buf.putStringAscii(name)
+            val lengthPos = buf.getPos()
+            buf.putInt(0) // patched once the chunk's size is known
+            val bodyStart = buf.getPos()
+            write()
+            val end = buf.getPos()
+            buf.putInt(end - bodyStart, lengthPos)
+            buf.goTo(end)
+        }
+
         if (continueEmulation) {
             startEmulation()
         }
@@ -230,6 +306,13 @@ class NES @JvmOverloads constructor(
             ppu.setMirroring(rom.mirroringType)
 
             this.memoryMapper = memoryMapper
+            romIdentity = RomIdentity(
+                mapperId = rom.mapperType,
+                prgBanks = rom.romCount,
+                chrBanks = rom.vromCount,
+                mirroring = rom.mirroring,
+                contentHash = RomIdentity.hashPrg(rom.rom),
+            )
         }
 
         isRomLoaded = rom.isValid()
