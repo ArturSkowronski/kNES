@@ -246,11 +246,26 @@ tests.
 
 ## Wave E — accuracy and debug tooling
 
-### E1. Turn `nestest.nes` into a real fixture — **M**
+### E1. Turn `nestest.nes` into a real fixture — **M** — *finding logged 2026-09-21, work still open*
 
-`nestest.nes` already sits in `knes-emulator/src/test/resources` and
-`knes-agent-tools/src/test/resources`. Add golden-log assertions against the known-good
-trace instead of using it as a smoke ROM.
+**The accuracy test proved nothing.** `NESIntegrationTest` ran nestest with
+`appletMode = false`, which means the CPU loop never clocks the PPU. The ROM parks in
+the vblank wait at `$C008` (`LDA $2002 / BPL -5`) and spins. After 30 000 instructions
+the entire 2 KB of CPU RAM is **untouched** — so `$0002 == 0x00` held only because the
+test zeroed RAM beforehand. It also read `$0003` into a local and never asserted it.
+
+Clocking the PPU makes the ROM execute — RAM and stack change — but nestest's automated
+entry is still never reached: `$C000` holds `JMP $C5F5` and execution never arrives at
+`$C5F5`, so the opcode suite does not run in either configuration.
+
+`NestestFixtureTest` replaces it and states only what is verified: the ROM executes,
+neither result byte reports a failure, an unclocked PPU runs nothing, and automated mode
+is not reached. That last one is written as an assertion that **fails once someone fixes
+it**, which is the prompt to tighten the rest into a real accuracy claim.
+
+**Still to do:** find why the `$C000` entry does not take (a PC-convention problem in the
+harness, or a CPU bug — unknown), then assert the opcode results for real. Golden-log
+comparison additionally needs the reference `nestest.log`, which is not in the repo.
 
 ### E2. Mappers beyond NROM/MMC1 — **L**
 
