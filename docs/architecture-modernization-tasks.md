@@ -311,7 +311,19 @@ Two limits on watchpoints, both deliberate and both tested:
   instruction would change the run being observed. `watch` rejects anything at or above
   `$2000` and says why.
 
-**Still open:** exposing any of this through the API/MCP surface.
+The trace is published as the MCP resource `knes://emulator/trace`, **not** as a tool.
+It is something to look at rather than an action, and the tool surface is meant to shrink
+— Claude Plays Pokémon runs on three tools, and the project's own research notes that
+harness was simplified over time rather than extended
+(`docs/superpowers/research/2026-05-01-llm-game-agents.md`).
+
+It reaches MCP through `EmulatorSession.traceTail`, not by letting agent tooling import
+`knes-emulator`: the core's trace type stays in the core and `knes.api.TraceEntry` is the
+session's view of it. Remote mode cannot serve it, the same way it cannot serve
+savestates.
+
+**Still open:** breakpoints and watchpoints through the API/MCP surface. They are actions
+and would each cost a tool, so they need a decision about that budget first.
 
 ---
 

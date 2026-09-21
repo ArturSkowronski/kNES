@@ -36,6 +36,9 @@ internal class RecordingToolset : EmulatorToolset {
     override fun press(buttons: List<String>) = record("press($buttons)") { StatusResult(true, "pressed") }
     override fun release(buttons: List<String>) = record("release($buttons)") { StatusResult(true, "released") }
 
+    override fun traceTail(count: Int) =
+        record("traceTail($count)") { listOf(TracedInstruction(pc = 0xC000, opcode = 0x4C, cycles = 3)) }
+
     override fun saveSavestate(): ByteArray = error("not reachable from MCP")
     override fun loadSavestate(bytes: ByteArray): Boolean = error("not reachable from MCP")
     override fun advanceFrames(count: Int) = error("not reachable from MCP")

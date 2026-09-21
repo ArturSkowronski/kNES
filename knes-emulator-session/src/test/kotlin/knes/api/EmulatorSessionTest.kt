@@ -49,4 +49,24 @@ class EmulatorSessionTest : FunSpec({
         val session = EmulatorSession()
         runCatching { session.saveState() }.isFailure shouldBe true
     }
+
+    test("tracing is off until something asks, so the first read is empty") {
+        val session = EmulatorSession()
+        check(session.loadRom(java.io.File("src/test/resources/nestest.nes").absolutePath))
+
+        session.advanceFrames(1)
+        session.traceTail(16) shouldBe emptyList()
+    }
+
+    test("once asked for, the trace records what the CPU executes") {
+        val session = EmulatorSession()
+        check(session.loadRom(java.io.File("src/test/resources/nestest.nes").absolutePath))
+        session.traceTail(16) // switches tracing on
+
+        session.advanceFrames(1)
+
+        val trace = session.traceTail(8)
+        (trace.size in 1..8) shouldBe true
+        trace.all { it.cycles > 0 } shouldBe true
+    }
 })

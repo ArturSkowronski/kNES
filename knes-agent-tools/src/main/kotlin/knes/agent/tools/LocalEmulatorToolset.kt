@@ -21,6 +21,14 @@ open class LocalEmulatorToolset(
     private val controller: ApiController = session.controller,
 ) : ToolSet, EmulatorToolset {
 
+    /**
+     * Switches tracing on the first time it is asked for, so nothing is paid for it in
+     * runs that never look. That first call therefore reports an empty trace.
+     */
+    override fun traceTail(count: Int): List<TracedInstruction> {
+        return session.traceTail(count).map { TracedInstruction(it.pc, it.opcode, it.cycles) }
+    }
+
     override fun saveSavestate(): ByteArray = session.saveState()
     override fun loadSavestate(bytes: ByteArray): Boolean = session.loadState(bytes)
     override fun advanceFrames(count: Int) = session.advanceFrames(count)

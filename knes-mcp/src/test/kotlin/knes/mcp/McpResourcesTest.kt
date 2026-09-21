@@ -69,4 +69,15 @@ class McpResourcesTest : FunSpec({
         val server = createMcpServer { RecordingToolset() }
         server.resources["knes://emulator/nonsense"] shouldBe null
     }
+
+    test("the instruction trace is published for looking at, not as a tool") {
+        val server = createMcpServer { RecordingToolset() }
+
+        val body = readResource(server, McpResources.TRACE_URI)
+
+        body shouldContain "\"pc\":49152"
+        body shouldContain "\"opcode\":76"
+        // No matching tool: the surface is meant to shrink, and this is data, not an action.
+        server.tools.keys.none { it.contains("trace") } shouldBe true
+    }
 })
