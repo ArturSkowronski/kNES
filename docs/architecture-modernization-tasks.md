@@ -206,14 +206,40 @@ Still on `Globals`: the Compose UI and applet frame pacing, and the applet's key
 control maps. The maps are input configuration, not emulator state. Migrating the UIs is
 follow-up work, and F3 (demote the applet) overlaps it.
 
-### C3. One console-clock coordinator — **XL, split first**
+### C3. One console-clock coordinator — **XL, now split**
 
-CPU (1295 lines), PPU (1851) and PAPU (984) each carry their own timing. Centralize
-scheduling once C1 and C2 are in.
+Where scheduling actually lives today, all of it inside `CPU.emulate`'s instruction loop:
 
-**Depends on:** C1, C2.
+```kotlin
+if (palEmu) { palCnt++; if (palCnt == 5) { palCnt = 0; cycleCount++ } }
+if (clocksPpu) { ppucycles.setCycles(cycleCount * 3); ppucycles.emulateCycles() }
+if (emulateSound) { papuClockFrame.clockFrameCounter(cycleCount) }
+```
 
----
+So the CPU owns the schedule, the NTSC dot ratio is a literal `3`, PAL is approximated by
+lengthening the CPU rather than quickening the PPU, and when `steppedExecution` is off the
+PPU is not advanced from here at all — two incompatible execution models in one build.
+
+**C3a — name the ratios — S — *done 2026-09-21*.** `ConsoleTiming` (NTSC/PAL: CPU
+frequency, dots per CPU cycle, the PAL correction interval). Behaviour-preserving, and
+nestest is now a real regression guard for it.
+
+**C3b — one coordinator — M.** A `ConsoleClock` that owns "advance the console by N CPU
+cycles" and calls the PPU and APU itself. `CPU.emulate` calls it instead of poking two
+components. The schedule moves to one place while still being driven from the CPU loop.
+*Depends on C3a.*
+
+**C3c — invert the drive — L.** Move the loop out of the CPU so the coordinator drives:
+step an instruction, then advance the PPU and APU by what it cost. This is what makes a
+single execution model possible. *Depends on C3b.*
+
+**C3d — delete the second execution model — M.** Once C3c lands, `steppedExecution` stops
+being a mode: the UIs drive frames through the coordinator like everything else, and
+`stepFrame` no longer needs to refuse. *Depends on C3c.*
+
+**C3e — fix PAL properly — S.** With the schedule in one place, PAL becomes 3.2 dots per
+CPU cycle on the PPU's side rather than a fifth-instruction correction on the CPU's.
+*Depends on C3c, and needs a PAL test ROM to verify.*
 
 ## Wave D — state and replay
 
