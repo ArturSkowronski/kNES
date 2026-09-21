@@ -61,6 +61,8 @@ private fun host() = object : NesHost {
     override fun imageReady(skipFrame: Boolean, buffer: IntArray) {}
 }
 
+private val held = HashSet<Int>()
+
 class CommercialRomCompatibilityTest : FunSpec({
 
     val roms = romsDirectory()
@@ -102,6 +104,61 @@ class CommercialRomCompatibilityTest : FunSpec({
                 nes.frameCount shouldBe 120L
             }
     }
+
+    val ff1 = roms?.let { File(it, "ff.nes") }
+    val ff1Available = ff1 != null && ff1.isFile
+
+    test("the PPU renders a real picture once a game is running")
+        .config(enabled = ff1Available) {
+            // Rendering had no coverage at all: every `imageReady` in this repo's tests
+            // is an empty lambda, so a regression that blanked the screen would not have
+            // failed anything. nestest is no use here — it draws two colours — so this
+            // needs a commercial ROM.
+            var latest: IntArray? = null
+            var frames = 0
+            val recordingHost = object : NesHost {
+                override fun sendErrorMsg(message: String) {}
+                override fun sendDebugMessage(message: String) {}
+                override fun destroy() {}
+                override fun getJoy1(): InputHandler = object : InputHandler {
+                    override fun getKeyState(padKey: Int): Short = if (padKey in held) 0x41 else 0x40
+                }
+                override fun getJoy2(): InputHandler? = null
+                override fun getTimer(): HiResTimer = HiResTimer()
+                override fun imageReady(skipFrame: Boolean, buffer: IntArray) {
+                    latest = buffer.copyOf()
+                    frames++
+                }
+            }
+
+            val nes = NES(recordingHost, NesConfig.HEADLESS)
+            check(nes.loadRom(ff1!!.absolutePath))
+
+            fun runFrames(count: Int) {
+                val target = frames + count
+                var guard = 0
+                while (frames < target && guard++ < count * 400_000) nes.stepInstruction()
+            }
+
+            runFrames(60)
+            val blank = latest!!.map { it and 0xFFFFFF }.toSet()
+
+            // Boot the game: alternate START and A through NEW GAME, class select, names.
+            repeat(70) { round ->
+                held.clear()
+                held += if (round % 2 == 0) InputHandler.KEY_START else InputHandler.KEY_A
+                runFrames(6)
+                held.clear()
+                runFrames(14)
+            }
+
+            val playing = latest!!.map { it and 0xFFFFFF }.toSet()
+
+            // The boot screen is near-blank; a running game is not.
+            blank.size shouldBe 2
+            playing.size shouldBeGreaterThan blank.size
+            playing.size shouldBeGreaterThan 5
+        }
 
     test("the suite reports whether it ran against real ROMs") {
         // Not an assertion about the emulator — a note in the output so a green run
