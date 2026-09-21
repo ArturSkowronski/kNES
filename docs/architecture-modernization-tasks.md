@@ -54,7 +54,7 @@ payoff — it gates every skill), then `MilestonePredicates`, then the pathfinde
 **Done when:** adding a second FF1-era game needs no edit under `knes-agent/src/main`.
 **Depends on:** A1.
 
-### A3. Delete the dead legacy MCP session — **S**
+### A3. Delete the dead legacy MCP session — **S** — *done 2026-09-21*
 
 `knes-mcp/src/main/kotlin/knes/mcp/NesEmulatorSession.kt` (147 lines) has no caller in any
 `src/main`; only its own `NesEmulatorSessionTest` keeps it alive. `knes-emulator-session`'s
