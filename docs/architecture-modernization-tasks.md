@@ -1,0 +1,262 @@
+# kNES Modernization — Task Backlog
+
+Date: 2026-09-21
+
+Actionable breakdown of `architecture-modernization-backlog.md`. That document says
+*what kind of system* kNES should become; this one is the work queue. Each task carries
+the evidence that it is still needed, so a task can be dropped the moment the evidence
+stops being true.
+
+Size is relative effort, not time: **S** = one sitting, **M** = one PR with tests,
+**L** = needs its own spec, **XL** = split before starting.
+
+Waves are ordered by dependency, not importance. Within a wave, tasks are independent
+unless `Depends on` says otherwise.
+
+---
+
+## Wave A — finish what is half-done
+
+Cheapest wins. Every task here closes a gap that current code actively contradicts.
+
+### A1. Collapse the two phase classifiers — **M**
+
+`Phase.fromRam` (`knes-agent/src/main/kotlin/knes/agent/runtime/Phase.kt:23`) and
+`ProfileSemantics.phaseFor` (`knes-debug`) now classify the same RAM with the same FF1
+constants, independently. The agent enum also carries four states the observation
+contract lacks: `Dialog`, `BattleMessage`, `Cutscene`, `CartographerExplore`.
+
+- Move `Dialog` / `BattleMessage` / `Cutscene` into `ff1.json` phase rules.
+- `CartographerExplore` is agent state, not a RAM fact — keep it out of the profile and
+  model it as an agent-side overlay on the observed phase.
+- Delete `Phase.fromRam`; have the runtime read `AgentObservation.phase`.
+- `PHASE_STATIC_WHITELIST` moves with it.
+
+**Done when:** `grep -rn "screenState\|mapflags" knes-agent/src/main/kotlin/knes/agent/runtime/`
+returns nothing, and the agent's phase for a given RAM snapshot matches the observation's.
+
+### A2. Evict FF1 constants from the agent runtime — **L, split per file**
+
+The "move game-specific RAM interpretation into profile semantics" bullet is only done
+for `knes-agent-tools`. `knes-agent/src/main` still hardcodes FF1 in ~10 files:
+
+| File | What is hardcoded |
+|---|---|
+| `tools/ToolSurface.kt` | `mapflags` bit0/bit1 transition waits, `currentMapId` checks |
+| `Main.kt:117,234,461` | `currentMapId`, `smPlayerX/Y`, `mapflags and 0x02` |
+| `runtime/MilestonePredicates.kt` | milestone predicates over raw RAM |
+| `pathfinding/ViewportPathfinder.kt`, `InteriorPathfinder.kt` | coordinate-space assumptions |
+| `runtime/Memory.kt`, `agents/CartographerAgent.kt`, `llm/HaikuClient.kt` | landmark + coord semantics |
+
+Do it as one PR per concern, not one big one. Suggested order: `ToolSurface` (biggest
+payoff — it gates every skill), then `MilestonePredicates`, then the pathfinders.
+
+**Done when:** adding a second FF1-era game needs no edit under `knes-agent/src/main`.
+**Depends on:** A1.
+
+### A3. Delete the dead legacy MCP session — **S**
+
+`knes-mcp/src/main/kotlin/knes/mcp/NesEmulatorSession.kt` (147 lines) has no caller in any
+`src/main`; only its own `NesEmulatorSessionTest` keeps it alive. `knes-emulator-session`'s
+`EmulatorSession` is the real one.
+
+**Done when:** file and test are gone, `./gradlew build` green. Port any assertion worth
+keeping onto `EmulatorSession` first.
+
+### A4. Stop running CI twice per PR — **S**
+
+`.github/workflows/build.yml` triggers on both `push: ["**"]` and `pull_request: ["**"]`,
+so every PR branch runs the identical `build` job twice (observed on PR #134: two runs,
+3m28s and 3m20s).
+
+**Done when:** one run per PR. Keep `push` on the default branch only, or drop the
+`pull_request` trigger — pick one and write down which.
+
+---
+
+## Wave B — MCP contract layer
+
+The tool catalog is shared; the handlers are not.
+
+### B1. One backend port behind both MCP modes — **L**
+
+`McpServer.kt` (262 lines) and `RemoteRestBridge.kt` (416 lines) still implement every
+tool twice — in-process against `EmulatorToolset`, remote against hand-rolled REST calls.
+`McpToolCatalog` unified the *schemas*, which makes the remaining behavioural drift
+harder to see, not easier.
+
+- Define a narrow port for emulator operations (`EmulatorToolset` is close already).
+- Implement it once in-process and once over REST.
+- Reduce both MCP entry points to registration + serialization.
+
+**Done when:** adding a tool means touching the catalog, the port, and one handler.
+
+### B2. Expose MCP resources — **M**
+
+`grep -rn "addResource" knes-mcp/src/main` returns nothing. Everything is a tool, so stable
+read-only data is re-fetched as tool calls and re-serialized each time.
+
+Publish as resources: loaded ROM metadata, emulator state snapshot, active profile,
+watched RAM definitions, and the new profile semantics.
+
+### B3. Structured tool results — **M**
+
+Handlers return `TextContent` holding encoded JSON. Return machine-readable results first,
+keep the text summary as the compatibility layer.
+
+**Depends on:** B1.
+
+### B4. Local/remote parity tests — **M**
+
+No test asserts that the two modes answer the same. Drive every catalogued tool through
+both and compare.
+
+**Depends on:** B1.
+
+---
+
+## Wave C — deterministic runtime
+
+Everything about replay, golden tests and multi-session hosting is blocked here.
+
+### C1. Explicit stepping API — **L**
+
+Today: `CPU.step()` (`CPU.kt:1159`) and `SessionActionController.step(buttons, frames)`.
+There is no `stepInstruction`, no `stepCpuCycles`, and no frame boundary observable
+without applet-mode flags.
+
+Add all three at the `NES`/session layer and make the frame boundary a first-class event.
+
+### C2. `Globals` → per-instance `NesConfig` — **L**
+
+`Globals` is a singleton holding `appletMode`, `palEmulation`, `enableSound`,
+`disableSprites`, `timeEmulation`, `preferredFrameRate`, plus keycode/control maps
+(`knes-emulator/src/main/kotlin/knes/emulator/utils/Globals.kt`). 20 call sites across
+CPU, PPU, PAPU, `EmulatorSession`, both UIs and the applet.
+
+Two emulator instances in one JVM cannot currently disagree about region or sound. That
+blocks parallel agent runs and makes tests order-dependent.
+
+**Done when:** `Globals` is gone or reduced to true constants, and a test runs two NES
+instances with different `NesConfig` side by side.
+
+### C3. One console-clock coordinator — **XL, split first**
+
+CPU (1295 lines), PPU (1851) and PAPU (984) each carry their own timing. Centralize
+scheduling once C1 and C2 are in.
+
+**Depends on:** C1, C2.
+
+---
+
+## Wave D — state and replay
+
+### D1. Versioned savestates with named chunks — **M**
+
+`NES.stateSave` (`NES.kt:93`) writes `putByte(1)` then dumps components positionally;
+`stateLoad` accepts version `1` and nothing else. No ROM identity, mapper id, region,
+controller state or config is recorded, so a savestate silently loads against the wrong
+ROM.
+
+**Done when:** a savestate carries named chunks plus ROM/mapper/region/config metadata,
+and loading it against a different ROM fails loudly.
+
+### D2. Replay format + determinism golden tests — **M**
+
+A small input-script format independent of the API JSON, plus save→load→replay golden
+tests.
+
+**Depends on:** C1, D1.
+
+---
+
+## Wave E — accuracy and debug tooling
+
+### E1. Turn `nestest.nes` into a real fixture — **M**
+
+`nestest.nes` already sits in `knes-emulator/src/test/resources` and
+`knes-agent-tools/src/test/resources`. Add golden-log assertions against the known-good
+trace instead of using it as a smoke ROM.
+
+### E2. Mappers beyond NROM/MMC1 — **L**
+
+`mappers/` holds `MapperDefault` and `MapperMMC1` only. Track compatibility by ROM/test
+name with expected results, and keep commercial-ROM tests separate from redistributable
+ones (`roms/` currently holds FF1 dumps that cannot ship).
+
+**Depends on:** C3.
+
+### E3. Debug API: breakpoints, watchpoints, trace ring buffer — **L**
+
+Promote memory watch, nametable reads, CPU registers and trace logging into a stable API
+usable from API/MCP/UI. Keep agent strategy out of it.
+
+---
+
+## Wave F — module and build hygiene
+
+### F1. Gradle convention plugin — **M**
+
+Every module repeats the same `kotlin { jvmToolchain }` / `java { toolchain }` /
+`kotlinOptions` / `test { useJUnitPlatform() }` block.
+
+### F2. Decide Java 11 or 17 — **S to decide, M to migrate**
+
+Currently split: 11 in `knes-emulator`, `knes-controllers`, `knes-debug`,
+`knes-emulator-session`, `knes-terminal-ui`, `knes-skiko-ui`, `knes-applet-ui`; 17 in
+root, `knes-api`, `knes-mcp`, `knes-agent`, `knes-agent-tools`, `knes-compose-ui`.
+
+The 11/17 line runs straight through the core/tooling boundary, which may well be
+deliberate — write the reason down either way.
+
+### F3. Demote or remove the applet — **M**
+
+`knes-applet-ui` plus `src/main/java/knes/launcher/AppletLauncher.java` keep applet-era
+code first-class and produce removal warnings on modern JDKs. `Globals.appletMode`
+defaults to `true`, which is a poor default for a headless-first project.
+
+**Depends on:** C2.
+
+---
+
+## Wave G — agent harness
+
+### G1. Richer observations — **M**
+
+Add transition detection, collision/passability hints, and event/dialog/menu state to
+`AgentObservation`. Location confidence already landed with profile semantics.
+
+**Depends on:** A1.
+
+### G2. Benchmark tasks with explicit win conditions — **M**
+
+Reach Coneria, buy a weapon, equip it, exit town, survive a battle, reach the next
+landmark. Each needs a machine-checkable predicate, reusable by the Reviewer.
+
+### G3. Replayable decision traces — **M**
+
+Log every observation, decision, action and verifier result in a form that can be
+replayed without an LLM.
+
+**Depends on:** D2.
+
+### G4. Unblock `arm_party` / EQUIP — **L**
+
+Parked FF1 blocker from the 2026-07-19 smoke: the Executor cannot drive the
+`WEAPON|EQUIP|TRADE|DROP` sub-header, so 0/4 characters equip despite 3/4 holding a
+weapon (127 turns stuck). Needs a deterministic state machine like the native
+`buyAtShop`, not per-turn LLM taps. Secondary: `buyAtShop` serves 3/4 characters, RedMage
+consistently gets nothing.
+
+This is gameplay, not architecture — but it is the one open correctness bug with a
+reproduction, so it should not fall off the list.
+
+---
+
+## Suggested order
+
+A4 → A3 → A1 → A2 → B1 → B2/B3/B4 → C2 → C1 → D1 → G1 → the rest.
+
+A4 and A3 are near-free. A1/A2 stop the semantics work from rotting. B1 is the largest
+single reduction in duplicated code. C2 unblocks parallel sessions, which everything in
+the agent harness eventually wants.
