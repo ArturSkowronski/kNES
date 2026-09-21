@@ -70,7 +70,7 @@ class PpuTestHarness {
     init {
 
         val gui = StubGUI()
-        nes = NES(gui, NesConfig(steppedExecution = false, enableSound = false, timeEmulation = false))
+        nes = NES(gui, NesConfig(enableSound = false, timeEmulation = false))
         ppu = nes.ppu
         cpuMemory = nes.cpuMemory
         sprMemory = nes.sprMemory

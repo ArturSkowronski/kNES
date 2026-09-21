@@ -238,16 +238,10 @@ class NES @JvmOverloads constructor(
     /**
      * Run until the PPU completes the next frame.
      *
-     * Requires [NesConfig.steppedExecution]: without it the PPU is clocked elsewhere,
-     * this would never return, and a clear failure beats a hang.
      *
      * @return CPU cycles the frame took.
      */
     fun stepFrame(maxCycles: Int = MAX_CYCLES_PER_FRAME): Int {
-        check(config.steppedExecution) {
-            "stepFrame requires NesConfig.steppedExecution = true, which is what makes the " +
-                "CPU loop clock the PPU; otherwise no frame boundary is ever reached here."
-        }
         val target = frameCount + 1
         var consumed = 0
         while (frameCount < target) {

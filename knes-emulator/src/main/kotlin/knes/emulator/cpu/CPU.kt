@@ -238,7 +238,6 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
             timing = timing,
             ppu = ppucycles,
             apu = papuClockFrame,
-            clocksPpu = config.steppedExecution,
             clocksApu = config.enableSound,
         )
         stopRunning = false
