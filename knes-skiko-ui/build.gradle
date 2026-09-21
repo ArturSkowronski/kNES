@@ -16,6 +16,9 @@ plugins {
     id 'application'
 }
 
+ext.knesJvmTarget = '11'
+apply from: "$rootDir/gradle/conventions/kotlin-module.gradle"
+
 repositories {
     mavenCentral()
     google()
@@ -37,17 +40,7 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
 }
 
-kotlin {
-    jvmToolchain(11)
-}
 
-tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-    kotlinOptions {
-        jvmTarget = '11'
-        apiVersion = '2.3'
-        languageVersion = '2.3'
-    }
-}
 
 java {
     toolchain {

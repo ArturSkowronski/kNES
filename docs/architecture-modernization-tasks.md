@@ -269,10 +269,20 @@ usable from API/MCP/UI. Keep agent strategy out of it.
 
 ## Wave F — module and build hygiene
 
-### F1. Gradle convention plugin — **M**
+### F1. Gradle convention plugin — **M** — *done 2026-09-21*
 
-Every module repeats the same `kotlin { jvmToolchain }` / `java { toolchain }` /
-`kotlinOptions` / `test { useJUnitPlatform() }` block.
+`gradle/conventions/kotlin-module.gradle`, applied by eleven modules with an optional
+`ext.knesJvmTarget`. Module build files total 804 → 688 lines.
+
+Two things it deliberately does not do:
+
+- **No `test { useJUnitPlatform() }`.** Not every module depends on the JUnit Platform
+  launcher; applying it everywhere broke `knes-compose-ui` immediately. Test framework
+  selection stays with the module — the backlog item is about Kotlin/JVM settings.
+- **No `buildSrc`.** A script plugin applied with `apply from:` does not get the Kotlin
+  Gradle plugin on its own compile classpath, so it matches Kotlin compile tasks by class
+  name instead of importing the type. `buildSrc` would allow the import, at the cost of
+  an extra build to configure and compile.
 
 ### F2. Decide Java 11 or 17 — **S to decide, M to migrate**
 
