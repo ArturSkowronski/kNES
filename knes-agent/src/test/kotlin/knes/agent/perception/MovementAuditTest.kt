@@ -1,5 +1,6 @@
 package knes.agent.perception
 
+import knes.agent.tools.results.GameSemantics
 import io.kotest.core.spec.style.FunSpec
 import knes.agent.skills.PressStartUntilOverworld
 import knes.agent.tools.LocalEmulatorToolset
@@ -35,7 +36,7 @@ class MovementAuditTest : FunSpec({
         toolset.applyProfile("ff1")
 
         // Boot to overworld
-        check(PressStartUntilOverworld(toolset).invoke().ok)
+        check(PressStartUntilOverworld(toolset, GameSemantics.of("ff1")).invoke().ok)
         val ram0 = toolset.getState().ram
         println("[audit] spawn world=(${ram0["worldX"]},${ram0["worldY"]})")
 

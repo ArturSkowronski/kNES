@@ -1,5 +1,6 @@
 package knes.agent.perception
 
+import knes.agent.tools.results.GameSemantics
 import io.kotest.core.spec.style.FunSpec
 import knes.agent.skills.PressStartUntilOverworld
 import knes.agent.tools.LocalEmulatorToolset
@@ -30,7 +31,7 @@ class PostBootFixtureBuilderTest : FunSpec({
         val toolset = LocalEmulatorToolset(session)
         check(toolset.loadRom(romPath).ok)
         toolset.applyProfile("ff1")
-        check(PressStartUntilOverworld(toolset).invoke().ok)
+        check(PressStartUntilOverworld(toolset, GameSemantics.of("ff1")).invoke().ok)
         // Settle a few frames so PPU has stable state and any boot-time animations
         // have flushed.
         toolset.step(buttons = emptyList(), frames = 30)

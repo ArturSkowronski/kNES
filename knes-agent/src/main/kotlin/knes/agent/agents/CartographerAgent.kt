@@ -1,5 +1,7 @@
 package knes.agent.agents
 
+import knes.agent.tools.results.GameSemantics
+
 import knes.agent.perception.FogOfWar
 import knes.agent.perception.LandmarkMemory
 import knes.agent.perception.OverworldMap
@@ -31,6 +33,7 @@ class CartographerAgent(
     private val budgetSeconds: Int,
     private val maxVisionCalls: Int,
     private val run: RunDirectory? = null,
+    private val semantics: GameSemantics,
 ) {
     suspend fun exploreInitialOverworld() {
         val started = System.currentTimeMillis()
@@ -46,8 +49,7 @@ class CartographerAgent(
             if (visionCalls >= maxVisionCalls) { knes.agent.runtime.Log.cartographer("vision call cap reached"); break }
 
             val ram = toolset.getState().ram
-            val worldX = ram["worldX"] ?: 0
-            val worldY = ram["worldY"] ?: 0
+            val (worldX, worldY) = semantics.worldPosition(ram) ?: (0 to 0)
 
             val viewport = overworldMap.readFullMapView(worldX to worldY)
             fog.merge(viewport)

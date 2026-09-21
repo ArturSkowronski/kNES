@@ -1,5 +1,6 @@
 package knes.agent.perception
 
+import knes.agent.tools.results.GameSemantics
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.ktor.client.HttpClient
@@ -56,7 +57,7 @@ class VisionInteriorFeasibilityTest : FunSpec({
         toolset.applyProfile("ff1").ok shouldBe true
 
         // 1) Boot to overworld
-        val boot = PressStartUntilOverworld(toolset).invoke()
+        val boot = PressStartUntilOverworld(toolset, GameSemantics.of("ff1")).invoke()
         check(boot.ok) { "press-start-until-overworld failed: ${boot.message}" }
         val ramOw = toolset.getState().ram
         println("[probe] spawn world=(${ramOw["worldX"]},${ramOw["worldY"]}) " +

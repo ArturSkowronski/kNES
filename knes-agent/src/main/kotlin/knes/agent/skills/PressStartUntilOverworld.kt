@@ -1,6 +1,8 @@
 package knes.agent.skills
 
 import knes.agent.tools.EmulatorToolset
+import knes.agent.tools.results.GameSemantics
+import knes.agent.tools.results.AgentPhase
 
 /**
  * Advance from the FF1 title screen through NEW GAME / class select / name entry
@@ -12,11 +14,14 @@ import knes.agent.tools.EmulatorToolset
  * V2 fix: replaced broken bootFlag heuristic (bootFlag=0x4D within 9 frames of cold boot)
  * with real RAM markers: worldX/char1_hpLow populated only after party is created.
  */
-class PressStartUntilOverworld(private val toolset: EmulatorToolset) : Skill {
+class PressStartUntilOverworld(
+    private val toolset: EmulatorToolset,
+    private val semantics: GameSemantics,
+) : Skill {
     override val id = "press_start_until_overworld"
     override val description =
         "Advance from the FF1 title screen through NEW GAME / class select / name entry " +
-            "into the overworld. Mashes START then A. Termination: char1_hpLow != 0 OR worldX != 0. " +
+            "into the overworld. Mashes START then A. Terminates once the party exists. " +
             "Bounded by maxAttempts (default 60)."
 
     override suspend fun invoke(args: Map<String, String>): SkillResult {
@@ -34,12 +39,13 @@ class PressStartUntilOverworld(private val toolset: EmulatorToolset) : Skill {
         // Phase 2: tap A until the party is created and on the overworld.
         while (attempts < maxAttempts) {
             val ram = toolset.getState().ram
-            val onOverworld = (ram["char1_hpLow"] ?: 0) != 0 || (ram["worldX"] ?: 0) != 0
+            // "The party exists" is exactly the profile's Boot rule, inverted.
+            val onOverworld = semantics.phase(ram) != AgentPhase.Boot
             if (onOverworld) {
                 return SkillResult(
                     ok = true,
                     message = "Reached overworld after $attempts taps " +
-                        "(worldX=0x${(ram["worldX"] ?: 0).toString(16)}, char1_hp=0x${(ram["char1_hpLow"] ?: 0).toString(16)})",
+                        "(world=${semantics.worldPosition(ram)})",
                     framesElapsed = totalFrames,
                     ramAfter = ram,
                 )
@@ -52,9 +58,7 @@ class PressStartUntilOverworld(private val toolset: EmulatorToolset) : Skill {
         return SkillResult(
             ok = false,
             message = "Did not reach overworld after $maxAttempts taps " +
-                "(menuCursor=0x${(ram["menuCursor"] ?: 0).toString(16)}, " +
-                "worldX=0x${(ram["worldX"] ?: 0).toString(16)}, " +
-                "char1_hpLow=0x${(ram["char1_hpLow"] ?: 0).toString(16)})",
+                "(phase=${semantics.phase(ram)}, world=${semantics.worldPosition(ram)})",
             framesElapsed = totalFrames,
             ramAfter = ram,
         )

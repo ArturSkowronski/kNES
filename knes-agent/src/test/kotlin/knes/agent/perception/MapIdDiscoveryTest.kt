@@ -1,5 +1,6 @@
 package knes.agent.perception
 
+import knes.agent.tools.results.GameSemantics
 import io.kotest.core.spec.style.FunSpec
 import knes.agent.skills.PressStartUntilOverworld
 import knes.agent.tools.LocalEmulatorToolset
@@ -43,7 +44,7 @@ class MapIdDiscoveryTest : FunSpec({
 
         // Live boot — fixture-load has known controller-state gap (per V5.2 commit comment
         // in ConeriaTownEmpiricalDiscoveryTest.kt:45). Slower (~10s) but reliable input.
-        check(PressStartUntilOverworld(toolset).invoke().ok) { "PressStartUntilOverworld failed" }
+        check(PressStartUntilOverworld(toolset, GameSemantics.of("ff1")).invoke().ok) { "PressStartUntilOverworld failed" }
         toolset.step(buttons = emptyList(), frames = 60)
 
         val ramOverworld = toolset.getState().ram

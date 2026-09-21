@@ -1,5 +1,6 @@
 package knes.agent.perception
 
+import knes.agent.tools.results.GameSemantics
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
@@ -46,7 +47,7 @@ class V516LoadStateInputDiagTest : FunSpec({
         val toolset = LocalEmulatorToolset(session)
         check(toolset.loadRom(romPath).ok)
         toolset.applyProfile("ff1")
-        check(PressStartUntilOverworld(toolset).invoke().ok)
+        check(PressStartUntilOverworld(toolset, GameSemantics.of("ff1")).invoke().ok)
         toolset.step(buttons = emptyList(), frames = 60)
 
         fun ramSnap(label: String): Map<String, Int> {
@@ -256,7 +257,7 @@ class V516LoadStateInputDiagTest : FunSpec({
         check(toolset.loadRom(romPath).ok)
         toolset.applyProfile("ff1")
         // Live boot to "warm up" the emulator (CPU thread state, PPU NMI cycle, etc.)
-        check(PressStartUntilOverworld(toolset).invoke().ok)
+        check(PressStartUntilOverworld(toolset, GameSemantics.of("ff1")).invoke().ok)
         toolset.step(buttons = emptyList(), frames = 60)
         // NOW load the persistent fixture on top of warmed state.
         check(session.loadState(fixtureFile.readBytes()))

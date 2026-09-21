@@ -4,6 +4,7 @@ import knes.agent.perception.LandmarkMemory
 import knes.agent.runtime.LandmarkContext
 import knes.agent.llm.GeminiPro31Client
 import knes.agent.campaign.Campaign
+import knes.agent.tools.results.GameSemantics
 import knes.agent.campaign.NoCampaign
 import knes.agent.runtime.Phase
 import knes.agent.runtime.Plan
@@ -23,6 +24,7 @@ class AdvisorAgent(
     private val run: RunDirectory,
     private val landmarks: LandmarkMemory? = null,
     private val campaign: Campaign = NoCampaign,
+    private val semantics: GameSemantics = GameSemantics.of(null),
 ) {
     private companion object {
         val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
@@ -101,12 +103,13 @@ class AdvisorAgent(
      */
     private fun stateDigest(phase: Phase?, ram: Map<String, Int>?): String {
         if (phase == null || ram == null) return "(state unavailable — picking step 0 must include explicit coord-space)"
+        // currentMapId and mapflags are named verbatim in the prompt below and in the
+        // Executor's, so they stay raw reads: renaming them in the text is a behaviour
+        // change no test here can catch.
         val mapId = ram["currentMapId"] ?: 0
         val mf = ram["mapflags"] ?: 0
-        val sx = ram["smPlayerX"] ?: 0
-        val sy = ram["smPlayerY"] ?: 0
-        val wx = ram["worldX"] ?: 0
-        val wy = ram["worldY"] ?: 0
+        val (sx, sy) = semantics.localPosition(ram) ?: (0 to 0)
+        val (wx, wy) = semantics.worldPosition(ram) ?: (0 to 0)
         val gold = campaign.gold(ram)
         val coordHint = when (phase) {
             Phase.Overworld -> "walkTo args MUST be world coords (worldX/worldY ~80-240). DO NOT pass small numbers like (11,10)."

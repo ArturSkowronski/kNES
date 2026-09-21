@@ -84,6 +84,8 @@ fun main(args: Array<String>) {
                 }
                 require(toolset.applyProfile(cfg.profile).ok) { "Failed to apply profile: ${cfg.profile}" }
 
+                val semantics = GameSemantics.of(cfg.profile)
+
                 // Perception (shared with v1)
                 val overworldMap = OverworldMap.fromRom(File(cfg.rom))
                 val fog = FogOfWar()
@@ -115,6 +117,9 @@ fun main(args: Array<String>) {
                     toolset = toolset,
                     mapSession = mapSession,
                     fog = fog,
+                    semantics = semantics,
+                    // Raw read on purpose: InteriorMemory persists tile facts keyed by
+                    // map id, so an opaque identity here would invalidate saved maps.
                     pathfinder = InteriorPathfinder(memory = interiorMemory) {
                         toolset.getState().ram["currentMapId"] ?: -1
                     },
@@ -123,14 +128,14 @@ fun main(args: Array<String>) {
                 )
                 val equipWeapon = EquipWeapon(toolset)
                 val restAtInn = RestAtInn(toolset)
-                val pressStart = PressStartUntilOverworld(toolset)
+                val pressStart = PressStartUntilOverworld(toolset, semantics)
 
                 val sonnet = SonnetClient(anthropicHttp)
                 val haiku = HaikuClient(anthropicHttp)
                 val tools = DefaultToolSurface(
                     toolset = toolset,
                     phaseProvider = { Phase.fromRam(toolset.getState().ram, cfg.profile) },
-                    semantics = GameSemantics.of(cfg.profile),
+                    semantics = semantics,
                     pressStartUntilOverworld = pressStart,
                     walkOverworld = walkOverworld,
                     exitInterior = exitInterior,
@@ -142,14 +147,14 @@ fun main(args: Array<String>) {
 
                 // Agents
                 val campaign = Campaign.of(cfg.profile)
-                val advisor = AdvisorAgent(gemini, memory, run, landmarks, campaign)
+                val advisor = AdvisorAgent(gemini, memory, run, landmarks, campaign, semantics)
                 val executor = ExecutorAgent(anthropic, sonnet, haiku, tools, memory, run, gemini = geminiExec, campaign = campaign)
                 Log.llm("models: advisor/cart=${gemini.model} executor=${geminiExec.model}")
                 val reviewer = ReviewerAgent(haiku, memory, run, campaign)
                 val cartographer = CartographerAgent(
                     gemini, toolset, memory, snapshotDumper, overworldMap, fog, landmarks,
                     cfg.cartographerBudgetSeconds, cfg.cartographerMaxVisionCalls,
-                    run,
+                    run, semantics,
                 )
 
                 Log.main("bootstrap complete — entering campaign loop")
@@ -235,8 +240,8 @@ fun main(args: Array<String>) {
                     Log.turn(
                         turn = turn,
                         phase = phase.name,
-                        smX = state.ram["smPlayerX"],
-                        smY = state.ram["smPlayerY"],
+                        smX = semantics.localPosition(state.ram)?.first,
+                        smY = semantics.localPosition(state.ram)?.second,
                         tool = decision.tool,
                         args = decision.args,
                         outcome = outcomeLabel.lowercase(),
@@ -315,7 +320,7 @@ fun main(args: Array<String>) {
                                 toolset.step(buttons = emptyList(), frames = 12)
                             }
                             advisor.plan(
-                                reason = "OBSERVATION: gold dropped -${delta}G at sm=(${state.ram["smPlayerX"]},${state.ram["smPlayerY"]}) while last tool was `${decision.tool}` (no intentional spend). Cause unknown — could be accidental NPC dialog (Yes/No), an inn-stay, a misfired skill, or a legitimate cost we didn't model. Inspect the current screenshot to identify which building/NPC the party is adjacent to (sign text, counter contents) and decide whether to retry, back out, or continue. Do NOT assume it was an inn unless the screenshot confirms a bed/INN sign.",
+                                reason = "OBSERVATION: gold dropped -${delta}G at sm=${semantics.localPosition(state.ram)} while last tool was `${decision.tool}` (no intentional spend). Cause unknown — could be accidental NPC dialog (Yes/No), an inn-stay, a misfired skill, or a legitimate cost we didn't model. Inspect the current screenshot to identify which building/NPC the party is adjacent to (sign text, counter contents) and decide whether to retry, back out, or continue. Do NOT assume it was an inn unless the screenshot confirms a bed/INN sign.",
                                 screenshotB64 = snap, turn = turn,
                                 phase = phase, ram = state.ram,
                             )

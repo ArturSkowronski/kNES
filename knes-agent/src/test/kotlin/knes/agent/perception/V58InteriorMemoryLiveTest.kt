@@ -1,5 +1,6 @@
 package knes.agent.perception
 
+import knes.agent.tools.results.GameSemantics
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldNotBeEmpty
@@ -49,7 +50,7 @@ class V58InteriorMemoryLiveTest : FunSpec({
         val toolset = LocalEmulatorToolset(session)
         check(toolset.loadRom(romPath).ok)
         toolset.applyProfile("ff1")
-        check(PressStartUntilOverworld(toolset).invoke().ok) { "PressStartUntilOverworld failed" }
+        check(PressStartUntilOverworld(toolset, GameSemantics.of("ff1")).invoke().ok) { "PressStartUntilOverworld failed" }
         toolset.step(buttons = emptyList(), frames = 60)
         suspend fun stepDir(name: String, n: Int) {
             repeat(n) {
@@ -80,7 +81,7 @@ class V58InteriorMemoryLiveTest : FunSpec({
             mapIdProvider = { toolset.getState().ram["currentMapId"] ?: -1 },
         )
         val toolCallLog = ToolCallLog()
-        val exitSkill = ExitInterior(toolset, mapSession, fog, pathfinder, toolCallLog, mem)
+        val exitSkill = ExitInterior(toolset, mapSession, fog, GameSemantics.of("ff1"), pathfinder, toolCallLog, mem)
         val result = exitSkill.invoke(mapOf("maxSteps" to "20"))
         println("[v58-live] ExitInterior(maxSteps=20) → ok=${result.ok} message=\"${result.message}\"")
         println("[v58-live] memory.visited(mapId=$mapId).size = ${mem.visited(mapId).size}")
