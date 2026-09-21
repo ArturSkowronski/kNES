@@ -18,7 +18,6 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.compose' version '2.3.20'
 }
 
-ext.knesJvmTarget = '17'
 apply from: "$rootDir/gradle/conventions/kotlin-module.gradle"
 
 repositories {

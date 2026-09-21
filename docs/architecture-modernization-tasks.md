@@ -344,14 +344,19 @@ Two things it deliberately does not do:
   name instead of importing the type. `buildSrc` would allow the import, at the cost of
   an extra build to configure and compile.
 
-### F2. Decide Java 11 or 17 — **S to decide, M to migrate**
+### F2. Decide Java 11 or 17 — *settled 2026-09-21: **17 everywhere***
 
-Currently split: 11 in `knes-emulator`, `knes-controllers`, `knes-debug`,
-`knes-emulator-session`, `knes-terminal-ui`, `knes-skiko-ui`, `knes-applet-ui`; 17 in
-root, `knes-api`, `knes-mcp`, `knes-agent`, `knes-agent-tools`, `knes-compose-ui`.
+Artur's call. Every module now targets Java 17, verified the same way F1 was: the
+bytecode major version of a compiled class from each of the twelve modules, all 61
+(previously seven were 55). `gradle/conventions/kotlin-module.gradle` no longer takes a
+target parameter.
 
-The 11/17 line runs straight through the core/tooling boundary, which may well be
-deliberate — write the reason down either way.
+Consequence worth knowing: the emulator core no longer runs on a JRE 11. Nothing in the
+repo needed that, and nothing recorded why it was ever a goal.
+
+Side effect: the `java.applet` removal warnings in `knes-applet-ui` and
+`src/main/java/knes/launcher/AppletLauncher.java` are now unavoidable on every build
+rather than hidden behind an older target. That makes F3 more pressing, not less.
 
 ### F3. Demote or remove the applet — **M** — *partly done 2026-09-21*
 
