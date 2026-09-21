@@ -127,7 +127,7 @@ fun main(args: Array<String>) {
                 val haiku = HaikuClient(anthropicHttp)
                 val tools = DefaultToolSurface(
                     toolset = toolset,
-                    phaseProvider = { Phase.fromRam(toolset.getState().ram) },
+                    phaseProvider = { Phase.fromRam(toolset.getState().ram, cfg.profile) },
                     pressStartUntilOverworld = pressStart,
                     walkOverworld = walkOverworld,
                     exitInterior = exitInterior,
@@ -175,7 +175,7 @@ fun main(args: Array<String>) {
                     val s0 = toolset.getState()
                     advisor.plan(
                         reason = "T0 fresh campaign", screenshotB64 = snap0, turn = firstTurn,
-                        phase = Phase.fromRam(s0.ram), ram = s0.ram,
+                        phase = Phase.fromRam(s0.ram, cfg.profile), ram = s0.ram,
                     )
                 } else {
                     waitForStableFrame(toolset)
@@ -183,7 +183,7 @@ fun main(args: Array<String>) {
                     val s = toolset.getState()
                     advisor.plan(
                         reason = "resume context", screenshotB64 = snap, turn = firstTurn,
-                        phase = Phase.fromRam(s.ram), ram = s.ram,
+                        phase = Phase.fromRam(s.ram, cfg.profile), ram = s.ram,
                     )
                 }
 
@@ -219,7 +219,7 @@ fun main(args: Array<String>) {
                     val snap = toolset.getScreen().base64
                     snapshotDumper.dump(turn)
                     val state = toolset.getState()
-                    val phase = Phase.fromRam(state.ram)
+                    val phase = Phase.fromRam(state.ram, cfg.profile)
                     val ramDigest = state.ram.entries.joinToString(",") { "${it.key}=${it.value}" }
 
                     val decision = executor.act(screenshotB64 = snap, ramDigest = ramDigest, turn = turn)

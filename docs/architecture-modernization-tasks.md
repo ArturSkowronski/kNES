@@ -19,21 +19,19 @@ unless `Depends on` says otherwise.
 
 Cheapest wins. Every task here closes a gap that current code actively contradicts.
 
-### A1. Collapse the two phase classifiers — **M**
+### A1. Collapse the two phase classifiers — **M** — *done 2026-09-21*
 
-`Phase.fromRam` (`knes-agent/src/main/kotlin/knes/agent/runtime/Phase.kt:23`) and
-`ProfileSemantics.phaseFor` (`knes-debug`) now classify the same RAM with the same FF1
-constants, independently. The agent enum also carries four states the observation
-contract lacks: `Dialog`, `BattleMessage`, `Cutscene`, `CartographerExplore`.
+`Phase.fromRam` now delegates to `AgentObservationBuilder.phaseFor`, so the FF1 rules
+exist once, in `profiles/ff1.json`.
 
-- Move `Dialog` / `BattleMessage` / `Cutscene` into `ff1.json` phase rules.
-- `CartographerExplore` is agent state, not a RAM fact — keep it out of the profile and
-  model it as an agent-side overlay on the observed phase.
-- Delete `Phase.fromRam`; have the runtime read `AgentObservation.phase`.
-- `PHASE_STATIC_WHITELIST` moves with it.
+Correction to the original plan: `Dialog`, `BattleMessage` and `Cutscene` were **not**
+states the agent could reach. `fromRam` never returned them and nothing else assigned
+them — they were unreachable enum constants, referenced only by
+`PHASE_STATIC_WHITELIST`. Inventing RAM rules for them would have meant inventing
+semantics nobody had verified, so they were deleted instead. `Watchdog` keeps its
+whitelist *mechanism* with an empty default; real dialog detection belongs to G1.
 
-**Done when:** `grep -rn "screenState\|mapflags" knes-agent/src/main/kotlin/knes/agent/runtime/`
-returns nothing, and the agent's phase for a given RAM snapshot matches the observation's.
+`CartographerExplore` stayed agent-side as planned.
 
 ### A2. Evict FF1 constants from the agent runtime — **L, split per file**
 
