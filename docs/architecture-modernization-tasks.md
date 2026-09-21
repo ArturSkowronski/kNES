@@ -121,13 +121,21 @@ removed 416 lines without a new abstraction.
 health-checks in its constructor, and building it eagerly made `--remote` die at startup
 instead of on the first tool call. A test pins that.
 
-### B2. Expose MCP resources — **M**
+### B2. Expose MCP resources — **M** — *done 2026-09-21*
 
 `grep -rn "addResource" knes-mcp/src/main` returns nothing. Everything is a tool, so stable
 read-only data is re-fetched as tool calls and re-serialized each time.
 
-Publish as resources: loaded ROM metadata, emulator state snapshot, active profile,
-watched RAM definitions, and the new profile semantics.
+Published: `knes://emulator/state`, `knes://emulator/profiles`,
+`knes://profiles/watched-ram` and `knes://profiles/semantics`.
+
+ROM metadata is not among them — nothing on the `EmulatorToolset` port reports it today,
+and inventing a REST endpoint for it belongs with the port work, not here. Left for
+later.
+
+Both rules from B1 apply and are tested: registration must not touch the backend, and
+the read handlers must share **one** backend instance rather than calling the provider
+(which would build a fresh emulator per read).
 
 ### B3. Structured tool results — **M**
 

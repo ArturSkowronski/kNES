@@ -44,12 +44,17 @@ fun createMcpServer(backend: () -> EmulatorToolset): Server {
         ),
         options = ServerOptions(
             capabilities = ServerCapabilities(
-                tools = ServerCapabilities.Tools(listChanged = true)
+                tools = ServerCapabilities.Tools(listChanged = true),
+                resources = ServerCapabilities.Resources(subscribe = false, listChanged = false)
             )
         )
     )
 
     val json = Json { encodeDefaults = true }
+
+    // `{ toolset }`, not `backend` — reading the lazy val reuses the one instance.
+    // Passing the provider itself would build a fresh emulator on every resource read.
+    McpResources.register(server, { toolset }, json)
 
     // 1. load_rom
     server.addTool(
