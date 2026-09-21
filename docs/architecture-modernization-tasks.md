@@ -224,10 +224,10 @@ PPU is not advanced from here at all — two incompatible execution models in on
 frequency, dots per CPU cycle, the PAL correction interval). Behaviour-preserving, and
 nestest is now a real regression guard for it.
 
-**C3b — one coordinator — M.** A `ConsoleClock` that owns "advance the console by N CPU
-cycles" and calls the PPU and APU itself. `CPU.emulate` calls it instead of poking two
-components. The schedule moves to one place while still being driven from the CPU loop.
-*Depends on C3a.*
+**C3b — one coordinator — M — *done 2026-09-21*.** `ConsoleClock` owns "advance the
+console by N CPU cycles" and calls the PPU and APU itself; `CPU.emulate` asks to be
+caught up with instead of poking two components. Still called from the CPU's loop —
+inverting that is C3c.
 
 **C3c — invert the drive — L.** Move the loop out of the CPU so the coordinator drives:
 step an instruction, then advance the PPU and APU by what it cost. This is what makes a
@@ -240,6 +240,15 @@ being a mode: the UIs drive frames through the coordinator like everything else,
 **C3e — fix PAL properly — S.** With the schedule in one place, PAL becomes 3.2 dots per
 CPU cycle on the PPU's side rather than a fifth-instruction correction on the CPU's.
 *Depends on C3c, and needs a PAL test ROM to verify.*
+
+Found while doing C3b: **PAL's extra cycle never fires under stepped execution.** The
+counter tracking "every fifth instruction" is a local in `CPU.emulate`, and `step()`
+re-enters `emulate()` per instruction, resetting it before it can reach five. Ten stepped
+NOPs cost 20 cycles under PAL, the same as NTSC, where they should cost 22. Harmless
+today because every stepped configuration in this repo is NTSC, and pinned by
+`PalTimingTest` so the assertion flips when C3c/C3e fix it. It is a good illustration of
+what two execution models cost: the same config produces different timing depending on
+who owns the loop.
 
 ## Wave D — state and replay
 
