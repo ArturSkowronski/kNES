@@ -364,11 +364,22 @@ it; what changed is that a caller can ask instead of inferring it from the pictu
 Tested without shipping a commercial ROM: the suite writes a minimal valid iNES file
 with whatever mapper byte it wants.
 
-**Still open:** actually implementing mappers. UxROM (2) and CNROM (3) are the obvious
-next ones by catalogue size, but neither can be verified here — the repo has no test ROM
-for them, and the commercial ROMs in `roms/` are correctly gitignored. That is the
-separation the task asks for, and it means a new mapper needs a redistributable test ROM
-brought in first.
+**MMC1 now has real coverage.** `nestest` is NROM: 16 KiB, no bank switching at all, so
+nothing in the suite exercised a mapper. `CommercialRomCompatibilityTest` boots Final
+Fantasy — MMC1, sixteen PRG banks, 256 KiB against a 32 KiB CPU window, so the game
+cannot reach its own boot code unless banks switch — and asserts it reaches `$00F9 =
+0x4D`, the warm-boot value the FF1 profile documents. A companion assertion checks the
+machine actually ran, so the marker cannot pass on leftover reset state.
+
+Expectations are a table of ROM name → mapper, PRG banks, boot marker, so compatibility
+is tracked rather than logged ad hoc. The suite **skips itself** when `roms/` is absent:
+those files cannot be redistributed, so CI stays green and a developer with them gets the
+coverage.
+
+**Still open:** mappers nobody here has a ROM for. Every commercial ROM available is
+mapper 1 (`vnes.nes` reads as 64 but has junk in header bytes 8–15, so `ROM.load`
+correctly masks it to NROM). UxROM (2) and CNROM (3) are the obvious next ones by
+catalogue size, and each needs a ROM before it is worth writing.
 
 ### E3. Debug API: breakpoints, watchpoints, trace ring buffer — **L** — *partly done 2026-09-21*
 
