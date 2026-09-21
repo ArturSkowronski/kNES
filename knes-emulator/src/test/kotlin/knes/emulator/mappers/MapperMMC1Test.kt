@@ -25,7 +25,7 @@ class MapperMMC1Test : FunSpec({
             override fun getTimer(): HiResTimer = HiResTimer()
             override fun imageReady(skipFrame: Boolean, buffer: IntArray) {}
         }
-        return NES(gui, NesConfig(steppedExecution = false, enableSound = false, timeEmulation = false))
+        return NES(gui, NesConfig(enableSound = false, timeEmulation = false))
     }
 
     fun createMapper(nes: NES): MapperMMC1 {

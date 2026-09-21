@@ -250,11 +250,16 @@ fires off the caller's thread, starting twice does not leave two loops, and the
 stop/restart handshake `stateSave` relies on keeps working. Seven tests, sub-second, and
 checked five times over for flakiness before landing.
 
-**C3d — delete the second execution model — S, ready.** C3c made this nearly free:
-every path that wants frames now goes through `stepInstruction`, so `steppedExecution`
-has shrunk to "clock the PPU or not" and nothing in production sets it false. Removing
-it drops the flag from `NesConfig`, the check from `stepFrame`, and the tests that
-exercise the mode. Held back only so the inversion could be reviewed on its own.
+**C3d — delete the second execution model — S — *done 2026-09-22*.** `steppedExecution`
+is gone from `NesConfig`, the check from `stepFrame`, and the branch from `ConsoleClock`.
+The CPU loop always clocks the PPU, so frames need no configuring.
+
+Worth noting what did *not* happen: `PpuTestHarness` and `MapperMMC1Test` had the flag
+off and now clock the PPU during CPU steps. They pass unchanged, so the flag was not
+providing the test isolation it looked like it might be.
+
+`Globals.appletMode`, which fed it, is now read by nothing in the emulator. The applet
+still writes it; removing that belongs with F3.
 
 **C3e — fix PAL properly — S.** With the schedule in one place, PAL becomes 3.2 dots per
 CPU cycle on the PPU's side rather than a fifth-instruction correction on the CPU's.

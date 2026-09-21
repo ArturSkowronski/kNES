@@ -22,8 +22,8 @@ class EmulatorTestHarness(romPath: String) {
     val nes: NES
 
     init {
-        // steppedExecution = true is required so that PPU cycles execute on each cpu.step(),
-        // which causes imageReady() to fire at the end of each VBlank — giving us real frames.
+        // The CPU loop always clocks the PPU, so imageReady() fires at the end of each
+        // VBlank and this harness gets real frames without configuring anything.
 
         val gui = object : GUI {
             override fun sendErrorMsg(message: String) {}

@@ -21,9 +21,8 @@ private fun clock(
     ppu: RecordingPpu = RecordingPpu(),
     apu: RecordingApu = RecordingApu(),
     timing: ConsoleTiming = ConsoleTiming.NTSC,
-    clocksPpu: Boolean = true,
     clocksApu: Boolean = true,
-) = ConsoleClock(timing, ppu, apu, clocksPpu, clocksApu)
+) = ConsoleClock(timing, ppu, apu, clocksApu)
 
 class ConsoleClockTest : FunSpec({
 
@@ -44,18 +43,6 @@ class ConsoleClockTest : FunSpec({
         clock(apu = apu, clocksApu = false).advance(4)
 
         apu.cycles shouldBe emptyList()
-    }
-
-    test("when something else drives the PPU, the clock leaves it alone") {
-        val ppu = RecordingPpu()
-        val apu = RecordingApu()
-
-        clock(ppu, apu, clocksPpu = false).advance(4)
-
-        ppu.dots shouldBe emptyList()
-        ppu.emulated shouldBe 0
-        // The APU still hears about it — the two are independent.
-        apu.cycles shouldBe listOf(4)
     }
 
     test("the dot ratio comes from the timing, not from the clock") {

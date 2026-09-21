@@ -8,7 +8,7 @@ private fun steppedNopCycles(palEmulation: Boolean): Int {
     val harness = CpuTestHarness()
     harness.cpu.init(
         harness.memory,
-        NesConfig(steppedExecution = false, enableSound = false, palEmulation = palEmulation),
+        NesConfig(enableSound = false, palEmulation = palEmulation),
     )
     harness.cpu.setMapper(TestMemoryAccess(harness.memory))
     harness.cpu.reset()

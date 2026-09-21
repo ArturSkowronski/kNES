@@ -43,7 +43,10 @@ object Globals {
     const val fsdebug: Boolean = false
 
     @JvmField
-    /** Maps to [knes.emulator.NesConfig.steppedExecution]; see the note there on the name. */
+    /**
+     * Read by nothing in the emulator any more. The applet still writes it; there is one
+     * execution model now, so no flag decides who drives the PPU.
+     */
     var appletMode: Boolean = true
     @JvmField
     var disableSprites: Boolean = false

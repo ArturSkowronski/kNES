@@ -17,15 +17,6 @@ import knes.emulator.utils.Globals
  * something.
  */
 data class NesConfig(
-    /**
-     * The CPU loop clocks the PPU, one instruction at a time.
-     *
-     * This is what makes stepped execution work: with it off the PPU is driven
-     * elsewhere and [NES.stepFrame] would never see a frame boundary. It was called
-     * `appletMode` and has nothing to do with applets — the applet merely happened to
-     * be the host that needed it on.
-     */
-    val steppedExecution: Boolean = true,
     val palEmulation: Boolean = false,
     var enableSound: Boolean = true,
     /** Sleep between frames to hold real-time speed. Off means run as fast as possible. */
@@ -38,14 +29,13 @@ data class NesConfig(
 
     companion object {
         /** Headless: no audio device, no frame pacing. */
-        val HEADLESS = NesConfig(steppedExecution = true, enableSound = false, timeEmulation = false)
+        val HEADLESS = NesConfig(enableSound = false, timeEmulation = false)
 
         /**
          * Reads the legacy [Globals] singleton, for hosts that still configure through it.
          * New code should build a [NesConfig] and pass it to [NES] instead.
          */
         fun fromGlobals() = NesConfig(
-            steppedExecution = Globals.appletMode,
             palEmulation = Globals.palEmulation,
             enableSound = Globals.enableSound,
             timeEmulation = Globals.timeEmulation,

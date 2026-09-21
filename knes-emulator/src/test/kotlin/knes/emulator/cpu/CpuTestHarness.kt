@@ -22,7 +22,7 @@ class CpuTestHarness {
         }
 
         cpu = CPU(noopPapu, noopPpu)
-        cpu.init(memory, NesConfig(steppedExecution = false, enableSound = false))
+        cpu.init(memory, NesConfig(enableSound = false))
         cpu.setMapper(TestMemoryAccess(memory))
         cpu.reset()
         cpu.REG_PC_NEW = programBase - 1

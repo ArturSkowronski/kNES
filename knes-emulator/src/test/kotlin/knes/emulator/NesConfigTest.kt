@@ -50,7 +50,6 @@ class NesConfigTest : FunSpec({
     test("the headless preset runs without audio or frame pacing") {
         NesConfig.HEADLESS.enableSound shouldBe false
         NesConfig.HEADLESS.timeEmulation shouldBe false
-        NesConfig.HEADLESS.steppedExecution shouldBe true
     }
 
     test("a host that passes no config still gets the legacy singleton") {
@@ -72,20 +71,15 @@ class NesConfigTest : FunSpec({
         nes.config.preferredFrameRate shouldBe 50
     }
 
-    test("steppedExecution is what decides whether the CPU loop clocks the PPU") {
-        // The name used to be appletMode, which said nothing about what it does. This
-        // pins the actual behaviour so the name stays honest.
-        val stepped = NES(host(), NesConfig.HEADLESS)
-        val notStepped = NES(host(), NesConfig.HEADLESS.copy(steppedExecution = false))
-        val rom = java.io.File("src/test/resources/nestest.nes").absolutePath
-        stepped.loadRom(rom) shouldBe true
-        notStepped.loadRom(rom) shouldBe true
+    test("every emulator clocks its own PPU, so frames need no configuring") {
+        // There used to be a flag deciding whether the CPU loop drives the PPU, which
+        // meant the same config produced frames or did not depending on who owned the
+        // loop. C3c and C3d removed the choice.
+        val nes = NES(host(), NesConfig.HEADLESS)
+        nes.loadRom(java.io.File("src/test/resources/nestest.nes").absolutePath) shouldBe true
 
-        repeat(20_000) { stepped.stepInstruction() }
-        repeat(20_000) { notStepped.stepInstruction() }
+        repeat(20_000) { nes.stepInstruction() }
 
-        // Same instruction count, but only one of them produced frames.
-        (stepped.frameCount > 0) shouldBe true
-        notStepped.frameCount shouldBe 0L
+        (nes.frameCount > 0) shouldBe true
     }
 })

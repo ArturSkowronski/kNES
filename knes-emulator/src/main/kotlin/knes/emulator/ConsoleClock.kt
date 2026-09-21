@@ -17,18 +17,11 @@ class ConsoleClock(
     private val timing: ConsoleTiming,
     private val ppu: PPUCycles,
     private val apu: PAPUClockFrame,
-    /**
-     * Whether the PPU is advanced from here. False when something else drives it — see
-     * [NesConfig.steppedExecution], which is really a choice of who owns the loop.
-     */
-    private val clocksPpu: Boolean,
     private val clocksApu: Boolean,
 ) {
     fun advance(cpuCycles: Int) {
-        if (clocksPpu) {
-            ppu.setCycles(cpuCycles * timing.ppuDotsPerCpuCycle)
-            ppu.emulateCycles()
-        }
+        ppu.setCycles(cpuCycles * timing.ppuDotsPerCpuCycle)
+        ppu.emulateCycles()
         if (clocksApu) {
             apu.clockFrameCounter(cpuCycles)
         }
