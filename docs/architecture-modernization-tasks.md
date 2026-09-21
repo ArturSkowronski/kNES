@@ -488,10 +488,33 @@ rather than re-deriving the game's rules.
   `MapSession`, well above the port. Either the port grows a tile-reading operation or
   this stays agent-side; that is a port decision, not an observation one.
 
-### G2. Benchmark tasks with explicit win conditions — **M**
+### G2. Benchmark tasks with explicit win conditions — **M** — *done 2026-09-22*
 
-Reach Coneria, buy a weapon, equip it, exit town, survive a battle, reach the next
-landmark. Each needs a machine-checkable predicate, reusable by the Reviewer.
+The predicates already existed (`Ff1Campaign`, since #139) and the Reviewer already used
+them. What was missing is a way to check them **without a model**.
+
+`CampaignBenchmark` plays a `knes-replay` script against a real ROM and reports which
+milestones latched, which were missed, the final phase and the gold. Milestones latch as
+they do in a live run, and are evaluated **every frame** — several of them describe a tile
+the party occupies for a moment, so sampling per replay entry would miss them.
+
+`Ff1BenchmarkTest` proves the whole stack end to end with no LLM: alternating START and A
+for seventy rounds boots Final Fantasy through NEW GAME, class select and name entry, the
+`boot` milestone latches, the party lands inside the Coneria world anchor the profile
+describes, and gold reads 400 — FF1's starting amount. MMC1, emulation, profile
+addresses, phase rules, landmark anchors and the gold decoder all have to be right for
+that to hold.
+
+Three of the six cases exist to keep it honest: a script that presses nothing reaches
+nothing (otherwise a green benchmark would mean nothing), the script survives a round trip
+through the replay text format (it is an artifact, not a Kotlin literal), and the frame
+count confirms per-frame evaluation.
+
+Skips when `roms/` is absent, like the compatibility suite.
+
+**Still open:** scripts that reach the later milestones. Getting to the weapon shop needs
+navigation, which is what the agent is for — those scripts should be *recorded* from a
+real run with `ReplayRecorder` (#153) rather than hand-written.
 
 ### G3. Replayable decision traces — **M** — *done 2026-09-21*
 
