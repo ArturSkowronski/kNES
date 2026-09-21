@@ -101,4 +101,42 @@ class Ff1CampaignTest : StringSpec({
         Campaign.of("FF1") shouldBe Ff1Campaign
         Campaign.of(null) shouldBe NoCampaign
     }
+
+    "a weapon byte splits into an equipped flag and an item id" {
+        Ff1Campaign.weaponId(0x83) shouldBe 3
+        Ff1Campaign.weaponId(0x03) shouldBe 3
+        Ff1Campaign.isEquipped(0x83) shouldBe true
+        Ff1Campaign.isEquipped(0x03) shouldBe false
+    }
+
+    "weaponSlot reads an empty slot as zero" {
+        val ram = mapOf("char2_weapon1" to 0x84)
+        Ff1Campaign.weaponSlot(ram, 2, 1) shouldBe 0x84
+        Ff1Campaign.weaponSlot(ram, 2, 0) shouldBe 0
+        Ff1Campaign.weaponSlot(emptyMap(), 1, 0) shouldBe 0
+    }
+
+    "minHpPct reports the worst-off member" {
+        val ram = mapOf(
+            "char1_hpLow" to 30, "char1_hpHigh" to 0, "char1_maxHpLow" to 30, "char1_maxHpHigh" to 0,
+            "char2_hpLow" to 5, "char2_hpHigh" to 0, "char2_maxHpLow" to 20, "char2_maxHpHigh" to 0,
+        )
+        Ff1Campaign.minHpPct(ram) shouldBe 25
+    }
+
+    "minHpPct reads HP as 16-bit little-endian" {
+        val ram = mapOf(
+            "char1_hpLow" to 0x00, "char1_hpHigh" to 0x01,
+            "char1_maxHpLow" to 0x00, "char1_maxHpHigh" to 0x02,
+        )
+        Ff1Campaign.minHpPct(ram) shouldBe 50
+    }
+
+    "no readable HP reports full health rather than a false alarm" {
+        Ff1Campaign.minHpPct(emptyMap()) shouldBe 100
+        // A max of zero is not a dead party, it is an unreadable one.
+        Ff1Campaign.minHpPct(
+            mapOf("char1_hpLow" to 0, "char1_hpHigh" to 0, "char1_maxHpLow" to 0, "char1_maxHpHigh" to 0)
+        ) shouldBe 100
+    }
 })

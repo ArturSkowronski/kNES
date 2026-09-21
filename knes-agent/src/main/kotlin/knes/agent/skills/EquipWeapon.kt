@@ -1,6 +1,6 @@
 package knes.agent.skills
 
-import knes.agent.runtime.StrategyContext
+import knes.agent.campaign.Ff1Campaign
 import knes.agent.tools.EmulatorToolset
 
 /**
@@ -38,13 +38,13 @@ class EquipWeapon(private val toolset: EmulatorToolset) : Skill {
             ?: return SkillResult(false, "Bad args: weaponSlot missing/invalid", ramAfter = emptyMap())
 
         val pre = toolset.getState().ram
-        val preByte = StrategyContext.weaponSlot(pre, charSlot, weaponSlot)
-        if (StrategyContext.weaponId(preByte) == 0) {
+        val preByte = Ff1Campaign.weaponSlot(pre, charSlot, weaponSlot)
+        if (Ff1Campaign.weaponId(preByte) == 0) {
             return SkillResult(false,
                 "WeaponNotInSlot: char=$charSlot slot=$weaponSlot byte=0",
                 ramAfter = pre)
         }
-        if (StrategyContext.isEquipped(preByte)) {
+        if (Ff1Campaign.isEquipped(preByte)) {
             return SkillResult(true,
                 "AlreadyEquipped: char=$charSlot slot=$weaponSlot byte=$preByte",
                 ramAfter = pre)
@@ -68,8 +68,8 @@ class EquipWeapon(private val toolset: EmulatorToolset) : Skill {
             toolset.tap(button = "A", count = 1, pressFrames = 5, gapFrames = 15)
             taps++
             val ram = toolset.getState().ram
-            val curByte = StrategyContext.weaponSlot(ram, charSlot, weaponSlot)
-            if (StrategyContext.isEquipped(curByte)) {
+            val curByte = Ff1Campaign.weaponSlot(ram, charSlot, weaponSlot)
+            if (Ff1Campaign.isEquipped(curByte)) {
                 // Close menu: B-mash back to overworld.
                 repeat(recoveryBTaps) { toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 20) }
                 return SkillResult(true,
