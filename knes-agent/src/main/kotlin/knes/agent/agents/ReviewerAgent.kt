@@ -1,7 +1,9 @@
 package knes.agent.agents
 
+import knes.agent.campaign.Campaign
+import knes.agent.campaign.NoCampaign
+
 import knes.agent.llm.HaikuClient
-import knes.agent.runtime.MilestonePredicates
 import knes.agent.runtime.Phase
 import knes.agent.runtime.ReviewEntry
 import knes.agent.runtime.Memory
@@ -13,6 +15,7 @@ class ReviewerAgent(
     private val haiku: HaikuClient,
     private val memory: Memory,
     private val run: knes.agent.runtime.RunDirectory? = null,
+    private val campaign: Campaign = NoCampaign,
 ) {
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = false }
 
@@ -123,9 +126,9 @@ class ReviewerAgent(
             if (m.status != "done") continue
             // Event-type milestones describe a transient state — don't
             // re-verify or we'd regress a legitimate latch.
-            if (m.id in MilestonePredicates.EVENT_TYPE) continue
+            if (m.id in campaign.eventTypeMilestones) continue
             checked += m.id
-            if (!MilestonePredicates.evaluate(m.id, phase, ram, prereqDone)) {
+            if (!campaign.isSatisfied(m.id, phase, ram, prereqDone)) {
                 knes.agent.runtime.Log.warn("REGRESSION milestone ${m.id} no longer satisfied — reverting to in_progress", turn)
                 m.status = "in_progress"
                 m.turnEnd = null
@@ -175,11 +178,10 @@ class ReviewerAgent(
         if (turn - lastStuckReplanTurn < STUCK_REPLAN_COOLDOWN) return null
         lastStuckReplanTurn = turn
 
-        val party = MilestonePredicates.partyWeaponDigest(ram)
-        val held = (1..4).count { MilestonePredicates.charHoldsAny(it, ram) }
-        val equipped = (1..4).count { MilestonePredicates.charHasEquipped(it, ram) }
-        val gold = ((ram["goldHigh"] ?: 0) shl 16) or
-            ((ram["goldMid"] ?: 0) shl 8) or (ram["goldLow"] ?: 0)
+        val party = campaign.partyDigest(ram)
+        val held = campaign.countHolding(ram)
+        val equipped = campaign.countEquipped(ram)
+        val gold = campaign.gold(ram)
 
         val tail = when (current.id) {
             "arm_party" -> "The current plan's `armCharsViaMenu` sentinel keeps the cursor parked " +

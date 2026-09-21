@@ -1,5 +1,7 @@
 package knes.agent.runtime
 
+import knes.agent.campaign.Ff1Campaign
+
 import kotlin.math.roundToInt
 
 /** RAM-derived FF1 helpers. Gold is 24-bit LE; HP is 16-bit LE; weapon bytes are flag|id. */
@@ -13,12 +15,7 @@ object StrategyContext {
         return pcts.minOrNull() ?: 100
     }
 
-    fun totalGold(ram: Map<String, Int>): Int {
-        val lo = ram["goldLow"] ?: 0
-        val mid = ram["goldMid"] ?: 0
-        val hi = ram["goldHigh"] ?: 0
-        return (hi shl 16) or (mid shl 8) or lo
-    }
+    fun totalGold(ram: Map<String, Int>): Int = Ff1Campaign.gold(ram)
 
     fun weaponSlot(ram: Map<String, Int>, char: Int, slot: Int): Int =
         ram["char${char}_weapon${slot}"] ?: 0

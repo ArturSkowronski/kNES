@@ -3,7 +3,8 @@ package knes.agent.agents
 import knes.agent.perception.LandmarkMemory
 import knes.agent.runtime.LandmarkContext
 import knes.agent.llm.GeminiPro31Client
-import knes.agent.runtime.MilestonePredicates
+import knes.agent.campaign.Campaign
+import knes.agent.campaign.NoCampaign
 import knes.agent.runtime.Phase
 import knes.agent.runtime.Plan
 import knes.agent.runtime.PlanEntry
@@ -21,6 +22,7 @@ class AdvisorAgent(
     private val memory: Memory,
     private val run: RunDirectory,
     private val landmarks: LandmarkMemory? = null,
+    private val campaign: Campaign = NoCampaign,
 ) {
     private companion object {
         val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
@@ -105,16 +107,16 @@ class AdvisorAgent(
         val sy = ram["smPlayerY"] ?: 0
         val wx = ram["worldX"] ?: 0
         val wy = ram["worldY"] ?: 0
-        val gold = ((ram["goldHigh"] ?: 0) shl 16) or ((ram["goldMid"] ?: 0) shl 8) or (ram["goldLow"] ?: 0)
+        val gold = campaign.gold(ram)
         val coordHint = when (phase) {
             Phase.Overworld -> "walkTo args MUST be world coords (worldX/worldY ~80-240). DO NOT pass small numbers like (11,10)."
             Phase.Town      -> "walkTo args MUST be town-local coords (smPlayerX/smPlayerY 0-31). e.g. (11,10) for the shopkeeper."
             Phase.Indoors   -> "walkTo dispatches exitInterior — your first step from here should be walkTo to leave this map back to Overworld, then re-enter the correct destination."
             else            -> "phase ${phase} — see TOOLS list for valid args."
         }
-        val party = MilestonePredicates.partyWeaponDigest(ram)
-        val buyDone = (1..4).count { MilestonePredicates.charHoldsAny(it, ram) }
-        val equipDone = (1..4).count { MilestonePredicates.charHasEquipped(it, ram) }
+        val party = campaign.partyDigest(ram)
+        val buyDone = campaign.countHolding(ram)
+        val equipDone = campaign.countEquipped(ram)
         return """
             Current state (live):
               phase=$phase  currentMapId=$mapId  mapflags=$mf
