@@ -9,6 +9,8 @@ import knes.agent.pathfinding.InteriorPathfinder
 import knes.agent.pathfinding.Pathfinder
 import knes.agent.runtime.ToolCallLog
 import knes.agent.tools.EmulatorToolset
+import knes.agent.tools.results.GameSemantics
+import knes.agent.tools.results.AgentPhase
 
 /**
  * Walks toward the nearest exit (DOOR / STAIRS / WARP or south-edge implicit exit)
@@ -24,6 +26,7 @@ class ExitInterior(
     private val toolset: EmulatorToolset,
     private val mapSession: MapSession,
     private val fog: FogOfWar,
+    private val semantics: GameSemantics,
     private val pathfinder: Pathfinder = InteriorPathfinder(),
     private val toolCallLog: ToolCallLog? = null,
     private val interiorMemory: InteriorMemory? = null,
@@ -50,18 +53,19 @@ class ExitInterior(
         try {
         while (stepsTaken < maxSteps) {
             val ram = toolset.getState().ram
-            if ((ram["screenState"] ?: 0) == 0x68) {
+            val phase = semantics.phase(ram)
+            if (phase == AgentPhase.Battle) {
                 return SkillResult(true, "encounter triggered after $stepsTaken steps", totalFrames, ram)
             }
-            // V5.6: canonical 'on overworld' = mapflags bit 0 clear.
-            val onOverworld = ((ram["mapflags"] ?: 0) and 0x01) == 0
-            if (onOverworld) {
+            if (phase == AgentPhase.Overworld) {
                 return SkillResult(
                     true,
-                    "reached overworld at (worldX=${ram["worldX"] ?: 0}, worldY=${ram["worldY"] ?: 0})",
+                    "reached overworld at ${semantics.worldPosition(ram)}",
                     totalFrames, ram,
                 )
             }
+            // The interior map id stays a raw read: InteriorMemory persists tile facts
+            // keyed by it, so swapping in an opaque identity would invalidate saved maps.
             val mapId = ram["currentMapId"] ?: -1
             if (mapId < 0) {
                 return SkillResult(false, "currentMapId unknown — RAM byte not configured", totalFrames, ram)
@@ -77,19 +81,18 @@ class ExitInterior(
             // settle frames, rotate cardinals when no world-coord progress.
             // Per memory `reference_ff1_npcs_move`, NPCs wander each frame so
             // a tile blocked one tap may be free the next.
-            if (mapId == 0) {
+            if (phase == AgentPhase.Town) {
                 val (cardinalFrames, exited) = walkOutOfTownOverlay(maxTaps = maxSteps - stepsTaken)
                 totalFrames += cardinalFrames
                 val ramAfter = toolset.getState().ram
                 return if (exited) {
                     SkillResult(true,
-                        "town-overlay exit: reached overworld at (worldX=${ramAfter["worldX"] ?: 0}, " +
-                            "worldY=${ramAfter["worldY"] ?: 0})",
+                        "town-overlay exit: reached overworld at ${semantics.worldPosition(ramAfter)}",
                         totalFrames, ramAfter)
                 } else {
                     SkillResult(false,
-                        "town-overlay exit: did not clear mapflags after ${maxSteps - stepsTaken} cardinal taps " +
-                            "(world=(${ramAfter["worldX"] ?: 0},${ramAfter["worldY"] ?: 0}))",
+                        "town-overlay exit: still in town after ${maxSteps - stepsTaken} cardinal taps " +
+                            "(world=${semantics.worldPosition(ramAfter)})",
                         totalFrames, ramAfter)
                 }
             }
@@ -97,8 +100,7 @@ class ExitInterior(
             // V5.6: party tile = ($0068, $0069) = sm_player_x/y per Disch disassembly.
             // Replaces V2.6.4's static (+8, +7) offset hack on $0029/$002A scroll, which
             // only worked when camera centered on party (broke at map edges).
-            val partyX = ram["smPlayerX"] ?: 0
-            val partyY = ram["smPlayerY"] ?: 0
+            val (partyX, partyY) = semantics.localPosition(ram) ?: (0 to 0)
             interiorMemory?.record(mapId, partyX, partyY, InteriorObservation.VISITED)
             val viewport = mapSession.readFullMapView(partyX to partyY)
             fog.merge(viewport)
@@ -106,8 +108,7 @@ class ExitInterior(
             if (!path.found || path.steps.isEmpty()) {
                 return SkillResult(
                     false,
-                    "no exit visible at mapId=$mapId, party=($partyX,$partyY) " +
-                        "scroll=(${ram["localX"]},${ram["localY"]}): ${path.reason ?: ""}",
+                    "no exit visible at mapId=$mapId, party=($partyX,$partyY): ${path.reason ?: ""}",
                     totalFrames, ram,
                 )
             }

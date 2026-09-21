@@ -41,11 +41,11 @@ for `knes-agent-tools`. `knes-agent/src/main` still hardcodes FF1 in ~10 files:
 | File | What is hardcoded |
 |---|---|
 | ~~`tools/ToolSurface.kt`~~ | *done 2026-09-21 — reads `GameSemantics` instead* |
-| `Main.kt:117,234,461` | `currentMapId`, `smPlayerX/Y`, `mapflags and 0x02` |
+| ~~`Main.kt`~~ | *done — positions via `GameSemantics`* |
 | ~~`runtime/MilestonePredicates.kt`~~ | *done 2026-09-21 — now `campaign/Ff1Campaign`* |
-| `pathfinding/ViewportPathfinder.kt`, `InteriorPathfinder.kt` | coordinate-space assumptions |
+| ~~`pathfinding/*`~~ | *clean already — only a comment mentioned FF1* |
 | ~~`runtime/StrategyContext.kt`~~ | *done 2026-09-21 — folded into `Ff1Campaign`* |
-| `runtime/Memory.kt`, `agents/CartographerAgent.kt`, `llm/HaikuClient.kt` | landmark + coord semantics |
+| ~~`agents/*`, `skills/ExitInterior.kt`, `skills/PressStartUntilOverworld.kt`~~ | *done* |
 
 Do it as one PR per concern, not one big one. Suggested order: ~~`ToolSurface`~~ (done),
 then ~~`MilestonePredicates`~~ (done), then ~~`StrategyContext`~~ (done). The pathfinders
@@ -67,8 +67,15 @@ its own objectives in a knowledge base); kNES keeps it deterministic on purpose,
 anything), plus the existing position mapping. Agents reach them through the
 `GameSemantics` facade in knes-agent-tools, so knes-agent never imports knes-debug.
 
-**Done when:** adding a second FF1-era game needs no edit under `knes-agent/src/main`.
-**Depends on:** A1.
+**Outcome:** four raw RAM reads remain in `knes-agent/src/main`, each deliberate and
+commented — `currentMapId` twice as the persisted `InteriorMemory` key, and
+`currentMapId`/`mapflags` in `AdvisorAgent` because those names appear verbatim in the
+LLM prompt, where renaming them is a behaviour change no test here can catch.
+
+Everything else goes through `GameSemantics` or `Campaign`. The `GameSemantics`
+parameter is **not** defaulted on skills: a default meaning "no semantics" compiles fine
+and fails silently at runtime, which is exactly the stealth no-op this project treats as
+its dominant failure mode.
 
 ### A3. Delete the dead legacy MCP session — **S** — *done 2026-09-21*
 

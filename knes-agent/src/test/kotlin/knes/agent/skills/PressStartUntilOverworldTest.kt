@@ -1,5 +1,6 @@
 package knes.agent.skills
 
+import knes.agent.tools.results.GameSemantics
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.shouldBe
@@ -18,7 +19,7 @@ class PressStartUntilOverworldTest : FunSpec({
         toolset.loadRom(rom).ok shouldBe true
         toolset.applyProfile("ff1").ok shouldBe true
 
-        val result = PressStartUntilOverworld(toolset).invoke()
+        val result = PressStartUntilOverworld(toolset, GameSemantics.of("ff1")).invoke()
 
         result.ok.shouldBeTrue()
         result.ramAfter["char1_hpLow"]!! shouldNotBe 0
