@@ -234,7 +234,7 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
 
         val palEmu = config.palEmulation
         val emulateSound = config.enableSound
-        val asApplet = config.appletMode
+        val clocksPpu = config.steppedExecution
         stopRunning = false
 
         while (true) {
@@ -1131,7 +1131,7 @@ class CPU(private val papuClockFrame: PAPUClockFrame, private val ppucycles: PPU
                 }
             }
 
-            if (asApplet) {
+            if (clocksPpu) {
                 ppucycles.setCycles(cycleCount * 3)
                 ppucycles.emulateCycles()
             }

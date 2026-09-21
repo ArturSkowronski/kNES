@@ -43,6 +43,7 @@ object Globals {
     const val fsdebug: Boolean = false
 
     @JvmField
+    /** Maps to [knes.emulator.NesConfig.steppedExecution]; see the note there on the name. */
     var appletMode: Boolean = true
     @JvmField
     var disableSprites: Boolean = false

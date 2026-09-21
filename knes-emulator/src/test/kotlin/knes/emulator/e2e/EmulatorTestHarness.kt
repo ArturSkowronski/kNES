@@ -22,7 +22,7 @@ class EmulatorTestHarness(romPath: String) {
     val nes: NES
 
     init {
-        // appletMode = true is required so that PPU cycles execute on each cpu.step(),
+        // steppedExecution = true is required so that PPU cycles execute on each cpu.step(),
         // which causes imageReady() to fire at the end of each VBlank — giving us real frames.
 
         val gui = object : GUI {

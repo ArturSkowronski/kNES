@@ -97,12 +97,12 @@ class SteppingApiTest : FunSpec({
     }
 
     test("stepFrame refuses to hang when the CPU loop is not clocking the PPU") {
-        val nes = loadedNes(NesConfig.HEADLESS.copy(appletMode = false))
+        val nes = loadedNes(NesConfig.HEADLESS.copy(steppedExecution = false))
 
         val error = runCatching { nes.stepFrame() }.exceptionOrNull()
 
         (error is IllegalStateException) shouldBe true
-        error!!.message!!.contains("appletMode") shouldBe true
+        error!!.message!!.contains("steppedExecution") shouldBe true
     }
 
     test("stepping many frames keeps the counter honest") {
