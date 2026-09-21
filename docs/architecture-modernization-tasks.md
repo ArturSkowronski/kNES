@@ -371,6 +371,17 @@ cannot reach its own boot code unless banks switch — and asserts it reaches `$
 0x4D`, the warm-boot value the FF1 profile documents. A companion assertion checks the
 machine actually ran, so the marker cannot pass on leftover reset state.
 
+**Rendering had no coverage at all.** Every `imageReady` in this repo's tests is an empty
+lambda, so a regression that blanked the screen would not have failed anything — which
+matters for an agent that navigates by vision. The suite now boots FF1 and asserts the
+PPU goes from a two-colour boot screen to a real picture. nestest is no use for this: it
+draws two colours either way.
+
+Checked while adding it, by running the identical probe against `a842f38` (before this
+session's 33 PRs) in a worktree: PPU output is **byte-identical** — 2 colours after boot,
+10 after the game starts, same RAM. Nothing in the execution-model work changed what the
+screen shows.
+
 Expectations are a table of ROM name → mapper, PRG banks, boot marker, so compatibility
 is tracked rather than logged ad hoc. The suite **skips itself** when `roms/` is absent:
 those files cannot be redistributed, so CI stays green and a developer with them gets the
