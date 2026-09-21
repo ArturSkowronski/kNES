@@ -101,7 +101,7 @@ so every PR branch runs the identical `build` job twice (observed on PR #134: tw
 
 The tool catalog is shared; the handlers are not.
 
-### B1. One backend port behind both MCP modes — **L**
+### B1. One backend port behind both MCP modes — **L** — *done 2026-09-21*
 
 `McpServer.kt` (262 lines) and `RemoteRestBridge.kt` (416 lines) still implement every
 tool twice — in-process against `EmulatorToolset`, remote against hand-rolled REST calls.
@@ -112,7 +112,14 @@ harder to see, not easier.
 - Implement it once in-process and once over REST.
 - Reduce both MCP entry points to registration + serialization.
 
-**Done when:** adding a tool means touching the catalog, the port, and one handler.
+**Outcome:** `EmulatorToolset` was already the port — it had a local and a remote
+implementation. `RemoteRestBridge` was re-adapting REST by hand next to it, so deleting
+it and building both entry points from `createMcpServer(backend: () -> EmulatorToolset)`
+removed 416 lines without a new abstraction.
+
+`createRemoteMcpServer` takes the backend **lazily**: `RemoteEmulatorToolset`
+health-checks in its constructor, and building it eagerly made `--remote` die at startup
+instead of on the first tool call. A test pins that.
 
 ### B2. Expose MCP resources — **M**
 
@@ -129,12 +136,12 @@ keep the text summary as the compatibility layer.
 
 **Depends on:** B1.
 
-### B4. Local/remote parity tests — **M**
+### B4. Local/remote parity tests — **M** — *mostly obsolete after B1*
 
-No test asserts that the two modes answer the same. Drive every catalogued tool through
-both and compare.
-
-**Depends on:** B1.
+Parity is now structural: one handler set, so there is nothing to drift. `McpServerToolsTest`
+drives handlers through a recording fake and asserts both entry points register the
+catalogued tools. What is still worth adding is an end-to-end test against a live REST
+server, which is E2E infrastructure rather than parity.
 
 ---
 
