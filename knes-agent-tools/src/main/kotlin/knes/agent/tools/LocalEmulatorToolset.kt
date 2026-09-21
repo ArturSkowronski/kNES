@@ -37,7 +37,16 @@ open class LocalEmulatorToolset(
     @LLMDescription("Load a NES ROM from the given file path. Requires the Compose UI with embedded API server running on port 6502.")
     override fun loadRom(path: String): StatusResult {
         val ok = session.loadRom(path)
-        return StatusResult(ok, if (ok) "ROM loaded: $path" else "Failed to load ROM: $path")
+        val message = when {
+            !ok -> "Failed to load ROM: $path"
+            // Loading succeeds on an NROM substitute, so say so here rather than leaving
+            // a caller to work it out from behaviour that stops making sense.
+            !session.isMapperSupported ->
+                "ROM loaded: $path — WARNING: its mapper is not implemented, so the " +
+                    "emulator is running an NROM substitute and this ROM will misbehave."
+            else -> "ROM loaded: $path"
+        }
+        return StatusResult(ok, message)
     }
 
     @Tool

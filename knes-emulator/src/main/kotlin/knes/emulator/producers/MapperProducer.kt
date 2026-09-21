@@ -36,28 +36,33 @@ class MapperProducer
      * @param romData The ROM data
      * @return The appropriate mapper for the ROM
      */
-    fun produce(nes: NES, romData: ROMData): MemoryMapper {
-        if (isMapperSupported(romData.mapperType)) {
-            when (romData.mapperType) {
-                0 -> return MapperDefault(nes)
-                1 -> return MapperMMC1(nes)
-            }
+    fun produce(nes: NES, romData: ROMData): MemoryMapper = when (romData.mapperType) {
+        NROM -> MapperDefault(nes)
+        MMC1 -> MapperMMC1(nes)
+        else -> {
+            // Substituting NROM lets the ROM "load" and then produce nonsense. The
+            // substitution stays for now, because the UIs tolerate it, but callers can
+            // ask rather than having to notice — see [NES.isMapperSupported].
+            showErrorMsg.accept(
+                "Mapper ${romData.mapperType} is not supported; falling back to NROM, " +
+                    "which will not run this ROM correctly."
+            )
+            MapperDefault(nes)
         }
-
-
-        // If the mapper wasn't supported, create the standard one:
-        showErrorMsg.accept("Warning: Mapper not supported yet.")
-        return MapperDefault(nes)
     }
 
-    /**
-     * Checks if a mapper type is supported.
-     *
-     * @param mapperType The mapper type to check
-     * @return true if the mapper is supported, false otherwise
-     */
-    private fun isMapperSupported(mapperType: Int): Boolean {
-        // For now, only mapper 0 is supported
-        return mapperType in intArrayOf(0, 1)
+    companion object {
+        const val NROM: Int = 0
+        const val MMC1: Int = 1
+
+        /**
+         * Mappers with a real implementation.
+         *
+         * One source of truth. There used to be two — the `when` above and a separate
+         * membership check — which is how a list like this drifts.
+         */
+        val SUPPORTED: Set<Int> = setOf(NROM, MMC1)
+
+        fun isSupported(mapperType: Int): Boolean = mapperType in SUPPORTED
     }
 }

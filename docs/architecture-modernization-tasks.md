@@ -344,13 +344,31 @@ entirely.
 **Still open:** golden-log comparison against the reference `nestest.log`, which is not in
 the repo.
 
-### E2. Mappers beyond NROM/MMC1 — **L**
+### E2. Mappers beyond NROM/MMC1 — **L** — *compatibility made honest 2026-09-22*
 
-`mappers/` holds `MapperDefault` and `MapperMMC1` only. Track compatibility by ROM/test
-name with expected results, and keep commercial-ROM tests separate from redistributable
-ones (`roms/` currently holds FF1 dumps that cannot ship).
+Unblocked by C3, and the first thing to fix was not a mapper.
 
-**Depends on:** C3.
+**An unsupported mapper loaded silently.** `MapperProducer` substituted NROM, pushed a
+warning into a `Consumer<String?>` that is a no-op lambda everywhere headless, and
+`loadRom` returned true. A Mega Man ROM would "load" and then produce nonsense with
+nothing saying why.
+
+The support list also existed twice — a `when` block and a separate membership check —
+which is how such a pair drifts.
+
+Now: `MapperProducer.SUPPORTED` is the single source of truth, `NES.isMapperSupported`
+records what happened, and the toolset's `loadRom` says plainly that the ROM will
+misbehave. The substitution itself stays, because the desktop UIs have always tolerated
+it; what changed is that a caller can ask instead of inferring it from the picture.
+
+Tested without shipping a commercial ROM: the suite writes a minimal valid iNES file
+with whatever mapper byte it wants.
+
+**Still open:** actually implementing mappers. UxROM (2) and CNROM (3) are the obvious
+next ones by catalogue size, but neither can be verified here — the repo has no test ROM
+for them, and the commercial ROMs in `roms/` are correctly gitignored. That is the
+separation the task asks for, and it means a new mapper needs a redistributable test ROM
+brought in first.
 
 ### E3. Debug API: breakpoints, watchpoints, trace ring buffer — **L** — *partly done 2026-09-21*
 
