@@ -46,6 +46,7 @@ The project is organized into the following modules:
 - **knes-skiko-ui**: Skiko-based hardware-accelerated rendering UI.
 - **knes-terminal-ui**: Terminal-based UI (text-based interface) — slow AF, but freaking fun.
 - **knes-api**: REST API server for AI agents, TAS tools, and automation ([docs](knes-api/README.md)).
+- **knes-agent**: an LLM plays Final Fantasy on the emulator ([docs](knes-agent/README.md)). Needs one `OPENAI_API_KEY`.
 - **knes-applet-ui**: Java Applet-based UI (legacy).
 
 https://github.com/user-attachments/assets/9036ae9a-3be8-43ec-8050-3a47b29d1648

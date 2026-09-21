@@ -1,7 +1,8 @@
 package knes.agent.llm
 
-class HaikuClient(private val http: AnthropicHttp) {
-    val modelId = "claude-haiku-4-5-20251001"
+class HaikuClient(private val http: ChatLlm) {
+    /** The provider's quick model: this runs several times a turn. */
+    val modelId: String get() = http.fastModel
 
     /**
      * Scene description for the Executor. Returns a compact text breakdown of

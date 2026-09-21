@@ -1,7 +1,8 @@
 package knes.agent.llm
 
-class SonnetClient(private val http: AnthropicHttp) {
-    val modelId = "claude-sonnet-4-6"
+class SonnetClient(private val http: ChatLlm) {
+    /** The provider's capable model: the turn's decision rests on this. */
+    val modelId: String get() = http.strongModel
 
     /**
      * Per-turn tool decision. Sonnet receives a scene digest (from Haiku), the
