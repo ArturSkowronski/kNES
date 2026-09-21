@@ -167,13 +167,17 @@ server, which is E2E infrastructure rather than parity.
 
 Everything about replay, golden tests and multi-session hosting is blocked here.
 
-### C1. Explicit stepping API — **L**
+### C1. Explicit stepping API — **L** — *done 2026-09-21*
 
-Today: `CPU.step()` (`CPU.kt:1159`) and `SessionActionController.step(buttons, frames)`.
-There is no `stepInstruction`, no `stepCpuCycles`, and no frame boundary observable
-without applet-mode flags.
+`NES` now has `stepInstruction()`, `stepCpuCycles(n)` and `stepFrame()`, each returning
+the CPU cycles consumed, plus `frameCount` and an `onFrame` hook. `EmulatorSession`'s
+hand-rolled advance loop is gone.
 
-Add all three at the `NES`/session layer and make the frame boundary a first-class event.
+**Finding: `NesConfig.appletMode` is misnamed.** It has nothing to do with applets — it
+selects whether the CPU loop clocks the PPU, i.e. stepped execution versus the PPU being
+clocked elsewhere. `stepFrame` only terminates with it on, so it `check`s and fails
+loudly rather than hanging. Renaming it (`steppedExecution`?) touches both UIs and the
+applet and belongs with F3.
 
 ### C2. `Globals` → per-instance `NesConfig` — **L** — *done 2026-09-21*
 
