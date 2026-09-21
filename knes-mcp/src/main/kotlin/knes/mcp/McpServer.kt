@@ -19,8 +19,11 @@ import kotlinx.io.buffered
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
@@ -65,11 +68,11 @@ fun createMcpServer(backend: () -> EmulatorToolset): Server {
         val path = request.arguments?.get("path")?.jsonPrimitive?.content
             ?: return@addTool CallToolResult(content = listOf(TextContent("Missing required parameter: path")), isError = true)
         val result = toolset.loadRom(path)
-        if (result.ok) {
-            CallToolResult(content = listOf(TextContent(result.message)))
-        } else {
-            CallToolResult(content = listOf(TextContent(result.message)), isError = true)
-        }
+        toolResult(
+            json.encodeToJsonElement(result).jsonObject,
+            listOf(TextContent(result.message)),
+            isError = !result.ok,
+        )
     }
 
     // 2. step
@@ -82,10 +85,9 @@ fun createMcpServer(backend: () -> EmulatorToolset): Server {
         val frames = request.arguments?.get("frames")?.jsonPrimitive?.content?.toIntOrNull() ?: 1
         val screenshot = request.arguments?.get("screenshot")?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
         val result = toolset.step(buttons, frames, screenshot)
-        val text = json.encodeToString(result)
-        val content = mutableListOf<ContentBlock>(TextContent(text))
+        val content = mutableListOf<ContentBlock>(TextContent(json.encodeToString(result)))
         result.screenshot?.let { content.add(ImageContent(data = it, mimeType = "image/png")) }
-        CallToolResult(content = content)
+        toolResult(json.encodeToJsonElement(result).jsonObject, content)
     }
 
     // 2b. tap
@@ -101,10 +103,9 @@ fun createMcpServer(backend: () -> EmulatorToolset): Server {
         val gapFrames = request.arguments?.get("gap_frames")?.jsonPrimitive?.content?.toIntOrNull() ?: 15
         val screenshot = request.arguments?.get("screenshot")?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
         val result = toolset.tap(button, count, pressFrames, gapFrames, screenshot)
-        val text = json.encodeToString(result)
-        val content = mutableListOf<ContentBlock>(TextContent(text))
+        val content = mutableListOf<ContentBlock>(TextContent(json.encodeToString(result)))
         result.screenshot?.let { content.add(ImageContent(data = it, mimeType = "image/png")) }
-        CallToolResult(content = content)
+        toolResult(json.encodeToJsonElement(result).jsonObject, content)
     }
 
     // 2c. sequence
@@ -123,10 +124,9 @@ fun createMcpServer(backend: () -> EmulatorToolset): Server {
             StepEntry(buttons, frames)
         }
         val result = toolset.sequence(steps, screenshot)
-        val text = json.encodeToString(result)
-        val content = mutableListOf<ContentBlock>(TextContent(text))
+        val content = mutableListOf<ContentBlock>(TextContent(json.encodeToString(result)))
         result.screenshot?.let { content.add(ImageContent(data = it, mimeType = "image/png")) }
-        CallToolResult(content = content)
+        toolResult(json.encodeToJsonElement(result).jsonObject, content)
     }
 
     // 3. get_state
@@ -135,7 +135,7 @@ fun createMcpServer(backend: () -> EmulatorToolset): Server {
         description = McpToolCatalog.getState.description
     ) { _ ->
         val result = toolset.getState()
-        CallToolResult(content = listOf(TextContent(json.encodeToString(result))))
+        toolResult(json.encodeToJsonElement(result).jsonObject, listOf(TextContent(json.encodeToString(result))))
     }
 
     // 4. get_screen
@@ -144,6 +144,8 @@ fun createMcpServer(backend: () -> EmulatorToolset): Server {
         description = McpToolCatalog.getScreen.description
     ) { _ ->
         val result = toolset.getScreen()
+        // No structured content: the payload *is* the image, and repeating the base64 in
+        // a second channel would double the size of every screenshot response.
         CallToolResult(content = listOf(ImageContent(data = result.base64, mimeType = "image/png")))
     }
 
@@ -158,7 +160,7 @@ fun createMcpServer(backend: () -> EmulatorToolset): Server {
         val result = toolset.observe(profileId, screenshot)
         val content = mutableListOf<ContentBlock>(TextContent(json.encodeToString(result)))
         result.screenshot?.base64?.let { content.add(ImageContent(data = it, mimeType = "image/png")) }
-        CallToolResult(content = content)
+        toolResult(json.encodeToJsonElement(result).jsonObject, content)
     }
 
     // 5. apply_profile
@@ -170,11 +172,14 @@ fun createMcpServer(backend: () -> EmulatorToolset): Server {
         val id = request.arguments?.get("profile_id")?.jsonPrimitive?.content
             ?: return@addTool CallToolResult(content = listOf(TextContent("Missing: profile_id")), isError = true)
         val result = toolset.applyProfile(id)
-        if (result.ok) {
-            CallToolResult(content = listOf(TextContent("Profile '$id' applied. RAM values will appear in step and get_state responses.")))
-        } else {
-            CallToolResult(content = listOf(TextContent(result.message)), isError = true)
-        }
+        val message =
+            if (result.ok) "Profile '$id' applied. RAM values will appear in step and get_state responses."
+            else result.message
+        toolResult(
+            json.encodeToJsonElement(result).jsonObject,
+            listOf(TextContent(message)),
+            isError = !result.ok,
+        )
     }
 
     // 5b. list_actions
@@ -188,7 +193,10 @@ fun createMcpServer(backend: () -> EmulatorToolset): Server {
                 content = listOf(TextContent("Missing profile_id")), isError = true
             )
         val actions = toolset.listActions(profileId)
-        CallToolResult(content = listOf(TextContent(json.encodeToString(actions))))
+        toolResult(
+            buildJsonObject { put("actions", json.encodeToJsonElement(actions)) },
+            listOf(TextContent(json.encodeToString(actions))),
+        )
     }
 
     // 5c. execute_action
@@ -207,10 +215,12 @@ fun createMcpServer(backend: () -> EmulatorToolset): Server {
             )
         val screenshot = request.arguments?.get("screenshot")?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: true
         val result = toolset.executeAction(profileId, actionId)
-        val text = json.encodeToString(result)
-        val content = mutableListOf<ContentBlock>(TextContent(text))
         // executeAction doesn't return a screenshot directly; get_screen can be called separately
-        CallToolResult(content = content, isError = !result.ok)
+        toolResult(
+            json.encodeToJsonElement(result).jsonObject,
+            listOf(TextContent(json.encodeToString(result))),
+            isError = !result.ok,
+        )
     }
 
     // 6. list_profiles
@@ -219,7 +229,10 @@ fun createMcpServer(backend: () -> EmulatorToolset): Server {
         description = McpToolCatalog.listProfiles.description
     ) { _ ->
         val profiles = toolset.listProfiles()
-        CallToolResult(content = listOf(TextContent(json.encodeToString(profiles))))
+        toolResult(
+            buildJsonObject { put("profiles", json.encodeToJsonElement(profiles)) },
+            listOf(TextContent(json.encodeToString(profiles))),
+        )
     }
 
     // 7. press
@@ -233,7 +246,7 @@ fun createMcpServer(backend: () -> EmulatorToolset): Server {
                 content = listOf(TextContent("'buttons' must be an array of button names")), isError = true
             )
         val result = toolset.press(buttons)
-        CallToolResult(content = listOf(TextContent(json.encodeToString(result))))
+        toolResult(json.encodeToJsonElement(result).jsonObject, listOf(TextContent(json.encodeToString(result))))
     }
 
     // 8. release
@@ -247,7 +260,7 @@ fun createMcpServer(backend: () -> EmulatorToolset): Server {
                 content = listOf(TextContent("'buttons' must be an array of button names")), isError = true
             )
         val result = toolset.release(buttons)
-        CallToolResult(content = listOf(TextContent(json.encodeToString(result))))
+        toolResult(json.encodeToJsonElement(result).jsonObject, listOf(TextContent(json.encodeToString(result))))
     }
 
     // 9. reset
@@ -256,7 +269,7 @@ fun createMcpServer(backend: () -> EmulatorToolset): Server {
         description = McpToolCatalog.reset.description
     ) { _ ->
         val result = toolset.reset()
-        CallToolResult(content = listOf(TextContent(json.encodeToString(result))))
+        toolResult(json.encodeToJsonElement(result).jsonObject, listOf(TextContent(json.encodeToString(result))))
     }
 
     return server
@@ -274,6 +287,20 @@ fun runMcpServer(server: Server) {
         done.join()
     }
 }
+
+/**
+ * Both result channels at once: [structured] for a caller that consumes typed data, and
+ * the content blocks for one that only reads text.
+ *
+ * The text block stays byte-identical to what it was before structured content existed.
+ * An LLM reading these results is a client too, and quietly summarising away its RAM
+ * dump would be a behaviour change no test in this repo could catch.
+ */
+private fun toolResult(
+    structured: kotlinx.serialization.json.JsonObject,
+    content: List<ContentBlock>,
+    isError: Boolean = false,
+) = CallToolResult(content = content, isError = isError, structuredContent = structured)
 
 /** In-process server: runs the emulator itself, no separate REST process needed. */
 fun createMcpServer(): Server = createMcpServer { LocalEmulatorToolset(EmulatorSession()) }

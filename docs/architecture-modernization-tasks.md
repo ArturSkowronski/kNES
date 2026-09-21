@@ -137,12 +137,22 @@ Both rules from B1 apply and are tested: registration must not touch the backend
 the read handlers must share **one** backend instance rather than calling the provider
 (which would build a fresh emulator per read).
 
-### B3. Structured tool results — **M**
+### B3. Structured tool results — **M** — *done 2026-09-21*
 
-Handlers return `TextContent` holding encoded JSON. Return machine-readable results first,
-keep the text summary as the compatibility layer.
+Thirteen handlers now return `structuredContent` alongside their content blocks.
 
-**Depends on:** B1.
+Deviation from the plan, on purpose: the task said to replace the text with a *summary*.
+The text is left byte-identical instead. An LLM reading these results is a client too,
+and a summary that drops the RAM dump is a behaviour change no test in this repo can
+catch. Structured content is additive; narrowing the text channel is a separate decision
+that needs a smoke run behind it.
+
+`get_screen` gets no structured content — the payload is the image, and repeating the
+base64 in a second channel doubles every screenshot response.
+
+`outputSchema` is deliberately not declared. The MCP spec binds a declared schema to
+conforming structured content, and writing schemas for fourteen result types is its own
+task rather than a side effect of this one.
 
 ### B4. Local/remote parity tests — **M** — *mostly obsolete after B1*
 
