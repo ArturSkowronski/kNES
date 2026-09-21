@@ -57,7 +57,7 @@ object AgentObservationBuilder {
         profileId: String? = null,
     ): AgentObservation {
         val semantics = profileId?.let { ProfileSemantics.get(it) }
-        val phase = semantics?.let { toPhase(it.phaseFor(state.ram)) } ?: AgentPhase.Unknown
+        val phase = phaseFor(state.ram, profileId)
 
         return AgentObservation(
             frame = state.frame,
@@ -79,6 +79,15 @@ object AgentObservationBuilder {
             screenshot = screen,
             profileId = semantics?.let { profileId },
         )
+    }
+
+    /**
+     * Phase on its own, for callers that already hold a RAM snapshot and do not need a
+     * full observation. Shares the rules [from] uses — there is one classifier, not two.
+     */
+    fun phaseFor(ram: Map<String, Int>, profileId: String?): AgentPhase {
+        val semantics = profileId?.let { ProfileSemantics.get(it) } ?: return AgentPhase.Unknown
+        return toPhase(semantics.phaseFor(ram))
     }
 
     /** Phases are named in profile JSON; anything the contract does not know is [AgentPhase.Unknown]. */

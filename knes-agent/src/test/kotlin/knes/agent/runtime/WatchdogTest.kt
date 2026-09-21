@@ -21,11 +21,19 @@ class WatchdogTest : StringSpec({
         w.counter() shouldBe 0
     }
 
-    "Dialog whitelist does not tick counter even with static RAM" {
-        val w = Watchdog()
-        repeat(20) { w.observe(Phase.Dialog, ramHash = 42, skillProgress = false) }
-        w.stuckSignal(Phase.Dialog) shouldBe false
+    "a whitelisted phase does not tick the counter even with static RAM" {
+        // No phase is whitelisted by default — nothing the profile can currently report
+        // is a legitimate waiting state. The mechanism still has to work for when one is.
+        val w = Watchdog(staticWhitelist = setOf(Phase.MenuStuck))
+        repeat(20) { w.observe(Phase.MenuStuck, ramHash = 42, skillProgress = false) }
+        w.stuckSignal(Phase.MenuStuck) shouldBe false
         w.counter() shouldBe 0
+    }
+
+    "the default whitelist is empty, so a static phase does tick" {
+        val w = Watchdog()
+        repeat(3) { w.observe(Phase.MenuStuck, ramHash = 42, skillProgress = false) }
+        w.stuckSignal(Phase.MenuStuck) shouldBe true
     }
 
     "RAM change resets counter" {
