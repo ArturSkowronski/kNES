@@ -9,6 +9,7 @@ import io.modelcontextprotocol.kotlin.sdk.types.ImageContent
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
+import knes.agent.tools.EmulatorToolset
 import knes.agent.tools.LocalEmulatorToolset
 import knes.agent.tools.results.StepEntry
 import knes.api.EmulatorSession
@@ -17,20 +18,24 @@ import kotlinx.io.asSource
 import kotlinx.io.buffered
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
- * In-process MCP server that delegates to [EmulatorToolset].
+ * MCP server over an [EmulatorToolset].
  *
- * Runs the emulator directly — no separate REST process required.
- * Use [createRemoteMcpServer] (--remote flag) for the legacy REST-bridge mode
- * where the Compose UI hosts the emulator on port 6502.
+ * There is one set of tool handlers. Where the emulator actually runs is the toolset's
+ * problem: [createMcpServer] drives one in-process, [createRemoteMcpServer] drives one
+ * hosted by the Compose UI over REST. Registering the tools twice, once per transport,
+ * is what let the two modes drift apart.
  */
-fun createMcpServer(): Server {
-    val session = EmulatorSession()
-    val toolset = LocalEmulatorToolset(session)
+fun createMcpServer(backend: () -> EmulatorToolset): Server {
+    // Lazy: building the server must not touch the emulator or the network. The remote
+    // toolset health-checks in its constructor, so an eager call would make --remote die
+    // at startup instead of on the first tool call.
+    val toolset by lazy(backend)
 
     val server = Server(
         serverInfo = Implementation(
@@ -218,8 +223,10 @@ fun createMcpServer(): Server {
         description = McpToolCatalog.press.description,
         inputSchema = McpToolCatalog.press.inputSchema!!
     ) { request ->
-        val buttons = request.arguments?.get("buttons")?.jsonArray?.map { it.jsonPrimitive.content }
-            ?: return@addTool CallToolResult(content = listOf(TextContent("Missing: buttons")), isError = true)
+        val buttons = (request.arguments?.get("buttons") as? JsonArray)?.map { it.jsonPrimitive.content }
+            ?: return@addTool CallToolResult(
+                content = listOf(TextContent("'buttons' must be an array of button names")), isError = true
+            )
         val result = toolset.press(buttons)
         CallToolResult(content = listOf(TextContent(json.encodeToString(result))))
     }
@@ -230,8 +237,10 @@ fun createMcpServer(): Server {
         description = McpToolCatalog.release.description,
         inputSchema = McpToolCatalog.release.inputSchema!!
     ) { request ->
-        val buttons = request.arguments?.get("buttons")?.jsonArray?.map { it.jsonPrimitive.content }
-            ?: return@addTool CallToolResult(content = listOf(TextContent("Missing: buttons")), isError = true)
+        val buttons = (request.arguments?.get("buttons") as? JsonArray)?.map { it.jsonPrimitive.content }
+            ?: return@addTool CallToolResult(
+                content = listOf(TextContent("'buttons' must be an array of button names")), isError = true
+            )
         val result = toolset.release(buttons)
         CallToolResult(content = listOf(TextContent(json.encodeToString(result))))
     }
@@ -260,3 +269,16 @@ fun runMcpServer(server: Server) {
         done.join()
     }
 }
+
+/** In-process server: runs the emulator itself, no separate REST process needed. */
+fun createMcpServer(): Server = createMcpServer { LocalEmulatorToolset(EmulatorSession()) }
+
+/**
+ * Remote server: drives the emulator hosted by the Compose UI's embedded API.
+ *
+ * Start the Compose UI first, click "API Server", then launch with --remote.
+ */
+fun createRemoteMcpServer(baseUrl: String = DEFAULT_REMOTE_URL): Server =
+    createMcpServer { EmulatorToolset.remote(baseUrl) }
+
+const val DEFAULT_REMOTE_URL: String = "http://localhost:6502"
