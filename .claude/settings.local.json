@@ -53,5 +53,9 @@
       "Bash(./gradlew :knes-debug:test --console=plain -q)",
       "Bash(./gradlew :knes-debug:build :knes-api:build --console=plain -q)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "knes"
+  ],
+  "enableAllProjectMcpServers": true
 }
