@@ -63,8 +63,48 @@ class NES @JvmOverloads constructor(
      */
     var trace: InstructionTrace? = null
 
-    /** Program counters [runUntilBreakpoint] stops at. */
+    /** Program counters [runUntilStop] stops at. */
     val breakpoints: MutableSet<Int> = mutableSetOf()
+
+    /**
+     * RAM addresses whose value changing stops [runUntilStop].
+     *
+     * Two deliberate limits. They fire on a **change**, not on a write, because they are
+     * sampled between instructions rather than hooked into the CPU's write path — a
+     * store of the value already there goes unnoticed. And they are restricted to RAM:
+     * reading a register like `$2002` has side effects, so sampling one every
+     * instruction would change the behaviour being observed.
+     *
+     * Add through [watch], which enforces the range.
+     */
+    val watchpoints: MutableSet<Int> = mutableSetOf()
+
+    private val watched = mutableMapOf<Int, Int>()
+
+    /** Start watching [address] for changes. Only RAM below `$2000` can be watched. */
+    fun watch(address: Int) {
+        require(address in 0 until RAM_END) {
+            "only RAM below ${"$%04X".format(RAM_END)} can be watched; reading " +
+                "${"$%04X".format(address)} would have side effects"
+        }
+        watchpoints += address
+        watched[address] = readByte(address)
+    }
+
+    fun unwatch(address: Int) {
+        watchpoints -= address
+        watched -= address
+    }
+
+    /** A byte as the CPU sees it. Side-effect free for RAM; above that it goes through the mapper. */
+    fun readByte(address: Int): Int {
+        val wrapped = address and 0xFFFF
+        return if (wrapped < RAM_END) {
+            cpuMemory.mem[wrapped and 0x7FF].toInt() and 0xFF
+        } else {
+            (memoryMapper?.load(wrapped)?.toInt() ?: cpuMemory.load(wrapped).toInt()) and 0xFF
+        }
+    }
 
     /**
      * The address the next instruction will be fetched from.
@@ -146,16 +186,23 @@ class NES @JvmOverloads constructor(
         (memoryMapper?.load(address and 0xFFFF)?.toInt() ?: cpuMemory.load(address and 0xFFFF).toInt()) and 0xFF
 
     /**
-     * Run instructions until the program counter reaches a breakpoint, or until
+     * Run instructions until a breakpoint or watchpoint fires, or until
      * [maxInstructions] have run.
      *
-     * @return the program counter stopped at, or null if the budget ran out first.
+     * @return what stopped it, or null if the budget ran out first.
      */
-    fun runUntilBreakpoint(maxInstructions: Int = DEFAULT_BREAKPOINT_BUDGET): Int? {
+    fun runUntilStop(maxInstructions: Int = DEFAULT_BREAKPOINT_BUDGET): DebugStop? {
         repeat(maxInstructions) {
             stepInstruction()
+            for (address in watchpoints) {
+                val now = readByte(address)
+                val before = watched.put(address, now)
+                if (before != null && before != now) {
+                    return DebugStop.ValueChanged(address, before, now, programCounter)
+                }
+            }
             val pc = programCounter
-            if (pc in breakpoints) return pc
+            if (pc in breakpoints) return DebugStop.Breakpoint(pc)
         }
         return null
     }
@@ -402,5 +449,8 @@ class NES @JvmOverloads constructor(
 
         /** Roughly a second of CPU time — enough to reach anything a breakpoint is useful for. */
         const val DEFAULT_BREAKPOINT_BUDGET: Int = 1_000_000
+
+        /** Everything below this is RAM, and reading it has no side effects. */
+        const val RAM_END: Int = 0x2000
     }
 }

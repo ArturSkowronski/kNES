@@ -93,27 +93,68 @@ class InstructionTraceTest : FunSpec({
         nes.opcodeAt(0xC000) shouldBe 0x4C
     }
 
-    test("runUntilBreakpoint stops at the breakpoint and says where") {
+    test("runUntilStop stops at a breakpoint and says where") {
         val nes = loadedNes()
         nes.breakpoints += 0xC5F5
 
-        val stopped = nes.runUntilBreakpoint(maxInstructions = 100)
-
-        stopped shouldBe 0xC5F5
+        nes.runUntilStop(maxInstructions = 100) shouldBe DebugStop.Breakpoint(0xC5F5)
         nes.programCounter shouldBe 0xC5F5
     }
 
-    test("runUntilBreakpoint gives up rather than running forever") {
+    test("runUntilStop gives up rather than running forever") {
         val nes = loadedNes()
         nes.breakpoints += 0x0001 // never executed
 
-        nes.runUntilBreakpoint(maxInstructions = 200) shouldBe null
+        nes.runUntilStop(maxInstructions = 200) shouldBe null
     }
 
-    test("no breakpoints means the budget simply runs out") {
+    test("nothing set means the budget simply runs out") {
         val nes = loadedNes()
 
-        nes.runUntilBreakpoint(maxInstructions = 50) shouldBe null
+        nes.runUntilStop(maxInstructions = 50) shouldBe null
         nes.programCounter shouldNotBe 0xC000
+    }
+
+    test("a watchpoint reports the address, both values and where execution had got to") {
+        // nestest's opcode suite writes its scratch state into zero page almost
+        // immediately, so something here changes within a few instructions.
+        val nes = loadedNes()
+        nes.watch(0x0000)
+
+        val stop = nes.runUntilStop(maxInstructions = 5_000)
+
+        (stop is DebugStop.ValueChanged) shouldBe true
+        val changed = stop as DebugStop.ValueChanged
+        changed.address shouldBe 0x0000
+        (changed.from != changed.to) shouldBe true
+        changed.to shouldBe nes.readByte(0x0000)
+    }
+
+    test("an unwatched address stops nothing") {
+        val nes = loadedNes()
+        nes.watch(0x0000)
+        nes.unwatch(0x0000)
+
+        nes.runUntilStop(maxInstructions = 5_000) shouldBe null
+    }
+
+    test("only RAM can be watched, because reading a register has side effects") {
+        val nes = loadedNes()
+
+        // $2002 is the PPU status register: reading it clears the vblank flag, so
+        // sampling it every instruction would change the run being observed.
+        val error = shouldThrow<IllegalArgumentException> { nes.watch(0x2002) }
+        error.message!!.contains("side effects") shouldBe true
+
+        nes.watchpoints shouldBe emptySet()
+    }
+
+    test("readByte sees RAM without going through the mapper") {
+        val nes = loadedNes()
+        nes.cpuMemory.write(0x0042, 0x7B.toShort())
+
+        nes.readByte(0x0042) shouldBe 0x7B
+        // Mirrored every 0x800 through the whole RAM window.
+        nes.readByte(0x0842) shouldBe 0x7B
     }
 })

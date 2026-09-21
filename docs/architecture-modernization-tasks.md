@@ -298,8 +298,20 @@ instructions that never ran.
 
 It earned its keep immediately: see E1 below.
 
-**Still open:** watchpoints, which need the memory layer instrumented, and exposing any
-of this through the API/MCP surface.
+Watchpoints followed: `NES.watch(address)` plus `runUntilStop`, which returns a
+`DebugStop` saying whether a breakpoint or a watched value stopped it.
+
+Two limits on watchpoints, both deliberate and both tested:
+
+- They fire on a **change**, not a write. They are sampled between instructions rather
+  than hooked into the CPU's write path, so a store of the value already there goes
+  unnoticed. Keeping debug facilities out of the hot loop is the same call as for the
+  trace.
+- **RAM only.** Reading `$2002` clears the vblank flag; sampling a register every
+  instruction would change the run being observed. `watch` rejects anything at or above
+  `$2000` and says why.
+
+**Still open:** exposing any of this through the API/MCP surface.
 
 ---
 
