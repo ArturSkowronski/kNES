@@ -20,6 +20,9 @@ plugins {
     id 'org.jetbrains.kotlin.jvm'
 }
 
+ext.knesJvmTarget = '11'
+apply from: "$rootDir/gradle/conventions/kotlin-module.gradle"
+
 repositories {
     mavenCentral()
 }
@@ -30,21 +33,6 @@ dependencies {
     testImplementation 'io.kotest:kotest-assertions-core:6.1.4'
 }
 
-kotlin {
-    jvmToolchain(11)
-}
-
-test {
-    useJUnitPlatform()
-}
-
-tasks.withType(KotlinCompile).configureEach {
-    kotlinOptions {
-        jvmTarget = '11'
-        apiVersion = '2.3'
-        languageVersion = '2.3'
-    }
-}
 
 sourceSets {
     main {
@@ -66,4 +54,8 @@ java {
     }
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
+}
+
+test {
+    useJUnitPlatform()
 }

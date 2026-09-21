@@ -4,6 +4,9 @@ plugins {
     id 'application'
 }
 
+ext.knesJvmTarget = '17'
+apply from: "$rootDir/gradle/conventions/kotlin-module.gradle"
+
 repositories {
     mavenCentral()
 }
@@ -46,27 +49,8 @@ dependencies {
     testImplementation 'io.ktor:ktor-client-cio:3.3.0'
 }
 
-kotlin {
-    jvmToolchain(17)
-}
 
-tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-    kotlinOptions {
-        jvmTarget = '17'
-        apiVersion = '2.3'
-        languageVersion = '2.3'
-    }
-}
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
-    }
-}
-
-test {
-    useJUnitPlatform()
-}
 
 tasks.register('runExplorer', JavaExec) {
     group = 'application'
@@ -74,4 +58,8 @@ tasks.register('runExplorer', JavaExec) {
     mainClass = 'knes.agent.explorer.ExplorerMainKt'
     classpath = sourceSets.main.runtimeClasspath
     standardInput = System.in
+}
+
+test {
+    useJUnitPlatform()
 }

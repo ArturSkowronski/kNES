@@ -4,6 +4,9 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.serialization' version '2.3.20'
 }
 
+ext.knesJvmTarget = '17'
+apply from: "$rootDir/gradle/conventions/kotlin-module.gradle"
+
 repositories {
     mavenCentral()
 }
@@ -29,28 +32,13 @@ dependencies {
     testImplementation "io.ktor:ktor-client-content-negotiation:$ktorVersion"
 }
 
-kotlin {
-    jvmToolchain(17)
-}
 
-tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-    kotlinOptions {
-        jvmTarget = '17'
-        apiVersion = '2.3'
-        languageVersion = '2.3'
-    }
-}
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
-    }
+
+application {
+    mainClass = 'knes.api.MainKt'
 }
 
 test {
     useJUnitPlatform()
-}
-
-application {
-    mainClass = 'knes.api.MainKt'
 }

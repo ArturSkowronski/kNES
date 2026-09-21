@@ -18,6 +18,9 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.compose' version '2.3.20'
 }
 
+ext.knesJvmTarget = '17'
+apply from: "$rootDir/gradle/conventions/kotlin-module.gradle"
+
 repositories {
     mavenCentral()
     google()
@@ -45,17 +48,7 @@ dependencies {
     testImplementation compose.desktop.currentOs
 }
 
-kotlin {
-    jvmToolchain(17)
-}
 
-tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-    kotlinOptions {
-        jvmTarget = '17'
-        apiVersion = '2.3'
-        languageVersion = '2.3'
-    }
-}
 
 java {
     toolchain {

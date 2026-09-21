@@ -16,6 +16,9 @@ plugins {
     id 'org.jetbrains.kotlin.jvm'
 }
 
+ext.knesJvmTarget = '11'
+apply from: "$rootDir/gradle/conventions/kotlin-module.gradle"
+
 repositories {
     mavenCentral()
     maven { url = 'https://jitpack.io' }
@@ -35,17 +38,7 @@ dependencies {
     testImplementation 'io.kotest:kotest-assertions-core:6.1.4'
 }
 
-kotlin {
-    jvmToolchain(11)
-}
 
-tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-    kotlinOptions {
-        jvmTarget = '11'
-        apiVersion = '2.3'
-        languageVersion = '2.3'
-    }
-}
 
 sourceSets {
     main {
