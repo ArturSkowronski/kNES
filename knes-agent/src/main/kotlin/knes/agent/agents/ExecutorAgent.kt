@@ -1,10 +1,12 @@
 package knes.agent.agents
 
+import knes.agent.campaign.Campaign
+import knes.agent.campaign.NoCampaign
+
 import knes.agent.llm.AnthropicSession
 import knes.agent.llm.GeminiPro31Client
 import knes.agent.llm.HaikuClient
 import knes.agent.llm.SonnetClient
-import knes.agent.runtime.MilestonePredicates
 import knes.agent.runtime.Plan
 import knes.agent.runtime.PlanStep
 import knes.agent.runtime.Memory
@@ -34,6 +36,7 @@ class ExecutorAgent(
     private val memory: Memory,
     private val run: RunDirectory? = null,
     private val gemini: GeminiPro31Client? = null,
+    private val campaign: Campaign = NoCampaign,
 ) {
     private val recentOutcomes = ArrayDeque<String>(4)
     private val recentMoves = ArrayDeque<MoveEntry>(8)
@@ -194,7 +197,7 @@ class ExecutorAgent(
             val eq = pair.indexOf('='); if (eq < 0) continue
             ramMap[pair.substring(0, eq)] = pair.substring(eq + 1).toIntOrNull() ?: continue
         }
-        val party = MilestonePredicates.partyWeaponDigest(ramMap)
+        val party = campaign.partyDigest(ramMap)
         return """
             CURRENT GOAL (milestone in progress): $currentMilestone
             All milestones: $milestoneStates

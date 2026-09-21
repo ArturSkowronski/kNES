@@ -42,12 +42,21 @@ for `knes-agent-tools`. `knes-agent/src/main` still hardcodes FF1 in ~10 files:
 |---|---|
 | ~~`tools/ToolSurface.kt`~~ | *done 2026-09-21 — reads `GameSemantics` instead* |
 | `Main.kt:117,234,461` | `currentMapId`, `smPlayerX/Y`, `mapflags and 0x02` |
-| `runtime/MilestonePredicates.kt` | milestone predicates over raw RAM |
+| ~~`runtime/MilestonePredicates.kt`~~ | *done 2026-09-21 — now `campaign/Ff1Campaign`* |
 | `pathfinding/ViewportPathfinder.kt`, `InteriorPathfinder.kt` | coordinate-space assumptions |
 | `runtime/Memory.kt`, `agents/CartographerAgent.kt`, `llm/HaikuClient.kt` | landmark + coord semantics |
 
 Do it as one PR per concern, not one big one. Suggested order: ~~`ToolSurface`~~ (done),
-then `MilestonePredicates`, then the pathfinders.
+then ~~`MilestonePredicates`~~ (done), then the pathfinders, then `StrategyContext`'s
+weapon-byte helpers and the remaining `smPlayerX/Y` reads in the three agents.
+
+Correction to the done-when: "no edit under `knes-agent/src/main`" is not reachable for
+campaign logic without inventing a generic RPG party model. A campaign is a game's goal
+list, party model and item encoding — data structures, not RAM addresses. The reachable
+goal is *isolation*: one `Campaign` implementation per game, and a runtime that only
+knows the interface. Claude Plays Pokémon does not model this at all (the model edits
+its own objectives in a knowledge base); kNES keeps it deterministic on purpose, because
+"premature goal completion" is a documented failure of that approach.
 
 `ToolSurface` needed four game signals that phases and landmarks did not cover, now in
 `ProfileSemantics.signals`: `transitioning` (is the engine mid-transition),

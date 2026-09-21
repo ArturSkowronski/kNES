@@ -25,6 +25,7 @@ import knes.agent.llm.GeminiPro31Client
 import knes.agent.llm.HaikuClient
 import knes.agent.llm.SonnetClient
 import knes.agent.runtime.Phase
+import knes.agent.campaign.Campaign
 import knes.agent.tools.results.GameSemantics
 import knes.agent.runtime.SnapshotDumper
 import knes.agent.runtime.Memory
@@ -140,10 +141,11 @@ fun main(args: Array<String>) {
                 )
 
                 // Agents
-                val advisor = AdvisorAgent(gemini, memory, run, landmarks)
-                val executor = ExecutorAgent(anthropic, sonnet, haiku, tools, memory, run, gemini = geminiExec)
+                val campaign = Campaign.of(cfg.profile)
+                val advisor = AdvisorAgent(gemini, memory, run, landmarks, campaign)
+                val executor = ExecutorAgent(anthropic, sonnet, haiku, tools, memory, run, gemini = geminiExec, campaign = campaign)
                 Log.llm("models: advisor/cart=${gemini.model} executor=${geminiExec.model}")
-                val reviewer = ReviewerAgent(haiku, memory, run)
+                val reviewer = ReviewerAgent(haiku, memory, run, campaign)
                 val cartographer = CartographerAgent(
                     gemini, toolset, memory, snapshotDumper, overworldMap, fog, landmarks,
                     cfg.cartographerBudgetSeconds, cfg.cartographerMaxVisionCalls,
@@ -276,9 +278,7 @@ fun main(args: Array<String>) {
                     )
 
                     // Gold-bleed detection — see prevGold comment above.
-                    val curGold = (state.ram["goldLow"] ?: 0) +
-                        ((state.ram["goldMid"] ?: 0) shl 8) +
-                        ((state.ram["goldHigh"] ?: 0) shl 16)
+                    val curGold = campaign.gold(state.ram)
                     // Attribute the gold drop to the tool from the PREVIOUS
                     // turn (the action that actually caused it). Current
                     // turn's tool is just the next decision being made.
@@ -324,7 +324,7 @@ fun main(args: Array<String>) {
                     prevGold = curGold
                     prevTool = decision.tool
 
-                    val milestoneJustAdvanced = advanceMilestones(memory, phase, state.ram, decision, turn)
+                    val milestoneJustAdvanced = advanceMilestones(memory, phase, state.ram, decision, turn, campaign)
                     if (milestoneJustAdvanced != null) {
                         val advisorReason = "milestone $milestoneJustAdvanced just done — replan for next"
                         Log.event(advisorReason, turn)
@@ -473,6 +473,7 @@ private fun advanceMilestones(
     ram: Map<String, Int>,
     @Suppress("UNUSED_PARAMETER") decision: knes.agent.agents.ExecutorDecision,
     turn: Int,
+    campaign: Campaign,
 ): String? {
     val ms = memory.campaign.milestones
     var advancedId: String? = null
@@ -486,7 +487,7 @@ private fun advanceMilestones(
             advancedId = id
         }
     }
-    // Single source of truth — see knes.agent.runtime.MilestonePredicates.
+    // Single source of truth — see knes.agent.campaign.Campaign.
     //
     // AT MOST ONE LATCH PER TURN. If multiple predicates already hold
     // (common in --remote mode where the Compose UI inherited weapons/
@@ -500,7 +501,7 @@ private fun advanceMilestones(
     val prereqDone = ms.associate { it.id to (it.status == "done") }
     for (m in ms) {
         if (m.status != "in_progress") continue
-        if (knes.agent.runtime.MilestonePredicates.evaluate(m.id, phase, ram, prereqDone)) {
+        if (campaign.isSatisfied(m.id, phase, ram, prereqDone)) {
             mark(m.id) { true }
             break
         }
