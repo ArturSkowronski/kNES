@@ -134,6 +134,17 @@ class NES @JvmOverloads constructor(
     var romIdentity: RomIdentity? = null
         private set
 
+    /**
+     * Whether the loaded ROM's mapper has a real implementation.
+     *
+     * False means the ROM loaded but is running on an NROM substitute and will not
+     * behave correctly. [loadRom] still returns true in that case, because the desktop
+     * UIs have always tolerated it — but a caller can now ask instead of finding out
+     * from the picture.
+     */
+    var isMapperSupported: Boolean = true
+        private set
+
     val inputHandler: InputHandler = host.getJoy1()
     val inputHandler2: InputHandler? = host.getJoy2()
 
@@ -439,6 +450,7 @@ class NES @JvmOverloads constructor(
             ppu.setMirroring(rom.mirroringType)
 
             this.memoryMapper = memoryMapper
+            isMapperSupported = MapperProducer.isSupported(rom.mapperType)
             romIdentity = RomIdentity(
                 mapperId = rom.mapperType,
                 prgBanks = rom.romCount,

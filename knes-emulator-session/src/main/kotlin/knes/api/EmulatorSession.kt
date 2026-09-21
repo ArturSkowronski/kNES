@@ -113,6 +113,14 @@ class EmulatorSession(externalNes: NES? = null) {
      * Tracing is switched on the first time this is called, so a run that never asks
      * pays nothing — and that first call reports an empty trace.
      */
+    /**
+     * Whether the loaded ROM's mapper has a real implementation.
+     *
+     * False means the ROM loaded but is running on an NROM substitute, so nothing it
+     * does after the first bank switch means anything.
+     */
+    val isMapperSupported: Boolean get() = nes.isMapperSupported
+
     fun traceTail(count: Int): List<TraceEntry> {
         val trace = nes.trace ?: InstructionTrace().also { nes.trace = it }
         return trace.tail(count).map { TraceEntry(it.pc, it.opcode, it.cycles) }
