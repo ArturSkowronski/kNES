@@ -1,8 +1,10 @@
 name: Java CI
 
+# One run per change: pull_request covers every branch on its way in, push covers
+# master after the merge. Triggering both on "**" ran this job twice per PR.
 on:
   push:
-    branches: [ "**" ]
+    branches: [ master ]
   pull_request:
     branches: [ "**" ]
 

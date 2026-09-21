@@ -63,7 +63,7 @@ payoff — it gates every skill), then `MilestonePredicates`, then the pathfinde
 **Done when:** file and test are gone, `./gradlew build` green. Port any assertion worth
 keeping onto `EmulatorSession` first.
 
-### A4. Stop running CI twice per PR — **S**
+### A4. Stop running CI twice per PR — **S** — *done 2026-09-21*
 
 `.github/workflows/build.yml` triggers on both `push: ["**"]` and `pull_request: ["**"]`,
 so every PR branch runs the identical `build` job twice (observed on PR #134: two runs,
