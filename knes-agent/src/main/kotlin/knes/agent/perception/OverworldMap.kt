@@ -64,6 +64,30 @@ class OverworldMap private constructor(val tiles: ByteArray) : ViewportSource {
     }
 
     companion object {
+        /** The only game whose overworld this decoder understands. */
+        const val DECODABLE_PROFILE = "ff1"
+
+        /**
+         * The overworld for whatever game is being played, or a blank one.
+         *
+         * Final Fantasy's overworld is RLE-compressed in a fixed bank of its own
+         * cartridge, and decoding it out of another game's ROM fails on the very first
+         * pointer — which is how a Super Mario Bros run died before the emulator had even
+         * started, in `Main`, three lines after the ROM path was read. The ROM is not read
+         * at all for a game this cannot decode.
+         */
+        fun forProfile(profileId: String?, romFile: File): OverworldMap =
+            if (profileId?.lowercase() == DECODABLE_PROFILE) fromRom(romFile) else blank()
+
+        /**
+         * An overworld of nothing, for a game that has no Final Fantasy overworld.
+         *
+         * The tools built on this map — overworld pathfinding, the Cartographer — are
+         * Final Fantasy's own and are never dispatched elsewhere, so this exists to keep
+         * them constructible rather than to be walked on.
+         */
+        fun blank(): OverworldMap = OverworldMap(ByteArray(256 * 256))
+
         fun fromRom(romFile: File): OverworldMap = fromRom(romFile.readBytes())
 
         fun fromRom(rom: ByteArray): OverworldMap {

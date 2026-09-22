@@ -47,6 +47,14 @@ object DecisionModels {
         // Quantization is an MLX-text-backend option; the pixel path loads the whole model.
         bits: String? = env("SEMIF_BITS").takeIf { backend != "pixels" },
         semifSrc: String? = env("SEMIF_SRC"),
+        /**
+         * How large a frame the pixel backend sees.
+         *
+         * 256x240 is the NES's own resolution and costs about 190 ms; doubling it costs
+         * about 290 ms. Worth raising when the thing the model has to notice is small on
+         * screen — a gap in the floor two tiles ahead is a handful of pixels at native size.
+         */
+        imageSize: String? = env("SEMIF_IMAGE_SIZE"),
     ): List<String> = buildList {
         add(python)
         add(sidecar)
@@ -55,6 +63,10 @@ object DecisionModels {
         add("--backend"); add(backend)
         bits?.let { add("--bits"); add(it) }
         semifSrc?.let { add("--semif-src"); add(it) }
+        if (backend == "pixels") imageSize?.split("x")?.takeIf { it.size == 2 }?.let { (w, h) ->
+            add("--image-width"); add(w.trim())
+            add("--image-height"); add(h.trim())
+        }
     }
 
     /** Builds and starts the model, or returns null when decisions stay with the chat model. */

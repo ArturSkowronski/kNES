@@ -90,6 +90,16 @@ class GoalSelector(
         world.ram["lives"]?.let { appendLine("lives left: $it") }
         world.ram["coins"]?.let { appendLine("coins: $it") }
         world.ram["enemyActive"]?.let { appendLine("enemies on screen: $it") }
+        // Whether the player is airborne changes what the options even mean, so it is
+        // said in words rather than left as a byte for the model to interpret.
+        world.ram["playerFloatState"]?.let { state ->
+            val rising = (world.ram["verticalVelocity"] ?: 0) > 127
+            appendLine(
+                if (state == 0) "the player is standing on solid ground"
+                else if (rising) "the player is in the air, still rising"
+                else "the player is in the air and coming down",
+            )
+        }
         val step = world.planStep
         appendLine(
             if (step == null) "the plan has no step for this turn"
@@ -102,6 +112,13 @@ class GoalSelector(
     }.trim()
 
     companion object {
-        const val DEFAULT_QUESTION = "Which of these should the party do on this turn?"
+        /**
+         * Deliberately not "the party".
+         *
+         * That was Final Fantasy's word, and it was being asked in front of a picture of
+         * Mario — a decision model reading the screen should not be told it is looking at
+         * something else.
+         */
+        const val DEFAULT_QUESTION = "Which of these should the player do on this turn?"
     }
 }

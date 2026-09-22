@@ -72,7 +72,7 @@ fun main(args: Array<String>) {
                 val semantics = GameSemantics.of(cfg.profile)
 
                 // Perception (shared with v1)
-                val overworldMap = OverworldMap.fromRom(File(cfg.rom))
+                val overworldMap = OverworldMap.forProfile(cfg.profile, File(cfg.rom))
                 val fog = FogOfWar()
                 val mapSession = MapSession(InteriorMapLoader(File(cfg.rom).readBytes()), fog)
                 val landmarks = LandmarkMemory()

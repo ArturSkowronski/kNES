@@ -225,13 +225,45 @@ The stall rule rescues some of this without any perception at all — a `run_rig
 stops moving Mario comes off the menu after six tries and something else has to win — but
 nothing rescues walking into a pit, because walking into a pit works.
 
-**Still missing: the ROM.** There is no Super Mario Bros ROM in this repo or on this
-machine, and commercial ROMs stay out of the tree. Drop one at `roms/smb.nes` and:
+### Mario, actually played
 
 ```bash
-KNES_DECISION=pixels SEMIF_VLM_PYTHON=~/GitHub/SemIf/.venv-vlm/bin/python \
+KNES_DECISION=pixels SEMIF_IMAGE_SIZE=512x480 \
+SEMIF_VLM_PYTHON=~/GitHub/SemIf/.venv-vlm/bin/python \
   ./gradlew :knes-agent:run -PappArgs="--fresh --reactive --rom=roms/smb.nes --profile=smb"
 ```
+
+The cartridge found three bugs before the first Goomba did:
+
+- **`Main` decoded Final Fantasy's overworld out of every ROM.** It is RLE-compressed in a
+  fixed bank, and another game's bytes resolve to a negative file offset, so a Super Mario
+  Bros run died three lines after the ROM path was read. `OverworldMap.forProfile` does not
+  open the file for a game it cannot decode.
+- **The model was asked what "the party" should do** — Final Fantasy's word, in front of a
+  picture of Mario.
+- **Nothing passed a frame size**, so the pixel backend always saw 256x240.
+
+Then three runs of 200 turns each, all on World 1-1:
+
+| | jumps | furthest | lives | ms |
+|---|---|---|---|---|
+| 256x240 | 0 | 297 px | 2 → 1 | 254 |
+| + jumps gated to the ground | 0 | 297 px | 2 → 0 | 264 |
+| **512x480** | **6** | **435 px** | 2 → 0 | 400 |
+
+Mario walks right, jumps sometimes, and dies in the pits. The frame size is what moved the
+needle: at native resolution a gap in the floor two tiles ahead is a handful of pixels, and
+the model picked `walk_right` at 0.50 every turn of a nine-turn fall.
+
+**Gating jumps to the ground** changed nothing measurable and is still right: there is no
+double jump in this game, so A in mid-air does nothing, and a goal that cannot work has no
+business on the menu. `playerFloatState` (`$001D`) is 0 on the ground — established by
+correlation rather than taken from a RAM map: over a 160-turn run Mario's y held still on
+103 of the 106 turns where the byte read 0, and moved on 50 of the 53 where it read 1.
+
+Where this leaves the demo: the mechanism is sound and fast — 200 typed decisions at
+400 ms, never once answering with something that was not on the menu — and the *play* is
+poor. Seven generic goals and a 4B readout do not clear World 1-1.
 
 ## Watching it
 

@@ -62,14 +62,14 @@ object SmbGoals {
             priority = 12,
             description = "Jump forward: hold A and Right together, clearing a gap or an enemy ahead.",
             action = GoalAction("hold", mapOf("buttons" to "Right,A,B", "frames" to "$JUMP_FRAMES")),
-            applies = { it.playing },
+            applies = { it.playing && it.grounded },
         ),
         stallable(
             id = "jump_up",
             priority = 13,
             description = "Jump straight up without moving forward — for a block directly overhead.",
             action = GoalAction("hold", mapOf("buttons" to "A", "frames" to "$JUMP_FRAMES")),
-            applies = { it.playing },
+            applies = { it.playing && it.grounded },
         ),
         stallable(
             id = "back_off",
@@ -96,6 +96,22 @@ object SmbGoals {
      */
     private val WorldSnapshot.playing: Boolean
         get() = phase != Phase.Boot && (ram["gameState"] ?: 0) != 0
+
+    /**
+     * Whether Mario is standing on something.
+     *
+     * There is no double jump in this game, so pressing A in mid-air does nothing at all —
+     * and a goal that cannot work has no business being on the menu. The first run that
+     * played the real cartridge fell down a pit over six turns while the model ranked
+     * `walk_right` at 0.50 and `jump_right` second the whole way down; neither would have
+     * helped, but only one of them was honest.
+     *
+     * `playerFloatState` is 0 on the ground. Established by correlation rather than taken
+     * on faith: over a 160-turn run, Mario's y held still on 103 of the 106 turns where
+     * the byte read 0, and moved on 50 of the 53 where it read 1.
+     */
+    private val WorldSnapshot.grounded: Boolean
+        get() = (ram["playerFloatState"] ?: 0) == 0
 
     /** Same rule as Final Fantasy's: a goal that stops achieving anything leaves the menu. */
     private fun stallable(
