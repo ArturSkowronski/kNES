@@ -13,6 +13,7 @@ kNES is a reimplementation and extension of the vNES emulator (originally develo
 - Provide a modern, Kotlin-based NES emulator
 - Serve as an educational resource for those interested in emulation
 - Demonstrate different UI implementation approaches in the JVM ecosystem
+- Give an LLM a machine it can actually drive — deterministic stepping, semantic observations, replayable traces
 - Have fun with retro gaming and programming!
 
 This project is distributed under the GNU General Public License v3.0 (GPL-3.0), ensuring it remains free and open source.
@@ -23,6 +24,10 @@ This project is distributed under the GNU General Public License v3.0 (GPL-3.0),
 |--------|------|-------|
 | 0 | NROM | Super Mario Bros, Donkey Kong, Pac-Man, ~250 games |
 | 1 | MMC1/SxROM | Final Fantasy, The Legend of Zelda, Metroid, Mega Man 2, ~680 games |
+
+A ROM with any other mapper still loads, on an NROM substitute — but it says so, through
+`NES.isMapperSupported` and in the message `load_rom` returns. It used to substitute
+silently and then produce nonsense.
 
 ## Controls
 
@@ -45,7 +50,11 @@ The project is organized into the following modules:
 - **knes-compose-ui**: Jetpack Compose Desktop UI (primary, recommended).
 - **knes-skiko-ui**: Skiko-based hardware-accelerated rendering UI.
 - **knes-terminal-ui**: Terminal-based UI (text-based interface) — slow AF, but freaking fun.
+- **knes-emulator-session**: the narrow session API over the core — load, step, savestate, replay.
+- **knes-debug**: game profiles (named RAM addresses) and their semantics — phase rules, landmarks, signals.
 - **knes-api**: REST API server for AI agents, TAS tools, and automation ([docs](knes-api/README.md)).
+- **knes-mcp**: MCP server — an LLM drives the emulator over the Model Context Protocol, in-process or through the REST API.
+- **knes-agent-tools**: the `EmulatorToolset` port both MCP modes and the agent share.
 - **knes-agent**: an LLM plays Final Fantasy on the emulator ([docs](knes-agent/README.md)). Needs one `OPENAI_API_KEY`.
 - **knes-applet-ui**: Java Applet-based UI (legacy).
 
@@ -60,7 +69,7 @@ https://github.com/user-attachments/assets/9036ae9a-3be8-43ec-8050-3a47b29d1648
 
 ### Prerequisites
 
-- Java 17 or higher (for running Gradle; build targets Java 11)
+- Java 17 (every module targets 17; the Gradle toolchain fetches it if missing)
 - Gradle 9.4+ (included via wrapper)
 
 ### Building
@@ -116,6 +125,45 @@ curl localhost:6502/state
 
 12 endpoints: `/step`, `/screen`, `/state`, `/watch`, `/press`, `/release`, `/fm2`, and more. Full docs in [knes-api/README.md](knes-api/README.md).
 
+### MCP Server
+
+Let an LLM drive the emulator over the Model Context Protocol:
+
+```bash
+./gradlew :knes-mcp:installDist          # in-process emulator
+./gradlew :knes-mcp:installDist --remote # drive the Compose UI's emulator instead
+```
+
+Fourteen tools — `load_rom`, `step`, `tap`, `sequence`, `observe`, `apply_profile` and
+friends — plus read-only resources the model can pull without spending a tool call:
+
+| Resource | What |
+|---|---|
+| `knes://emulator/state` | frame, watched RAM, CPU registers, held buttons |
+| `knes://emulator/profiles` | game profiles the backend can apply |
+| `knes://profiles/watched-ram` | named addresses per game, with meaning |
+| `knes://profiles/semantics` | phase rules, landmarks, signals |
+| `knes://emulator/trace` | the instructions the CPU most recently executed |
+
+`observe` is the one to reach for: it returns a semantic reading — phase, position,
+location, whether the engine is mid-transition — rather than raw bytes.
+
+### An LLM plays Final Fantasy
+
+```bash
+export OPENAI_API_KEY=sk-...
+./gradlew :knes-agent:run -PappArgs="--fresh --max-turns=200"
+```
+
+One key is the whole setup; `GEMINI_API_KEY` works the same way. From a cold boot the
+agent creates a party, walks into Coneria, finds the weapon shop and buys — four
+campaign milestones with no human input. Details and the model roles in
+[knes-agent/README.md](knes-agent/README.md).
+
+Game knowledge lives in `profiles/<id>.json`, not in the agent: phase rules, landmark
+anchors and the signals tools ask about are data, so teaching it another game is a JSON
+edit rather than a code change.
+
 ## Architecture
 
 The emulator uses a modular architecture with a clear separation between the core emulator functionality and the UI. This allows for different UI implementations to be used with the same core emulator.
@@ -129,18 +177,37 @@ The core emulator is contained in the `knes-emulator` module and provides the fo
 - **PAPU**: Audio — square, triangle, noise, and DMC channels
 - **Memory**: 64KB CPU address space with mirroring
 - **Mappers**: NROM (Mapper 0) and MMC1 (Mapper 1) with PRG/CHR bank switching
+- **Timing**: one `ConsoleClock` advances PPU and APU by what the CPU just ran; NTSC and PAL differ only in a `ConsoleTiming` value
+
+### Deterministic execution and debugging
+
+The emulator is driven, not just run. One execution model: free-running is `stepInstruction()`
+called in a loop, which is what stepped execution already was.
+
+- `stepInstruction()`, `stepCpuCycles(n)`, `stepFrame()` — each returns the CPU cycles it took
+- `frameCount` and an `onFrame` hook, owned by the instance rather than by whatever host is attached
+- `InstructionTrace` — a ring of program counter / opcode / cycles, off by default
+- Breakpoints and watchpoints via `runUntilStop()`; watchpoints are RAM-only, because reading a register like `$2002` would change the run being observed
+- Savestates carry a ROM identity, so loading one from a different cartridge fails loudly
+- `knes-replay` — a diffable text format for input scripts, with determinism golden tests
 
 ### Testing
 
-400+ automated tests covering every layer:
+800+ automated tests covering every layer:
 - CPU instruction tests (all opcodes, all addressing modes)
 - PPU register and rendering logic tests
 - PAPU audio channel tests
 - MMC1 mapper unit tests
-- nestest.nes ROM integration test (community-standard CPU validation)
+- **nestest.nes** — kNES passes both the official and the unofficial opcode suites
+- Free-running execution: the emulation thread's start/stop/restart contract
+- Savestate round-trip and replay determinism (golden tests)
 - Super Mario Bros E2E game tests (headless, input injection, RAM assertions)
-- REST API E2E tests (game session, screenshot, FM2 playback, batch stepping)
+- REST API and MCP protocol tests (tool contract, resources, structured results)
 - Compose Desktop UI smoke tests
+
+Some tests need a commercial ROM (MMC1 bank switching, PPU rendering, the campaign
+benchmark). Those ROMs cannot be redistributed, so the suites **skip themselves** when
+`roms/` is absent — CI stays green and a developer with the files gets the coverage.
 
 ```bash
 ./gradlew test
