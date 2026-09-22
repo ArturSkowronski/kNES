@@ -276,6 +276,12 @@ class DefaultToolSurface(
         return CardinalTryResult(tried, tapsUsed)
     }
 
+    /** `(x,y)` with no space — the Executor's move-history parser reads this back. */
+    private suspend fun screenAfter(): String? = runCatching { toolset.getScreen().base64 }.getOrNull()
+
+    private fun formatCoord(position: Pair<Int, Int>?): String =
+        position?.let { "(${it.first},${it.second})" } ?: "(?,?)"
+
     private fun dominantAxisCardinal(dx: Int, dy: Int): String? = when {
         kotlin.math.abs(dx) >= kotlin.math.abs(dy) && dx != 0 -> if (dx > 0) "Right" else "Left"
         dy != 0 -> if (dy > 0) "Down" else "Up"
@@ -523,6 +529,7 @@ class DefaultToolSurface(
         val executed = normalized.filterNotNull().take(MAX)
         val truncated = (normalized.size - executed.size).coerceAtLeast(0)
         val pre = toolset.getState().ram
+        val screenBefore = runCatching { toolset.getScreen().base64 }.getOrNull()
         for (b in executed) {
             toolset.tap(button = b, count = 1, pressFrames = 5, gapFrames = 8)
             // A / B / START open or close dialog/menu overlays that take
@@ -554,14 +561,31 @@ class DefaultToolSurface(
             }
         }
         val post = toolset.getState().ram
-        val sm = "${semantics.localPosition(post)}"
-        val w = "${semantics.worldPosition(post)}"
+        // Written by hand, not via Pair.toString(): the Executor parses `sm=(x,y)` out
+        // of this message to tell whether the party moved, and `Pair` renders a space
+        // after the comma that the parser did not expect.
+        val sm = formatCoord(semantics.localPosition(post))
+        val w = formatCoord(semantics.worldPosition(post))
         val truncNote = if (truncated > 0) " [truncated $truncated extra: max=$MAX/turn]" else ""
+        // In a menu the party tile never moves, so "did I move?" says nothing about
+        // whether the taps did anything, and a model can press B at a dialog it imagined
+        // for a dozen turns without evidence.
+        //
+        // Judged from the SCREEN, not from RAM. FF1's shop and inn dialogs are NPC
+        // overlays that leave screenState, menuCursor and the hand coordinates
+        // untouched, so a RAM fingerprint reports "unchanged" while the dialog is
+        // visibly advancing — worse than no signal, because it contradicts what the
+        // model can see.
+        val screenNote = if (screenBefore != null && screenBefore == screenAfter()) {
+            " screen=unchanged"
+        } else {
+            " screen=changed"
+        }
         return ToolOutcome.Ok(
             "sequence: tapped ${executed.size} buttons$truncNote; sm=$sm world=$w " +
-            "location=${semantics.locationIdentity(post)}",
+            "location=${semantics.locationIdentity(post)}$screenNote",
             mapOf(
-                "preSm" to "${semantics.localPosition(pre)}",
+                "preSm" to formatCoord(semantics.localPosition(pre)),
                 "postSm" to sm,
             )
         )

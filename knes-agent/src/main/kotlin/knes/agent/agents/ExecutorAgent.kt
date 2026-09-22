@@ -48,7 +48,11 @@ class ExecutorAgent(
         val argsSummary: String,
         val postSm: Pair<Int, Int>,
         val outcome: String,
+        val screen: ScreenEffect,
     )
+
+    /** Whether a turn's taps changed the picture, for turns where the party cannot move. */
+    enum class ScreenEffect { CHANGED, UNCHANGED, UNKNOWN }
 
     suspend fun act(screenshotB64: String, ramDigest: String, turn: Int = 0): ExecutorDecision {
         val started = System.currentTimeMillis()
@@ -80,12 +84,13 @@ class ExecutorAgent(
         // Read post-state straight from outcome message (sequence/townWalk both
         // include sm coords in their Ok messages) — not bullet-proof but cheap
         // and avoids another toolset.getState() round-trip.
-        val postRam = if (outcome is ToolOutcome.Ok) extractSmFromMessage(outcome.message) ?: preRam else preRam
+        val postRam = if (outcome is ToolOutcome.Ok) partyPositionIn(outcome.message) ?: preRam else preRam
         recentMoves.addLast(MoveEntry(
             turn = turn, preSm = preRam, tool = tool,
             argsSummary = args.entries.joinToString(",") { "${it.key}=${it.value.take(40)}" },
             postSm = postRam,
             outcome = outcome.javaClass.simpleName,
+            screen = screenEffectIn(if (outcome is ToolOutcome.Ok) outcome.message else ""),
         ))
         if (recentMoves.size > 8) recentMoves.removeFirst()
 
@@ -111,18 +116,69 @@ class ExecutorAgent(
         return ExecutorDecision(tool, args, reasoning, outcome, System.currentTimeMillis() - started)
     }
 
+    /**
+     * Whether the plan's target coordinate belongs to the phase the party is actually in.
+     *
+     * The Advisor writes a plan for where it expects the party to be. Acting on a
+     * town-local target while standing on the overworld walks north-west into Coneria
+     * CASTLE, which has ended runs before.
+     *
+     * This warns rather than blocking: a magnitude gate was tried in May and rejected
+     * legitimate walks, and a Reject that moves nothing is worse than a Fail with a
+     * diagnostic. The model sees the mismatch and can reach the right phase first.
+     */
+    private fun coordSpaceWarning(step: PlanStep, ramDigest: String): String? {
+        if (step.intentTool != "walkTo") return null
+        val x = step.intentArgs?.get("x")?.toIntOrNull() ?: return null
+        val y = step.intentArgs?.get("y")?.toIntOrNull() ?: return null
+        val onOverworld = Regex("mapflags=(\\d+)").find(ramDigest)?.groupValues?.get(1)
+            ?.toIntOrNull()?.let { (it and 1) == 0 } ?: return null
+
+        val targetLooksTownLocal = x in 0..31 && y in 0..31
+        return when {
+            onOverworld && targetLooksTownLocal ->
+                "!! COORD-SPACE MISMATCH: the step's ($x,$y) is town-local, but the RAM digest " +
+                    "says you are on the OVERWORLD, where walkTo takes world coords 80-240. " +
+                    "Walking there now heads north-west into Coneria CASTLE. Enter the town first."
+            !onOverworld && !targetLooksTownLocal ->
+                "!! COORD-SPACE MISMATCH: the step's ($x,$y) is a world coordinate, but you are " +
+                    "inside a town overlay, where walkTo takes town-local coords 0-31."
+            else -> null
+        }
+    }
+
+    /**
+     * The handful of values a turn actually turns on.
+     *
+     * They are all in the RAM digest already, but that is one comma-joined line of about
+     * 120 fields; a cursor position two characters wide is easy to miss in it, and a
+     * model that misses it guesses which menu row is highlighted.
+     */
+    private fun atAGlance(ram: Map<String, Int>): String {
+        val cursor = ram["menuCursor"]
+        val hand = ram["menuHandX"] to ram["menuHandY"]
+        val heldCount = campaign.countHolding(ram)
+        val equippedCount = campaign.countEquipped(ram)
+        return buildString {
+            append("party sm=(${ram["smPlayerX"]},${ram["smPlayerY"]}) ")
+            append("world=(${ram["worldX"]},${ram["worldY"]}) ")
+            append("gold=${campaign.gold(ram)}\n")
+            append("            menuCursor=$cursor hand=(${hand.first},${hand.second}) ")
+            append("screenState=${ram["screenState"]}\n")
+            append("            weapons: $heldCount/4 chars hold one, $equippedCount/4 equipped\n")
+            append("            menuCursor counts Down presses since the last A and resets on A ")
+            append("(observed, FF1). Treat it as how far you have moved in the open list, ")
+            append("not as a proven index into the shop's item order — and note the item ")
+            append("ID that lands in a weapon slot is NOT the shop row number.")
+        }
+    }
+
     private fun parseSmFromRamDigest(digest: String): Pair<Int, Int> {
         val sx = Regex("smPlayerX=(-?\\d+)").find(digest)?.groupValues?.get(1)?.toIntOrNull() ?: 0
         val sy = Regex("smPlayerY=(-?\\d+)").find(digest)?.groupValues?.get(1)?.toIntOrNull() ?: 0
         return sx to sy
     }
 
-    private fun extractSmFromMessage(msg: String): Pair<Int, Int>? {
-        // Both sequence (.message contains "sm=(X,Y)") and townWalk Ok messages
-        // include "sm=(N,N)". Pull the first match.
-        val m = Regex("sm=\\((-?\\d+),(-?\\d+)\\)").find(msg) ?: return null
-        return m.groupValues[1].toInt() to m.groupValues[2].toInt()
-    }
 
     /**
      * Sonnet decides every turn. Sees screenshot + Haiku digest + RAM digest +
@@ -152,9 +208,17 @@ class ExecutorAgent(
             parseToolDecision(raw)
         } catch (e: Exception) {
             knes.agent.runtime.Log.error("askLlm error: ${e.message?.take(160)} — falling back to plan tail")
-            val tail = plan?.steps?.lastOrNull()
-            if (tail?.intentTool != null) Triple(tail.intentTool, tail.intentArgs ?: emptyMap(), "fallback to plan tail (askLlm exception)")
-            else Triple("useMenu", mapOf("path" to "main/exit"), "fallback no-op (no plan, askLlm exception)")
+            // Prefer the step the plan is actually on; the tail is where the plan
+            // ends up, not where it is. And only dispatch a tool that exists —
+            // falling back onto a name the dispatcher does not know turns every
+            // failed turn into a Reject and trips the stuck watchdog.
+            val step = plan?.steps?.getOrNull(plan.cursor) ?: plan?.steps?.lastOrNull()
+            val intent = step?.intentTool?.takeIf { it in DISPATCHABLE }
+            if (intent != null) {
+                Triple(intent, step.intentArgs ?: emptyMap(), "fallback to plan step (askLlm exception)")
+            } else {
+                Triple("useMenu", mapOf("path" to "main/exit"), "fallback no-op (askLlm exception)")
+            }
         }
     }
 
@@ -167,7 +231,10 @@ class ExecutorAgent(
             buildString {
                 val staleNote = if (plan.milestone != currentMilestone) " [STALE — plan was for ${plan.milestone}, current is $currentMilestone]" else ""
                 append("plan-milestone=${plan.milestone} cursor=${plan.cursor}/${plan.steps.size}$staleNote\n")
-                if (cur != null) append("current step [${cur.index}]: ${cur.intentTool}(${cur.intentArgs ?: emptyMap()}) — ${cur.description}\n")
+                if (cur != null) {
+                    append("current step [${cur.index}]: ${cur.intentTool}(${cur.intentArgs ?: emptyMap()}) — ${cur.description}\n")
+                    coordSpaceWarning(cur, ramDigest)?.let { append("$it\n") }
+                }
                 if (tail != null && tail.index != cur?.index) append("final step [${tail.index}]: ${tail.intentTool}(${tail.intentArgs ?: emptyMap()}) — ${tail.description}\n")
             }
         }
@@ -175,7 +242,15 @@ class ExecutorAgent(
         val movesBlock = if (recentMoves.isEmpty()) "(no prior moves yet)" else {
             recentMoves.joinToString("\n") { mv ->
                 val moved = mv.preSm != mv.postSm
-                val tag = if (moved) "MOVED" else "NO-MOVEMENT"
+                // A menu tap never moves the party, so NO-MOVEMENT alone would brand
+                // every correct menu step a failure. Only a tap that changed neither the
+                // party tile nor the picture did nothing at all.
+                val tag = when {
+                    moved -> "MOVED"
+                    mv.screen == ScreenEffect.CHANGED -> "SCREEN-CHANGED"
+                    mv.screen == ScreenEffect.UNCHANGED -> "NOTHING-HAPPENED — try a different button"
+                    else -> "NO-MOVEMENT"
+                }
                 "  T${mv.turn}: sm${mv.preSm} → ${mv.tool}(${mv.argsSummary.take(50)}) [${mv.outcome}] → sm${mv.postSm} [$tag]"
             }
         }
@@ -200,6 +275,10 @@ class ExecutorAgent(
             CURRENT GOAL (milestone in progress): $currentMilestone
             All milestones: $milestoneStates
 
+            AT A GLANCE (the same numbers as the digest below, which is 120 fields
+            long and easy to lose them in):
+            ${atAGlance(ramMap)}
+
             Party weapons: $party
             (held bytes are item indices; * suffix = equipped, bit7 of byte)
 
@@ -216,7 +295,8 @@ class ExecutorAgent(
 
             Output ONE of these JSON shapes (no prose, JSON only):
 
-            (A) Raw button sequence — PREFERRED for navigation, building entry, dialog stepping.
+            (A) Raw button sequence — for ONE-TILE adjustments, building entry,
+                dialog and menu stepping.
                 {"sequence":["Up"],"reasoning":"<≤80 chars why>"}
                 Allowed buttons: Up, Down, Left, Right, A, B, START, SELECT.
                 EXACTLY ONE BUTTON per turn. The FF1 NES viewport is 16×14 tiles,
@@ -226,9 +306,23 @@ class ExecutorAgent(
                 cost — Executor runs every turn anyway).
 
             (B) High-level tool — for compound flows the engine handles in one call.
-                {"tool":"<one of: restAtInn|useMenu>","args":{...},"reasoning":"..."}
+                {"tool":"<one of: walkTo|restAtInn|useMenu>","args":{...},"reasoning":"..."}
+                  walkTo:       args = {"x":<int>,"y":<int>}
                   restAtInn:    args = {"innMapId":"<int>"}
                   useMenu:      args = {"path":"<grammar>"} — main/<item|equip|magic|status|exit>[/charN][/weapon|armor][/0-3] or shop/<buy|sell|exit>[/N][/charN]
+
+                *** USE walkTo WHEN YOU HAVE A TARGET COORDINATE ***
+                If the plan step names a destination and the party is more than
+                one tile away, emit walkTo with THAT coordinate. It walks many
+                tiles in one call, remembers which cardinals were blocked, and
+                rounds wandering NPCs — none of which single taps can do, because
+                each tap forgets everything the last one learned.
+                Coord space MUST match the phase: Town → town-local 0-31,
+                Overworld → world 80-240. Sending town coords while the RAM digest
+                says Overworld walks the party into Coneria CASTLE.
+                Use single taps instead only when: the target is adjacent, a
+                dialog or menu is open, or walkTo already reported Fail/Reject
+                for this destination.
 
                 NOTE: buyAtShop and equipWeapon are REMOVED — their cursor
                 state machines kept misfiring. Shopping AND equipping are
@@ -237,14 +331,14 @@ class ExecutorAgent(
 
             Decide from the SCREENSHOT what's happening. The plan is a hint; if the
             screen shows something else (e.g. dialog, menu, encounter), handle that
-            FIRST. For navigation, emit a short button sequence — you'll see the
-            result next turn and can adapt.
+            FIRST. For navigation toward a named coordinate use walkTo; for the last
+            tile, a dialog, or a menu, emit one button and re-read the screen.
 
             JSON only.
         """.trimIndent()
     }
 
-    private fun parseToolDecision(raw: String): Triple<String, Map<String, String>, String> {
+    internal fun parseToolDecision(raw: String): Triple<String, Map<String, String>, String> {
         val start = raw.indexOf('{'); val end = raw.lastIndexOf('}')
         require(start in 0 until end) { "no JSON object in llm response: ${raw.take(200)}" }
         val jsonText = raw.substring(start, end + 1)
@@ -255,8 +349,15 @@ class ExecutorAgent(
             // dispatch() can recover it without changing its signature.
             return Triple("sequence", mapOf("buttons" to parsed.sequence.joinToString(",")), reasoning)
         }
-        return Triple(parsed.tool ?: "(none)", parsed.args ?: emptyMap(), reasoning)
+        return Triple(parsed.tool ?: "(none)", toolArgs(parsed.args), reasoning)
     }
+
+    /** Numbers, strings and booleans all arrive as text, which is what dispatch reads. */
+    private fun toolArgs(raw: Map<String, kotlinx.serialization.json.JsonElement>?): Map<String, String> =
+        raw.orEmpty().mapValues { (_, value) ->
+            (value as? kotlinx.serialization.json.JsonPrimitive)?.content
+                ?: value.toString().trim('"')
+        }
 
     private suspend fun dispatch(tool: String, args: Map<String, String>): ToolOutcome = when (tool) {
         "boot"            -> tools.boot()
@@ -287,7 +388,14 @@ class ExecutorAgent(
         "battleFightAll"  -> tools.battleFightAll()
         "approachSprite"  -> tools.approachSprite(args.getValue("kind"))
         "sequence"        -> tools.sequence(args.getValue("buttons").split(",").map { it.trim() })
-        else              -> ToolOutcome.Reject("unknown tool: $tool")
+        // Naming the alternatives matters: a plan step once asked for
+        // "armCharsViaMenu", which does not exist, and every fallback turn
+        // rejected with no hint of what would have worked.
+        else              -> ToolOutcome.Reject(
+            "unknown tool '$tool'. Dispatchable tools: boot, walkTo, interactAt, " +
+                "useMenu, restAtInn, battleFightAll, approachSprite, sequence. " +
+                "Shopping and equipping are done with `sequence` taps."
+        )
     }
 
     private fun advancePlan(plan: Plan) {
@@ -298,12 +406,25 @@ class ExecutorAgent(
     @kotlinx.serialization.Serializable
     private data class ToolWire(
         val tool: String? = null,
-        val args: Map<String, String>? = null,
+        /**
+         * Values stay as raw JSON until [toolArgs] reads them.
+         *
+         * Decoding straight into `Map<String, String>` rejects `{"x":11}` — which is
+         * what a model naturally writes for a coordinate — and the whole decision was
+         * then discarded as a parse failure.
+         */
+        val args: Map<String, kotlinx.serialization.json.JsonElement>? = null,
         val reasoning: String? = null,
         val sequence: List<String>? = null,
     )
 
     companion object {
+        /** Tool names [dispatch] understands. A plan may name only these. */
+        internal val DISPATCHABLE = setOf(
+            "boot", "walkTo", "interactAt", "useMenu",
+            "restAtInn", "battleFightAll", "approachSprite", "sequence",
+        )
+
         private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
         private val EXECUTOR_SYSTEM_PROMPT = """
@@ -499,7 +620,23 @@ class ExecutorAgent(
 
             === ANTI-OSCILLATION ===
             Read the "Recent moves" block. Each entry shows pre-sm → tool →
-            post-sm with MOVED/NO-MOVEMENT.
+            post-sm with one of:
+              MOVED             — the party tile changed.
+              SCREEN-CHANGED    — the party did not move (it cannot, in a menu)
+                                  but the picture changed, so a dialog or menu
+                                  advanced. This is what progress looks like
+                                  while shopping or equipping.
+              NOTHING-HAPPENED  — neither the party nor the picture changed. That
+                                  button does nothing on this screen. Repeating
+                                  it will keep doing nothing. If you see two of
+                                  these in a row, you have misread the screen:
+                                  re-classify it via the STATE MACHINE section
+                                  and pick a button valid for THAT state. In
+                                  particular, B on the field with no dialog open
+                                  is a no-op — if B gave NOTHING-HAPPENED, there
+                                  was no dialog to close.
+              NO-MOVEMENT       — the party did not move and the tool could not
+                                  report whether the picture changed.
             - NO-MOVEMENT on a cardinal = wall or NPC blocking. Do not
               repeat the same tap.
             - If sm has not changed for 3+ recent turns: take a LONG
@@ -514,4 +651,30 @@ class ExecutorAgent(
             Respond with JSON only.
         """.trimIndent()
     }
+}
+
+/**
+ * The party position a tool reported in its own Ok message.
+ *
+ * The Executor uses this to tell a move that worked from one that did not — the signal
+ * the model needs in order to stop re-trying a blocked direction. Whitespace after the
+ * comma is tolerated: it was not, and when a producer started rendering a Kotlin `Pair`
+ * the move history silently claimed NO-MOVEMENT for every turn of a run.
+ */
+internal fun partyPositionIn(message: String): Pair<Int, Int>? {
+    val match = Regex("""sm=\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)""").find(message) ?: return null
+    return match.groupValues[1].toInt() to match.groupValues[2].toInt()
+}
+
+/**
+ * Reads the `screen=` note a tool appends.
+ *
+ * Deliberately about the picture rather than RAM: FF1's shop and inn dialogs are NPC
+ * overlays that leave the menu-state bytes untouched, so a RAM-based signal reports
+ * "nothing happened" while the dialog visibly advances.
+ */
+internal fun screenEffectIn(message: String): ExecutorAgent.ScreenEffect = when {
+    message.contains("screen=changed") -> ExecutorAgent.ScreenEffect.CHANGED
+    message.contains("screen=unchanged") -> ExecutorAgent.ScreenEffect.UNCHANGED
+    else -> ExecutorAgent.ScreenEffect.UNKNOWN
 }

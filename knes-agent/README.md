@@ -9,7 +9,16 @@ export OPENAI_API_KEY=sk-...
 ./gradlew :knes-agent:run -PappArgs="--fresh --max-turns=200"
 ```
 
-That is the whole setup. One key covers every role the agent needs.
+That is the whole setup. One key covers every role the agent needs — `GEMINI_API_KEY`
+works the same way, and `KNES_LLM` forces a choice when both are present.
+
+### How far it gets
+
+A 120-turn run from a cold boot reaches four milestones: `boot`, `enter_coneria`,
+`enter_weapon_shop` and `buy_weapons` — the party walks into Coneria, finds the weapon
+shop and buys. `arm_party` (equipping) is a known blocker that needs the FF1
+disassembly rather than more prompting; see the G4 entry in
+`docs/architecture-modernization-tasks.md`.
 
 ## Which models
 
@@ -38,8 +47,9 @@ while it stood on the centre path, then confused Coneria Castle for Coneria Town
 | `OPENAI_FAST_MODEL` | fast model (default `gpt-5`) |
 | `OPENAI_EXECUTOR_MODEL` | executor vision, if it should differ |
 | `OPENAI_REASONING_EFFORT` | `minimal`/`low`/`medium`/`high` (default `low`) |
-| `KNES_LLM` | force a provider: `openai` or `anthropic+gemini` |
-| `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` | the older pairing; needs both |
+| `KNES_LLM` | force a provider: `openai`, `gemini` or `anthropic+gemini` |
+| `GEMINI_API_KEY` | enables the Gemini provider, which also covers every role alone |
+| `ANTHROPIC_API_KEY` | only for the older `anthropic+gemini` pairing, which needs both keys |
 
 Two OpenAI details worth knowing, because both fail quietly otherwise: the budget is
 `max_completion_tokens` and it **also covers reasoning tokens**, so a ceiling sized for

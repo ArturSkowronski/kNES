@@ -24,6 +24,7 @@ class LlmProviderTest : FunSpec({
 
     test("an explicit choice wins over what keys happen to be present") {
         LlmProvider.select("openai", hasOpenAiKey = false) shouldBe LlmProvider.OpenAi
+        LlmProvider.select("gemini", hasOpenAiKey = true) shouldBe LlmProvider.Gemini
         LlmProvider.select("anthropic+gemini", hasOpenAiKey = true) shouldBe LlmProvider.AnthropicAndGemini
     }
 
@@ -31,10 +32,22 @@ class LlmProviderTest : FunSpec({
         LlmProvider.select("  OpenAI ", hasOpenAiKey = false) shouldBe LlmProvider.OpenAi
     }
 
-    test("with no choice, one key that covers every role wins") {
+    test("with no choice, a key that covers every role wins") {
         LlmProvider.select(null, hasOpenAiKey = true) shouldBe LlmProvider.OpenAi
-        LlmProvider.select(null, hasOpenAiKey = false) shouldBe LlmProvider.AnthropicAndGemini
         LlmProvider.select("", hasOpenAiKey = true) shouldBe LlmProvider.OpenAi
+
+        // Gemini alone is enough now. It used to fall through to the pairing, which
+        // then failed for a missing Anthropic key even with a working vision model.
+        LlmProvider.select(null, hasOpenAiKey = false, hasGeminiKey = true) shouldBe LlmProvider.Gemini
+
+        LlmProvider.select(null, hasOpenAiKey = false, hasGeminiKey = false) shouldBe
+            LlmProvider.AnthropicAndGemini
+    }
+
+    test("a running provider never runs out of one key and silently switches") {
+        // Choice is by configuration, not by whether a call just failed: a provider
+        // swapping mid-run would make a trace impossible to read.
+        LlmProvider.select("openai", hasOpenAiKey = false, hasGeminiKey = true) shouldBe LlmProvider.OpenAi
     }
 
     test("an unknown provider is refused by name rather than silently defaulted") {
