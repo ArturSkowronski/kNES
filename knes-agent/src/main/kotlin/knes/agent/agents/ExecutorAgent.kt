@@ -147,6 +147,30 @@ class ExecutorAgent(
         }
     }
 
+    /**
+     * The handful of values a turn actually turns on.
+     *
+     * They are all in the RAM digest already, but that is one comma-joined line of about
+     * 120 fields; a cursor position two characters wide is easy to miss in it, and a
+     * model that misses it guesses which menu row is highlighted.
+     */
+    private fun atAGlance(ram: Map<String, Int>): String {
+        val cursor = ram["menuCursor"]
+        val hand = ram["menuHandX"] to ram["menuHandY"]
+        val heldCount = campaign.countHolding(ram)
+        val equippedCount = campaign.countEquipped(ram)
+        return buildString {
+            append("party sm=(${ram["smPlayerX"]},${ram["smPlayerY"]}) ")
+            append("world=(${ram["worldX"]},${ram["worldY"]}) ")
+            append("gold=${campaign.gold(ram)}\n")
+            append("            menuCursor=$cursor hand=(${hand.first},${hand.second}) ")
+            append("screenState=${ram["screenState"]}\n")
+            append("            weapons: $heldCount/4 chars hold one, $equippedCount/4 equipped\n")
+            append("            menuCursor is the highlighted ROW INDEX in whatever list is open ")
+            append("(0 = top). Use it instead of guessing which row the hand points at.")
+        }
+    }
+
     private fun parseSmFromRamDigest(digest: String): Pair<Int, Int> {
         val sx = Regex("smPlayerX=(-?\\d+)").find(digest)?.groupValues?.get(1)?.toIntOrNull() ?: 0
         val sy = Regex("smPlayerY=(-?\\d+)").find(digest)?.groupValues?.get(1)?.toIntOrNull() ?: 0
@@ -182,9 +206,17 @@ class ExecutorAgent(
             parseToolDecision(raw)
         } catch (e: Exception) {
             knes.agent.runtime.Log.error("askLlm error: ${e.message?.take(160)} — falling back to plan tail")
-            val tail = plan?.steps?.lastOrNull()
-            if (tail?.intentTool != null) Triple(tail.intentTool, tail.intentArgs ?: emptyMap(), "fallback to plan tail (askLlm exception)")
-            else Triple("useMenu", mapOf("path" to "main/exit"), "fallback no-op (no plan, askLlm exception)")
+            // Prefer the step the plan is actually on; the tail is where the plan
+            // ends up, not where it is. And only dispatch a tool that exists —
+            // falling back onto a name the dispatcher does not know turns every
+            // failed turn into a Reject and trips the stuck watchdog.
+            val step = plan?.steps?.getOrNull(plan.cursor) ?: plan?.steps?.lastOrNull()
+            val intent = step?.intentTool?.takeIf { it in DISPATCHABLE }
+            if (intent != null) {
+                Triple(intent, step.intentArgs ?: emptyMap(), "fallback to plan step (askLlm exception)")
+            } else {
+                Triple("useMenu", mapOf("path" to "main/exit"), "fallback no-op (askLlm exception)")
+            }
         }
     }
 
@@ -240,6 +272,10 @@ class ExecutorAgent(
         return """
             CURRENT GOAL (milestone in progress): $currentMilestone
             All milestones: $milestoneStates
+
+            AT A GLANCE (the same numbers as the digest below, which is 120 fields
+            long and easy to lose them in):
+            ${atAGlance(ramMap)}
 
             Party weapons: $party
             (held bytes are item indices; * suffix = equipped, bit7 of byte)
@@ -350,7 +386,14 @@ class ExecutorAgent(
         "battleFightAll"  -> tools.battleFightAll()
         "approachSprite"  -> tools.approachSprite(args.getValue("kind"))
         "sequence"        -> tools.sequence(args.getValue("buttons").split(",").map { it.trim() })
-        else              -> ToolOutcome.Reject("unknown tool: $tool")
+        // Naming the alternatives matters: a plan step once asked for
+        // "armCharsViaMenu", which does not exist, and every fallback turn
+        // rejected with no hint of what would have worked.
+        else              -> ToolOutcome.Reject(
+            "unknown tool '$tool'. Dispatchable tools: boot, walkTo, interactAt, " +
+                "useMenu, restAtInn, battleFightAll, approachSprite, sequence. " +
+                "Shopping and equipping are done with `sequence` taps."
+        )
     }
 
     private fun advancePlan(plan: Plan) {
@@ -374,6 +417,12 @@ class ExecutorAgent(
     )
 
     companion object {
+        /** Tool names [dispatch] understands. A plan may name only these. */
+        internal val DISPATCHABLE = setOf(
+            "boot", "walkTo", "interactAt", "useMenu",
+            "restAtInn", "battleFightAll", "approachSprite", "sequence",
+        )
+
         private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
         private val EXECUTOR_SYSTEM_PROMPT = """

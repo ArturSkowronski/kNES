@@ -77,3 +77,31 @@ private object NoTools : knes.agent.tools.ToolSurface {
     override suspend fun approachSprite(kind: String) = error("not called")
     override suspend fun sequence(buttons: List<String>) = error("not called")
 }
+
+/**
+ * A plan may only name tools the Executor can actually dispatch.
+ *
+ * A plan step once asked for "armCharsViaMenu", which does not exist. Every turn that
+ * fell back to the plan rejected, and five rejections trip the stuck watchdog — so an
+ * LLM hiccup during the equip phase turned into the run giving up.
+ */
+class DispatchableToolsTest : FunSpec({
+
+    test("the dispatchable set matches what the Advisor may plan") {
+        ExecutorAgent.DISPATCHABLE shouldBe setOf(
+            "boot", "walkTo", "interactAt", "useMenu",
+            "restAtInn", "battleFightAll", "approachSprite", "sequence",
+        )
+    }
+
+    test("the tools the plan actually uses are all dispatchable") {
+        // These are the intentTool values the Advisor prompt tells the model to emit.
+        listOf("boot", "walkTo", "interactAt", "sequence").forEach {
+            (it in ExecutorAgent.DISPATCHABLE) shouldBe true
+        }
+    }
+
+    test("the invented one is not, and never silently became so") {
+        ("armCharsViaMenu" in ExecutorAgent.DISPATCHABLE) shouldBe false
+    }
+})

@@ -221,7 +221,10 @@ class AdvisorAgent(
                   exiting the dialog."
 
             arm_party (≥2 chars have a weapon equipped — bit7 set):
-              [0] intentTool="armCharsViaMenu"  intentArgs={}
+              [0] OMIT intentTool entirely for this step — there is no equip
+                  tool to dispatch. Naming one the Executor does not have
+                  ("armCharsViaMenu") makes every fallback turn a Reject and
+                  trips the stuck watchdog.
                   description: "Equipping is done VIA RAW SEQUENCE TAPS
                   by the Executor (see EQUIPPING PLAYBOOK in the Executor
                   system prompt). Cursor stays on this step until the
