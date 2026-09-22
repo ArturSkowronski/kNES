@@ -61,3 +61,27 @@ class ScreenEffectTest : FunSpec({
         screenEffectIn("townWalk: reached (11,11) in 4 steps") shouldBe ExecutorAgent.ScreenEffect.UNKNOWN
     }
 })
+
+/**
+ * Not every tool says where the party ended up, which is why the Executor settles a turn's
+ * effect from the next turn's RAM rather than from the message it was handed.
+ */
+class MessagesWithoutCoordinatesTest : FunSpec({
+
+    test("a town walk reports its destination in prose, not in a shape either parser reads") {
+        val message = "townWalk: reached EXACT (11,11) in 19 steps (recoveries=0)"
+        partyPositionIn(message) shouldBe null
+        worldPositionIn(message) shouldBe null
+    }
+
+    test("an overworld walk is the same") {
+        partyPositionIn("reached (147,155) in 3 steps") shouldBe null
+        worldPositionIn("reached (147,155) in 3 steps") shouldBe null
+    }
+
+    test("a sequence does carry both, and both are read") {
+        val message = "sequence: tapped 1 buttons; sm=(11,10) world=(147,155) location=[0, 1] screen=changed"
+        partyPositionIn(message) shouldBe (11 to 10)
+        worldPositionIn(message) shouldBe (147 to 155)
+    }
+})

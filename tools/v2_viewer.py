@@ -3,7 +3,7 @@
 Live viewer for the v2 agent run.
 
 Serves http://localhost:9876/ — auto-refreshes every 3s. Reads from
-~/.knes/runs/latest-v2/ and renders:
+~/.knes/runs/latest/ and renders:
   - what each agent does (static narrative)
   - campaign goal / milestone progress
   - last executor decision + plan
@@ -23,7 +23,16 @@ import urllib.parse
 from pathlib import Path
 
 PORT = 9876
-RUN_LINK = Path.home() / ".knes" / "runs" / "latest-v2"
+RUN_ROOT = Path.home() / ".knes" / "runs"
+
+
+def run_link() -> Path:
+    """The run to show: `latest`, which every fresh run repoints, then the older v2 link."""
+    for name in ("latest", "latest-v2"):
+        link = RUN_ROOT / name
+        if link.exists():
+            return link
+    return RUN_ROOT / "latest"
 
 AGENT_NARRATIVE = [
     ("cartographer", "Cartographer", "gemini-3-pro (vision)",
@@ -98,6 +107,96 @@ def _h(s):
     return html.escape(str(s)) if s is not None else ""
 
 
+def read_goal_decision(run: Path):
+    """The newest `executor-goals` dump, split into its three sections.
+
+    Written by ExecutorAgent when KNES_DECISION is on: the state the model read, every
+    option it was shown, and the full ranking. Returns None when the run decided its turns
+    with the chat model instead, so the panel simply does not appear.
+    """
+    prompts = run / "prompts"
+    if not prompts.exists():
+        return None
+    dumps = sorted(prompts.glob("T*-executor-goals.txt"))
+    if not dumps:
+        return None
+    newest = dumps[-1]
+    text = newest.read_text()
+    sections = {}
+    current = None
+    for line in text.splitlines():
+        if line.startswith("=== ") and line.endswith(" ==="):
+            current = line.strip("= ").strip().lower()
+            sections[current] = []
+        elif current:
+            sections[current].append(line)
+
+    options = []
+    for line in sections.get("options", []):
+        if line.startswith("- ") and ": " in line:
+            goal_id, description = line[2:].split(": ", 1)
+            options.append((goal_id, description))
+
+    ranking = []
+    for line in sections.get("ranking", []):
+        parts = line.rsplit(" ", 1)
+        if len(parts) == 2:
+            try:
+                ranking.append((parts[0], float(parts[1])))
+            except ValueError:
+                pass
+
+    return {
+        "turn": int(newest.stem[1:6]),
+        "state": "\n".join(sections.get("state", [])).strip(),
+        "options": dict(options),
+        "ranking": ranking,
+    }
+
+
+def render_goal_decision(decision) -> str:
+    """The typed decision, as bars.
+
+    The point the panel has to make is that the answer could not have been anything else:
+    every bar is an option that was written down before the model was asked.
+    """
+    if not decision:
+        return (
+            '<div style="background:#161616;padding:12px;border-radius:6px;color:#888;font-size:12px">'
+            'This run decided its turns with the chat model. Set '
+            '<code style="color:#7cb">KNES_DECISION=semif</code> (or <code style="color:#7cb">order</code>) '
+            'to put the goal selector in charge — see docs/typed-decisions.md.</div>'
+        )
+    ranking = decision["ranking"]
+    if not ranking:
+        return '<div style="color:#888">(only one goal applied — nothing to decide)</div>'
+    top = ranking[0][1] or 1.0
+    rows = []
+    for i, (goal_id, probability) in enumerate(ranking):
+        width = max(1.0, probability / top * 100.0)
+        won = i == 0
+        colour = "#4caf50" if won else "#33506b"
+        rows.append(
+            f'<div style="margin-bottom:6px">'
+            f'<div style="display:flex;justify-content:space-between;font-size:12px;'
+            f'color:{"#dfe" if won else "#9ab"};font-family:monospace">'
+            f'<span>{"&#9654; " if won else "&nbsp;&nbsp;&nbsp;"}{_h(goal_id)}</span>'
+            f'<span>{probability:.4f}</span></div>'
+            f'<div style="background:#12181f;border-radius:3px;height:8px;overflow:hidden">'
+            f'<div style="background:{colour};width:{width:.1f}%;height:100%"></div></div>'
+            f'<div style="font-size:11px;color:#667;margin-top:2px">'
+            f'{_h(decision["options"].get(goal_id, ""))}</div>'
+            f'</div>'
+        )
+    return (
+        f'<div style="background:#161616;padding:12px;border-radius:6px">'
+        f'<div style="font-size:11px;color:#888;margin-bottom:8px">'
+        f'T{decision["turn"]:05d} · {len(ranking)} goals said they could run · '
+        f'the model ranked them · nothing else was possible to answer</div>'
+        f'{"".join(rows)}</div>'
+    )
+
+
 def render_html(run: Path) -> str:
     if not run.exists():
         return f"<html><body><h1>No run dir at {run}</h1><p>Start a smoke first.</p></body></html>"
@@ -150,6 +249,8 @@ def render_html(run: Path) -> str:
             n = int(cf.stem.split("cart-")[1])
             png = run / "snapshots" / f"cart-{n:05d}.png"
             cart_prompts.append((n, cf.read_text(), b64_png(png)))
+
+    goal_decision = read_goal_decision(run)
 
     milestones = campaign.get("milestones", [])
     plans_history = campaign.get("plans", [])
@@ -321,6 +422,8 @@ details summary{{cursor:pointer;color:#7cb;padding:4px 0}}
 </div>
 
 <div class="col" style="width:330px">
+  <h2>Typed decision (goals &rarr; SemIf)</h2>
+  {render_goal_decision(goal_decision)}
   <h2>RAM (T{last_t})</h2>
   {ram_html}
   <h2>Goal · milestones</h2>
@@ -363,6 +466,9 @@ details summary{{cursor:pointer;color:#7cb;padding:4px 0}}
 <tbody>{rows_html}</tbody>
 </table>
 
+<h2>State the decision model read</h2>
+<details><summary>show</summary><pre>{_h(goal_decision["state"]) if goal_decision else "(no typed decisions in this run)"}</pre></details>
+
 <h2>Latest Advisor prompt + response</h2>
 <details><summary>show</summary><pre>{_h(advisor_prompt) or "(no advisor prompts dumped yet)"}</pre></details>
 
@@ -376,7 +482,8 @@ details summary{{cursor:pointer;color:#7cb;padding:4px 0}}
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
-        run = RUN_LINK.resolve() if RUN_LINK.exists() else RUN_LINK
+        link = run_link()
+        run = link.resolve() if link.exists() else link
         if path == "/" or path == "/index.html":
             html_text = render_html(run)
             data = html_text.encode("utf-8")
@@ -398,8 +505,8 @@ class ReusableTCPServer(socketserver.TCPServer):
 
 
 def main():
-    if not RUN_LINK.exists():
-        print(f"[v2-viewer] WARN: {RUN_LINK} does not exist yet — start a smoke first.")
+    if not run_link().exists():
+        print(f"[v2-viewer] WARN: {run_link()} does not exist yet — start a smoke first.")
     print(f"[v2-viewer] http://localhost:{PORT}/  (Ctrl-C to stop)")
     with ReusableTCPServer(("127.0.0.1", PORT), Handler) as srv:
         srv.serve_forever()

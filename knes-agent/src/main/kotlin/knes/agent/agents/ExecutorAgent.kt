@@ -61,6 +61,8 @@ class ExecutorAgent(
     private data class MoveEntry(
         val turn: Int,
         val preSm: Pair<Int, Int>,
+        /** Where the party stood on the overworld when this turn began. */
+        val preWorld: Pair<Int, Int>,
         val tool: String,
         val argsSummary: String,
         val postSm: Pair<Int, Int>,
@@ -82,6 +84,7 @@ class ExecutorAgent(
         val preRam = parseSmFromRamDigest(ramDigest)
         val ram = WorldSnapshot.parseRam(ramDigest)
         val preWorld = (ram["worldX"] ?: 0) to (ram["worldY"] ?: 0)
+        correctPreviousTurnsEffect(preRam, preWorld)
         val plan = memory.currentPlan
         val planCreatedAt = plan?.createdAtTurn ?: -1
         if (planCreatedAt != lastPlanCreatedAt) {
@@ -118,7 +121,7 @@ class ExecutorAgent(
         val postRam = if (outcome is ToolOutcome.Ok) partyPositionIn(outcome.message) ?: preRam else preRam
         val postWorld = worldPositionIn(message)
         recentMoves.addLast(MoveEntry(
-            turn = turn, preSm = preRam, tool = tool,
+            turn = turn, preSm = preRam, preWorld = preWorld, tool = tool,
             argsSummary = args.entries.joinToString(",") { "${it.key}=${it.value.take(40)}" },
             postSm = postRam,
             outcome = outcome.javaClass.simpleName,
@@ -224,6 +227,24 @@ class ExecutorAgent(
         return sx to sy
     }
 
+
+    /**
+     * Settle what the previous turn actually did, now that its result is on the floor.
+     *
+     * A tool's Ok message does not always carry a coordinate to compare: `walkTo` reports
+     * "reached (147,155) in 3 steps" and nothing in it matches the `sm=`/`world=` shapes,
+     * so a turn that walked three tiles read as having moved nothing — and a goal that
+     * gives up when nothing is happening gave up on a step that was working.
+     *
+     * Where the party stands when the next turn begins is the honest measure, and it costs
+     * nothing: the turn loop hands over a fresh RAM digest anyway. Only the current turn's
+     * entry is ever provisional, and this runs before any goal reads the history.
+     */
+    private fun correctPreviousTurnsEffect(preSm: Pair<Int, Int>, preWorld: Pair<Int, Int>) {
+        val last = recentMoves.lastOrNull() ?: return
+        val moved = last.preSm != preSm || last.preWorld != preWorld
+        if (moved != last.moved) recentMoves[recentMoves.size - 1] = last.copy(moved = moved)
+    }
 
     /**
      * Ask the goal selector what to do, if there is one.
