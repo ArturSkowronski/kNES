@@ -247,6 +247,32 @@ business on the menu. `playerFloatState` (`$001D`) is 0 on the ground — establ
 correlation rather than taken from a RAM map: over a 160-turn run Mario's y held still on
 103 of the 106 turns where the byte read 0, and moved on 50 of the 53 where it read 1.
 
+### What a description is for
+
+The single most effective change to how Mario plays was four words removed from a goal's
+description. `walk_right` used to read *"Walk right without sprinting — slower, and easier
+to stop before an edge."* That is advice to walk at the edge of a pit, which is how you
+fall into one. Deleting the clause took the first life from 295 px to 722 px and halved the
+death rate.
+
+The opposite experiment is just as sharp. Rewriting every description to be purely
+mechanical — *"Hold Right, A and B for a third of a second"* — with nothing about what the
+option is **for**, produced **zero jumps in 220 turns** and 298 px. The description is the
+model's only channel besides the picture; strip the purpose and the option stops being
+reachable.
+
+So: say what a goal is for, say nothing about when it is wise.
+
+| | per life | deaths / 220 turns |
+|---|---|---|
+| original descriptions | 295, 297, 594 | 2 |
+| purely mechanical | 297, 298, 297 | 2, no jumps at all |
+| **purpose kept, advice removed** | **722, 722** | **1** |
+
+Two other changes measured nothing and were reverted rather than kept as folklore: holding
+the jump for 26 frames instead of 18, and offering `wait` only with an enemy on screen (an
+enemy is on screen for almost all of World 1-1).
+
 Where this leaves the demo: the mechanism is sound and fast — 200 typed decisions at
 400 ms, never once answering with something that was not on the menu — and the *play* is
 poor. Seven generic goals and a 4B readout do not clear World 1-1.
@@ -303,3 +329,16 @@ Executor can dispatch.
 *Jev and TypeSafe are other people's names and marks. [SemIf](https://github.com/TheoLeeCJ/SemIf)
 is an independent project by its own authors, not affiliated with either; kNES is not
 affiliated with any of them, and this integration is written against SemIf's interface.*
+
+## Running it live
+
+```bash
+tools/live_demo.sh smb      # or ff1
+```
+
+Brings up the viewer, starts the agent, and restarts it whenever it exits — a run ends on
+its own at `--max-turns`, and can also die on a dropped model. A demo that stops between
+the introduction and the point is worse than no demo. Ctrl-C stops both.
+
+`KNES_DECISION` and `TURNS_PER_RUN` override the defaults; with `KNES_DECISION=pixels` it
+finds SemIf's vision environment at `~/GitHub/SemIf/.venv-vlm` or tells you what to set.
