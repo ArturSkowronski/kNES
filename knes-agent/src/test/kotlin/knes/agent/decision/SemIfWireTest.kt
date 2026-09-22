@@ -4,6 +4,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 
 private val CHOICE = Choice(
     id = "turn-7",
@@ -57,5 +58,17 @@ class SemIfWireTest : FunSpec({
         shouldThrow<IllegalStateException> {
             SemIfProcess.parseRanking(CHOICE, """{"id":"turn-7","error":"ValueError: boom"}""", "m")
         }.message shouldContain "ValueError: boom"
+    }
+})
+
+class PixelWireTest : FunSpec({
+
+    test("a frame rides along on the wire when the model can look at it") {
+        val withScreen = CHOICE.copy(imageB64 = "iVBORw0KGgo=")
+        SemIfProcess.wire(withScreen).toString() shouldContain "\"image\":\"iVBORw0KGgo=\""
+    }
+
+    test("no frame, no field — the text backend would not know what to do with one") {
+        SemIfProcess.wire(CHOICE).toString() shouldNotContain "image"
     }
 })

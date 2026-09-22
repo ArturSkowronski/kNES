@@ -25,7 +25,22 @@ class WorldSnapshotTest : FunSpec({
     test("a missing position reads as the origin rather than throwing mid-turn") {
         val world = WorldSnapshot(1, Phase.Town, emptyMap(), null, "m", emptyList())
         world.sm shouldBe (0 to 0)
-        world.world shouldBe (0 to 0)
+    }
+
+    test("a game with no overworld simply has none, rather than reporting the origin") {
+        // Only Final Fantasy watches worldX/worldY. Mario reporting (0,0) would read as a
+        // real position on a map he is not on.
+        WorldSnapshot(1, Phase.Overworld, mapOf("playerX" to 40), null, "m", emptyList()).world shouldBe null
+        WorldSnapshot(1, Phase.Town, mapOf("worldX" to 147, "worldY" to 155), null, "m", emptyList())
+            .world shouldBe (147 to 155)
+    }
+
+    test("the profile's own position wins over guessing at field names") {
+        val world = WorldSnapshot(
+            1, Phase.Overworld, mapOf("smPlayerX" to 9, "smPlayerY" to 9),
+            null, "m", emptyList(), position = 40 to 176,
+        )
+        world.sm shouldBe (40 to 176)
     }
 
     test("recentFailures counts the turns that moved the game no further") {

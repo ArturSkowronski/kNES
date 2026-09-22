@@ -36,6 +36,16 @@ data class Choice(
     val state: String,
     val question: String,
     val options: List<Option>,
+    /**
+     * The screen, when the model can look at it.
+     *
+     * The pinned checkpoint is a vision-language model, and the same readout works with a
+     * frame as the evidence instead of a paragraph about it — at 256x240 it costs about
+     * 190 ms against 100 ms for text alone. It is the difference between an agent that
+     * reads a RAM digest and one that can see a pipe in front of it. Ignored by backends
+     * that only have the text half of the model loaded.
+     */
+    val imageB64: String? = null,
 ) {
     init {
         require(id.isNotBlank()) { "a choice needs a non-blank id" }

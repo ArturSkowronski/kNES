@@ -197,6 +197,136 @@ def render_goal_decision(decision) -> str:
     )
 
 
+
+# ---------------------------------------------------------------- live demo page
+
+BUTTONS = ("Up", "Down", "Left", "Right", "B", "A", "SELECT", "START")
+
+
+def live_payload(run: Path) -> dict:
+    """Everything the demo page redraws, small enough to poll several times a second.
+
+    The screen comes from `live.png`, which the tool surface rewrites after every single
+    button press — not from the per-turn dump, which would only move once a turn and make
+    a 5 Hz agent look like a 1 Hz one.
+    """
+    decisions = sorted((run / "decisions").glob("turn-*.json")) if (run / "decisions").exists() else []
+    decision = read_json(decisions[-1]) if decisions else {}
+    executor = decision.get("executor", {}) or {}
+    pressed = [b.strip() for b in (executor.get("args", {}) or {}).get("buttons", "").split(",") if b.strip()]
+
+    goals = read_goal_decision(run) or {}
+    live_png = run / "snapshots" / "live.png"
+    turn_png = run / "snapshots" / f"turn-{decision.get('turn', 0):05d}.png"
+    frame = live_png if live_png.exists() else turn_png
+
+    ram = decision.get("ram", {}) or {}
+    return {
+        "turn": decision.get("turn", 0),
+        "phase": decision.get("phase", "?"),
+        "tool": executor.get("tool", ""),
+        "args": executor.get("args", {}),
+        "pressed": pressed,
+        "outcome": executor.get("outcome", ""),
+        "ms": executor.get("ms", 0),
+        "model": (goals.get("ranking") and executor.get("reasoningSummary", "").split(" via ")[-1]) or "",
+        "ranking": goals.get("ranking", []),
+        "options": goals.get("options", {}),
+        "screen": b64_png(frame),
+        "sm": [ram.get("smPlayerX"), ram.get("smPlayerY")],
+    }
+
+
+LIVE_PAGE = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>kNES live</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#0b0e13; color:#dfe6ee;
+         font:14px ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .wrap { display:flex; gap:24px; padding:24px; flex-wrap:wrap; align-items:flex-start; }
+  h1 { font-size:15px; letter-spacing:.14em; text-transform:uppercase; color:#7f93a8;
+       margin:0 0 12px; font-weight:600; }
+  #screen { image-rendering:pixelated; width:512px; max-width:100%; display:block;
+            border:1px solid #1d2733; border-radius:4px; background:#000; }
+  .pad { display:grid; grid-template-columns:repeat(3,34px); gap:4px; margin-top:16px; }
+  .key { height:34px; border-radius:4px; background:#141b24; border:1px solid #222d3a;
+         display:flex; align-items:center; justify-content:center; font-size:12px;
+         color:#54636f; transition:background .05s, color .05s, border-color .05s; }
+  .key.on { background:#4caf50; color:#06210c; border-color:#7fe08a; }
+  .face { display:flex; gap:8px; margin-top:12px; }
+  .face .key { width:46px; border-radius:23px; }
+  .meta { color:#7f93a8; font-size:12px; margin-top:14px; line-height:1.7; }
+  .bar { height:9px; background:#111820; border-radius:3px; overflow:hidden; }
+  .bar > div { height:100%; background:#33506b; transition:width .12s; }
+  .row.win .bar > div { background:#4caf50; }
+  .row { margin-bottom:9px; }
+  .row .hd { display:flex; justify-content:space-between; font-size:12px; color:#8fa3b5; }
+  .row.win .hd { color:#dff3e2; }
+  .row .desc { font-size:11px; color:#5b6a78; margin-top:2px; }
+  .col { min-width:340px; flex:1; }
+  .note { color:#5b6a78; font-size:11px; margin-top:6px; }
+</style></head><body>
+<div class="wrap">
+  <div>
+    <h1>Screen</h1>
+    <img id="screen" alt="NES screen">
+    <div class="pad">
+      <div></div><div class="key" data-b="Up">&#9650;</div><div></div>
+      <div class="key" data-b="Left">&#9664;</div><div></div><div class="key" data-b="Right">&#9654;</div>
+      <div></div><div class="key" data-b="Down">&#9660;</div><div></div>
+    </div>
+    <div class="face">
+      <div class="key" data-b="SELECT">SEL</div>
+      <div class="key" data-b="START">STA</div>
+      <div class="key" data-b="B">B</div>
+      <div class="key" data-b="A">A</div>
+    </div>
+    <div class="meta" id="meta"></div>
+  </div>
+  <div class="col">
+    <h1>The decision</h1>
+    <div id="ranking"></div>
+    <div class="note" id="note"></div>
+  </div>
+</div>
+<script>
+const KEYS = document.querySelectorAll('.key');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function tick() {
+  try {
+    const d = await (await fetch('/api/live', {cache:'no-store'})).json();
+    if (d.screen) document.getElementById('screen').src = 'data:image/png;base64,' + d.screen;
+
+    const down = new Set(d.pressed || []);
+    KEYS.forEach(k => k.classList.toggle('on', down.has(k.dataset.b)));
+
+    document.getElementById('meta').innerHTML =
+      'turn <b>' + d.turn + '</b> &middot; ' + esc(d.phase) +
+      ' &middot; tile ' + d.sm[0] + ',' + d.sm[1] + '<br>' +
+      esc(d.tool) + ' &rarr; ' + esc(d.outcome) + ' &middot; ' + d.ms + ' ms';
+
+    const rank = d.ranking || [];
+    const top = rank.length ? (rank[0][1] || 1) : 1;
+    document.getElementById('ranking').innerHTML = rank.map(([id, p], i) =>
+      '<div class="row' + (i === 0 ? ' win' : '') + '">' +
+        '<div class="hd"><span>' + (i === 0 ? '&#9654; ' : '') + esc(id) + '</span>' +
+          '<span>' + p.toFixed(4) + '</span></div>' +
+        '<div class="bar"><div style="width:' + Math.max(1, p / top * 100).toFixed(1) + '%"></div></div>' +
+        '<div class="desc">' + esc((d.options || {})[id] || '') + '</div>' +
+      '</div>').join('') || '<i style="color:#5b6a78">waiting for a decision…</i>';
+
+    document.getElementById('note').textContent = rank.length
+      ? rank.length + ' goals said they could run. The model ranked them. Nothing else was possible to answer.'
+      : '';
+  } catch (e) { /* the run may be between writes; try again next tick */ }
+}
+tick();
+setInterval(tick, 120);
+</script>
+</body></html>"""
+
+
 def render_html(run: Path) -> str:
     if not run.exists():
         return f"<html><body><h1>No run dir at {run}</h1><p>Start a smoke first.</p></body></html>"
@@ -481,6 +611,25 @@ details summary{{cursor:pointer;color:#7cb;padding:4px 0}}
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
+        link = run_link()
+        run_now = link.resolve() if link.exists() else link
+        if self.path.startswith("/api/live"):
+            body = json.dumps(live_payload(run_now)).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if self.path.startswith("/live"):
+            body = LIVE_PAGE.encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         path = urllib.parse.urlparse(self.path).path
         link = run_link()
         run = link.resolve() if link.exists() else link

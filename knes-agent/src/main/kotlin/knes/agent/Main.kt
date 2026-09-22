@@ -135,8 +135,12 @@ fun main(args: Array<String>) {
                 val advisor = AdvisorAgent(vision, memory, run, landmarks, campaign, semantics)
                 // Off unless KNES_DECISION says otherwise; see DecisionModels.
                 val decisionModel = knes.agent.decision.DecisionModels.fromEnvironment()
-                val goalSelector = decisionModel?.let {
-                    knes.agent.goals.GoalSelector(knes.agent.goals.Ff1Goals.all(), it)
+                val profileGoals = knes.agent.goals.Goals.of(cfg.profile)
+                val goalSelector = decisionModel?.takeIf { profileGoals.isNotEmpty() }?.let {
+                    knes.agent.goals.GoalSelector(profileGoals, it)
+                }
+                if (decisionModel != null && profileGoals.isEmpty()) {
+                    Log.warn("no goals written for profile '${cfg.profile}' — the chat model keeps deciding turns")
                 }
                 val executor = ExecutorAgent(
                     sonnet, haiku, tools, memory, run,
@@ -144,9 +148,26 @@ fun main(args: Array<String>) {
                     campaign = campaign,
                     goals = goalSelector,
                     phaseProvider = { Phase.fromRam(toolset.getState().ram, cfg.profile) },
+                    // The profile knows which of its addresses hold the position; `smPlayerX`
+                    // is a Final Fantasy name and Mario has no such field.
+                    positionOf = { semantics.localPosition(it) },
                 )
                 Log.llm("models: advisor/cart=${vision.model} executor=${executorVision.model} fast=${chat.fastModel}")
                 Log.llm("decisions: ${decisionModel?.name ?: "chat model (KNES_DECISION off)"}")
+                check(!cfg.reactive || goalSelector != null) {
+                    "--reactive plays without the Advisor, so something has to decide the turn: set KNES_DECISION=semif or order"
+                }
+                if (cfg.reactive) {
+                    Log.llm("reactive: the goal selector plays alone — no Advisor, so no plan and no composite tools")
+                }
+
+                // One gate rather than six. Every replan trigger below calls this, so
+                // --reactive is decided once here instead of at each call site.
+                val plan: suspend (String, String, Int, Phase, Map<String, Int>) -> Unit =
+                    if (cfg.reactive) { _, _, _, _, _ -> Unit }
+                    else { reason, shot, t, ph, r ->
+                        advisor.plan(reason = reason, screenshotB64 = shot, turn = t, phase = ph, ram = r)
+                    }
                 val reviewer = ReviewerAgent(haiku, memory, run, campaign)
                 val cartographer = CartographerAgent(
                     vision, toolset, memory, snapshotDumper, overworldMap, fog, landmarks,
@@ -179,18 +200,12 @@ fun main(args: Array<String>) {
                     snapshotDumper.dump(0)
                     val snap0 = toolset.getScreen().base64
                     val s0 = toolset.getState()
-                    advisor.plan(
-                        reason = "T0 fresh campaign", screenshotB64 = snap0, turn = firstTurn,
-                        phase = Phase.fromRam(s0.ram, cfg.profile), ram = s0.ram,
-                    )
+                    plan("T0 fresh campaign", snap0, firstTurn, Phase.fromRam(s0.ram, cfg.profile), s0.ram)
                 } else {
                     waitForStableFrame(toolset)
                     val snap = toolset.getScreen().base64
                     val s = toolset.getState()
-                    advisor.plan(
-                        reason = "resume context", screenshotB64 = snap, turn = firstTurn,
-                        phase = Phase.fromRam(s.ram, cfg.profile), ram = s.ram,
-                    )
+                    plan("resume context", snap, firstTurn, Phase.fromRam(s.ram, cfg.profile), s.ram)
                 }
 
                 // Phase 1: campaign loop
@@ -223,7 +238,9 @@ fun main(args: Array<String>) {
                     // viewport and the Executor decides on bogus state.
                     waitForStableFrame(toolset)
                     val snap = toolset.getScreen().base64
-                    snapshotDumper.dump(turn)
+                    // Hand over the frame just grabbed: dumping its own would encode the
+                    // identical picture a second time, every turn.
+                    snapshotDumper.dump(turn, snap)
                     val state = toolset.getState()
                     val phase = Phase.fromRam(state.ram, cfg.profile)
                     val ramDigest = state.ram.entries.joinToString(",") { "${it.key}=${it.value}" }
@@ -316,11 +333,8 @@ fun main(args: Array<String>) {
                                 toolset.tap(button = "B", count = 1, pressFrames = 5, gapFrames = 8)
                                 toolset.step(buttons = emptyList(), frames = 12)
                             }
-                            advisor.plan(
-                                reason = "OBSERVATION: gold dropped -${delta}G at sm=${semantics.localPosition(state.ram)} while last tool was `${decision.tool}` (no intentional spend). Cause unknown — could be accidental NPC dialog (Yes/No), an inn-stay, a misfired skill, or a legitimate cost we didn't model. Inspect the current screenshot to identify which building/NPC the party is adjacent to (sign text, counter contents) and decide whether to retry, back out, or continue. Do NOT assume it was an inn unless the screenshot confirms a bed/INN sign.",
-                                screenshotB64 = snap, turn = turn,
-                                phase = phase, ram = state.ram,
-                            )
+                            plan(
+                                "OBSERVATION: gold dropped -${delta}G at sm=${semantics.localPosition(state.ram)} while last tool was `${decision.tool}` (no intentional spend). Cause unknown — could be accidental NPC dialog (Yes/No), an inn-stay, a misfired skill, or a legitimate cost we didn't model. Inspect the current screenshot to identify which building/NPC the party is adjacent to (sign text, counter contents) and decide whether to retry, back out, or continue. Do NOT assume it was an inn unless the screenshot confirms a bed/INN sign.", snap, turn, phase, state.ram)
                         }
                     }
                     prevGold = curGold
@@ -333,19 +347,13 @@ fun main(args: Array<String>) {
                         // Fresh plan should get a full grace period from
                         // the audit-hysteresis counter.
                         consecutiveAuditHits = 0
-                        advisor.plan(
-                            reason = advisorReason, screenshotB64 = snap, turn = turn,
-                            phase = phase, ram = state.ram,
-                        )
+                        plan(advisorReason, snap, turn, phase, state.ram)
                     }
 
                     if (watchdog.stuckSignal(phase)) {
                         val diag = watchdog.diagnose(phase, recentExecutorOutcomes.toList())
                         Log.warn("stuck-signal — $diag", turn)
-                        advisor.plan(
-                            reason = "stuck: $diag", screenshotB64 = snap, turn = turn,
-                            phase = phase, ram = state.ram,
-                        )
+                        plan("stuck: $diag", snap, turn, phase, state.ram)
                         watchdog.reset()
                     }
 
@@ -365,11 +373,7 @@ fun main(args: Array<String>) {
                             consecutiveAuditHits += 1
                             if (consecutiveAuditHits >= 2) {
                                 Log.reviewer("auditPlan hits $consecutiveAuditHits consecutive — replanning", turn)
-                                advisor.plan(
-                                    reason = "Reviewer audit (2 consecutive hits): ${issues.joinToString(" | ").take(160)}",
-                                    screenshotB64 = snap, turn = turn,
-                                    phase = phase, ram = state.ram,
-                                )
+                                plan("Reviewer audit (2 consecutive hits): ${issues.joinToString(" | ").take(160)}", snap, turn, phase, state.ram)
                                 consecutiveAuditHits = 0
                             } else {
                                 Log.reviewer("auditPlan issue (1st hit — grace 25t): ${issues.joinToString(" | ").take(120)}", turn)
@@ -387,11 +391,7 @@ fun main(args: Array<String>) {
                     if (turn % 10 == 0) {
                         val regressed = reviewer.verifyMilestones(phase, state.ram, turn)
                         if (regressed.isNotEmpty()) {
-                            advisor.plan(
-                                reason = "milestone REGRESSED: ${regressed.joinToString(",")}",
-                                screenshotB64 = snap, turn = turn,
-                                phase = phase, ram = state.ram,
-                            )
+                            plan("milestone REGRESSED: ${regressed.joinToString(",")}", snap, turn, phase, state.ram)
                         }
                         // Stuck-progress detector — catches the case where
                         // the current milestone has been in_progress for
@@ -404,11 +404,7 @@ fun main(args: Array<String>) {
                         val stuck = reviewer.checkProgress(turn, state.ram)
                         if (stuck != null) {
                             consecutiveAuditHits = 0  // fresh plan deserves a clean audit window
-                            advisor.plan(
-                                reason = stuck.reason,
-                                screenshotB64 = snap, turn = turn,
-                                phase = phase, ram = state.ram,
-                            )
+                            plan(stuck.reason, snap, turn, phase, state.ram)
                         }
                     }
 

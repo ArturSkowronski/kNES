@@ -28,6 +28,19 @@ data class Config(
      *   - savestate-checkpoints every 100 turns are skipped.
      */
     val remoteUrl: String?,
+    /**
+     * Play without the Advisor: the goal selector decides every turn on its own.
+     *
+     * The planning agent costs seconds a call and, once the selector is running, its plan
+     * is only one option among several anyway. Without it the agent never dispatches the
+     * composite tools a plan step names — and those are what a turn's wall clock is
+     * actually made of: a measured FF1 run spent 2032 emulated frames on the median
+     * `walkTo` against 31 on a button tap.
+     *
+     * Requires a decision model (`KNES_DECISION`); with none there would be nothing left
+     * to decide the turn.
+     */
+    val reactive: Boolean,
 ) {
     companion object {
         fun parse(args: Array<String>): Config {
@@ -49,6 +62,7 @@ data class Config(
             }
 
             return Config(
+                reactive = args.contains("--reactive"),
                 rom = arg("--rom=") ?: "roms/ff.nes",
                 profile = arg("--profile=") ?: "ff1",
                 resumeDir = resume,

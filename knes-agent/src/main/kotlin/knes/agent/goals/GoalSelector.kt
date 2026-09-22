@@ -61,6 +61,7 @@ class GoalSelector(
             state = describe(world),
             question = question,
             options = shown.map { Option(it.id, it.describe(world)) },
+            imageB64 = world.screenB64,
         )
         val ranking = model.choose(choice)
         // The model can only answer with an id it was given, and parseRanking already
@@ -80,11 +81,15 @@ class GoalSelector(
         appendLine("turn: ${world.turn}")
         appendLine("phase: ${world.phase}")
         appendLine("milestone in progress: ${world.milestone}")
-        appendLine("party tile in this map: ${world.sm.first},${world.sm.second}")
-        appendLine("party tile on the overworld: ${world.world.first},${world.world.second}")
+        appendLine("player position: ${world.sm.first},${world.sm.second}")
+        world.world?.let { appendLine("position on the overworld: ${it.first},${it.second}") }
+        // Only the fields this profile actually watches, named the way it names them.
         world.ram["gold"]?.let { appendLine("gold: $it") }
         world.ram["menuCursor"]?.let { appendLine("menu cursor (Down presses since the last A): $it") }
         world.ram["screenState"]?.let { appendLine("screen state: $it") }
+        world.ram["lives"]?.let { appendLine("lives left: $it") }
+        world.ram["coins"]?.let { appendLine("coins: $it") }
+        world.ram["enemyActive"]?.let { appendLine("enemies on screen: $it") }
         val step = world.planStep
         appendLine(
             if (step == null) "the plan has no step for this turn"
