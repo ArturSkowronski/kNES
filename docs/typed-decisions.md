@@ -36,11 +36,11 @@ no model is configured.
 
 ```
 knes.agent.goals            knes.agent.decision
-  Goal                        Choice { id, state, question, options[2..16] }
+  Goal                        Choice { id, state, question, options[2..16], image? }
   WorldSnapshot               Ranking { scores, best, confidence, margin }
   GoalSelector  ───────────►  DecisionModel
-  Ff1Goals                      ├─ DeclaredOrder   (no model: lowest priority wins)
-                                └─ SemIfProcess    (a local SemIf sidecar)
+  Ff1Goals / SmbGoals           ├─ DeclaredOrder   (no model: lowest priority wins)
+  Goals.of(profile)             └─ SemIfProcess    (a local SemIf sidecar, text or pixels)
 ```
 
 `Choice` is SemIf's row format field for field — `{id, state, question, options[{id,
@@ -104,7 +104,8 @@ SEMIF_BITS=4 \
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `KNES_DECISION` | `off` | `off`, `order`, or `semif` |
+| `KNES_DECISION` | `off` | `off`, `order`, `semif` (RAM digest) or `pixels` (the screen) |
+| `SEMIF_VLM_PYTHON` | — | interpreter with `mlx-vlm`, for `pixels` — SemIf keeps it in its own venv |
 | `SEMIF_PYTHON` | `python3` | an interpreter with `semif_phase1` importable |
 | `SEMIF_SRC` | — | SemIf's `src/`, when it is not installed in that interpreter |
 | `SEMIF_MODEL` | `Qwen/Qwen3.5-4B` | checkpoint id or a local directory |
@@ -143,6 +144,105 @@ its word — so `Ff1Goals.PHASE_GUARDS` now stops a plan step from routing aroun
 its own goal already carries, and `back_out_of_menu` is offered whenever nothing has moved
 for a while, whatever the phase claims. A menu the classifier does not recognise looks
 exactly like that from the outside: the screen keeps changing and the party never does.
+
+## Making it fast enough to watch
+
+The first runs were honest about the decision and dishonest about the demo: SemIf answered
+in 100 ms and the turn still took two seconds. Profiling a 124-turn run said where it all
+went, and none of it was the decision:
+
+| | |
+|---|---|
+| wall clock | 2.06 s a turn |
+| the Advisor | 22% of it, in five calls |
+| median `walkTo` | **2032 emulated frames** |
+| median button tap | **31 emulated frames** |
+| SemIf | ~0.1 s — about 5% |
+
+The composite tools are the wall clock. A plan step says `walkTo`, and `walkTo` in a town
+runs a vision call per step; one turn took nineteen seconds. So `--reactive` drops the
+Advisor: with the selector running, the plan was only one option among several anyway, and
+without a plan there is no step naming a composite tool. Every turn becomes a button.
+
+```
+                       turn      steady state
+  planned              2.06 s        1.6 s
+  --reactive           0.43 s        0.20 s     5 decisions a second
+  --reactive, pixels   0.47 s        0.22 s
+```
+
+The emulator was never the problem — it runs about 660 frames a second, eleven times real
+time. It was being asked for 1360 frames a turn.
+
+## Letting the model see the screen
+
+`KNES_DECISION=pixels` is the same readout with the frame as the evidence. The pinned
+checkpoint is a vision-language model; SemIf's MLX text backend drops the ViT, but the
+weights are in the same cache, and SemIf's own `doom_pixels_semif.py` shows the readout
+applied to the full model — option letters declared in the prompt, logits taken at the last
+position, nothing sampled. `tools/semif_sidecar.py --backend pixels` does that for kNES.
+
+Measured on an M-series Mac: **3.5 s to load, 188 ms a decision at 256x240** (290 ms at
+512x480), against 100 ms for text alone. It is worth the 90 ms, and the reason is Mario.
+
+## Mario
+
+`SmbGoals` is the same machinery asking a different game the question it is best at. Final
+Fantasy buries the decision under minutes of planning; Super Mario Bros **is** the decision
+— which button, now, several times a second, with nothing to reason about.
+
+Every Mario goal holds buttons for a span of frames rather than tapping them, because there
+the length of a press is part of the decision: the same A is a hop or a full jump depending
+on how long it is held. That is what `ToolSurface.hold` is for.
+
+| priority | goal | holds | frames |
+|---|---|---|---|
+| 0 | `start_game` | START | 8 |
+| 10 | `run_right` | Right + B | 8 |
+| 11 | `walk_right` | Right | 8 |
+| 12 | `jump_right` | Right + A + B | 18 |
+| 13 | `jump_up` | A | 18 |
+| 20 | `back_off` | Left | 8 |
+| 30 | `wait` | nothing | 8 |
+
+**Why Mario needs the pixel backend.** Asked from a RAM digest alone, the 4B readout plays
+badly in exactly the places that matter — measured on written-out Mario states:
+
+| the situation | what it picked |
+|---|---|
+| open ground | `walk_right` 0.52 — fine |
+| a question block overhead | `jump_up` 0.92 — right |
+| a Goomba two tiles ahead | `wait` 0.49 — walks into it |
+| a pipe directly ahead | `walk_right` 0.68 — into the pipe |
+| **a gap in the floor ahead** | **`walk_right` 0.92 — straight into the pit** |
+
+`profiles/smb.json` watches Mario's position, his lives and the enemy count; it does not
+watch the level geometry, so from RAM there is nothing that says *pipe* or *gap*. The model
+was not being stupid, it was blind. The pixel backend is what gives it eyes, and it costs
+90 ms.
+
+The stall rule rescues some of this without any perception at all — a `run_right` that
+stops moving Mario comes off the menu after six tries and something else has to win — but
+nothing rescues walking into a pit, because walking into a pit works.
+
+**Still missing: the ROM.** There is no Super Mario Bros ROM in this repo or on this
+machine, and commercial ROMs stay out of the tree. Drop one at `roms/smb.nes` and:
+
+```bash
+KNES_DECISION=pixels SEMIF_VLM_PYTHON=~/GitHub/SemIf/.venv-vlm/bin/python \
+  ./gradlew :knes-agent:run -PappArgs="--fresh --reactive --rom=roms/smb.nes --profile=smb"
+```
+
+## Watching it
+
+`python3 tools/v2_viewer.py`, then **http://localhost:9876/live**: the screen, a controller
+that lights the buttons as they go down, and the ranking as bars. It polls eight times a
+second, against the dashboard's three-second page reload, because an agent taking five
+decisions a second looks like a broken one through a three-second window. The screen comes
+from `live.png`, which the tool surface rewrites after **every single press** rather than
+once a turn.
+
+http://localhost:9876/ is still the full dashboard: RAM, milestones, plan, prompts.
 
 ## Why a sidecar
 

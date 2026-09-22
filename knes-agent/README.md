@@ -52,8 +52,14 @@ Off by default:
 ```bash
 KNES_DECISION=order ./gradlew :knes-agent:run -PappArgs="--fresh"   # no model, priority order
 KNES_DECISION=semif SEMIF_PYTHON=~/GitHub/SemIf/.venv/bin/python \
-  SEMIF_SRC=~/GitHub/SemIf/src SEMIF_BITS=4 ./gradlew :knes-agent:run -PappArgs="--fresh"
+  SEMIF_SRC=~/GitHub/SemIf/src SEMIF_BITS=4 ./gradlew :knes-agent:run -PappArgs="--fresh --reactive"
 ```
+
+`--reactive` drops the Advisor and lets the selector play alone — **0.20 s a turn against
+2.06 s**, because a plan step means a composite tool and those cost two thousand emulated
+frames where a button costs thirty-one. `KNES_DECISION=pixels` gives the model the screen
+instead of a RAM digest, for 90 ms more. Watch it at **http://localhost:9876/live** after
+`python3 tools/v2_viewer.py`: the screen, the buttons lighting up, and the ranking.
 
 ## Environment
 
@@ -67,7 +73,7 @@ KNES_DECISION=semif SEMIF_PYTHON=~/GitHub/SemIf/.venv/bin/python \
 | `KNES_LLM` | force a provider: `openai`, `gemini` or `anthropic+gemini` |
 | `GEMINI_API_KEY` | enables the Gemini provider, which also covers every role alone |
 | `ANTHROPIC_API_KEY` | only for the older `anthropic+gemini` pairing, which needs both keys |
-| `KNES_DECISION` | `off`, `order` or `semif` — see [typed decisions](../docs/typed-decisions.md) |
+| `KNES_DECISION` | `off`, `order`, `semif` or `pixels` — see [typed decisions](../docs/typed-decisions.md) |
 | `SEMIF_*` | where the local SemIf model lives, when `KNES_DECISION=semif` |
 
 Two OpenAI details worth knowing, because both fail quietly otherwise: the budget is
@@ -87,4 +93,5 @@ spending none of it.
 | `--fresh` | start a new run |
 | `--resume=<dir>` | continue a previous one |
 | `--cart` | enable the Cartographer (off by default; landmarks are preseeded) |
+| `--reactive` | play without the Advisor; the goal selector decides alone (needs `KNES_DECISION`) |
 | `--remote[=<url>]` | drive the Compose UI's emulator over REST instead of an in-process one |

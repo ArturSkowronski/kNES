@@ -18,7 +18,7 @@ import java.io.File
  */
 object DecisionModels {
 
-    enum class Kind { Off, DeclaredOrder, SemIf }
+    enum class Kind { Off, DeclaredOrder, SemIf, Pixels }
 
     /** Split from the environment so the rule itself can be tested. */
     fun select(requested: String?): Kind =
@@ -26,7 +26,8 @@ object DecisionModels {
             null, "off", "none", "false" -> Kind.Off
             "order", "priority", "declared-order" -> Kind.DeclaredOrder
             "semif", "jev" -> Kind.SemIf
-            else -> error("KNES_DECISION='$name' is not a decision model; use 'off', 'order' or 'semif'")
+            "pixels", "vision" -> Kind.Pixels
+            else -> error("KNES_DECISION='$name' is not a decision model; use 'off', 'order', 'semif' or 'pixels'")
         }
 
     /**
@@ -43,7 +44,8 @@ object DecisionModels {
         model: String = env("SEMIF_MODEL") ?: DEFAULT_MODEL,
         revision: String = env("SEMIF_REVISION") ?: DEFAULT_REVISION,
         backend: String = env("SEMIF_BACKEND") ?: "mlx",
-        bits: String? = env("SEMIF_BITS"),
+        // Quantization is an MLX-text-backend option; the pixel path loads the whole model.
+        bits: String? = env("SEMIF_BITS").takeIf { backend != "pixels" },
         semifSrc: String? = env("SEMIF_SRC"),
     ): List<String> = buildList {
         add(python)
@@ -61,6 +63,11 @@ object DecisionModels {
             Kind.Off -> null
             Kind.DeclaredOrder -> DeclaredOrder
             Kind.SemIf -> SemIfProcess(semIfCommand(), workingDir = workingDir).start()
+            // The vision tower needs mlx-vlm, which SemIf keeps in its own environment.
+            Kind.Pixels -> SemIfProcess(
+                semIfCommand(python = env("SEMIF_VLM_PYTHON") ?: env("SEMIF_PYTHON") ?: "python3", backend = "pixels"),
+                workingDir = workingDir,
+            ).start()
         }
 
     /**

@@ -141,6 +141,7 @@ class SemIfProcess(
             put("id", choice.id)
             put("state", choice.state)
             put("question", choice.question)
+            choice.imageB64?.let { put("image", it) }
             put("options", buildJsonArray {
                 choice.options.forEach { option ->
                     add(buildJsonObject {

@@ -44,10 +44,23 @@ data class WorldSnapshot(
     val recentTurns: List<TurnEffect>,
     /** One line about what is on screen, when something has described it. May be blank. */
     val scene: String = "",
+    /**
+     * Where the player is, per the active profile's own position fields.
+     *
+     * Null when the profile declares none; goals then work from [ram] directly rather than
+     * from a coordinate the profile never promised.
+     */
+    val position: Pair<Int, Int>? = null,
+    /** The current frame, for a decision model that can look at it. */
+    val screenB64: String? = null,
 ) {
-    val sm: Pair<Int, Int> get() = (ram["smPlayerX"] ?: 0) to (ram["smPlayerY"] ?: 0)
+    val sm: Pair<Int, Int> get() = position ?: ((ram["smPlayerX"] ?: 0) to (ram["smPlayerY"] ?: 0))
 
-    val world: Pair<Int, Int> get() = (ram["worldX"] ?: 0) to (ram["worldY"] ?: 0)
+    /** Only Final Fantasy has one; null elsewhere, and the state simply does not mention it. */
+    val world: Pair<Int, Int>? get() {
+        val x = ram["worldX"] ?: return null
+        return x to (ram["worldY"] ?: 0)
+    }
 
     /** How many of the last few turns did not work out. Goals use it to offer a way out. */
     val recentFailures: Int get() = recentTurns.count { !it.progressed }

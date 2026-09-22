@@ -75,6 +75,7 @@ private object NoTools : knes.agent.tools.ToolSurface {
     override suspend fun restAtInn(innMapId: String) = error("not called")
     override suspend fun battleFightAll() = error("not called")
     override suspend fun approachSprite(kind: String) = error("not called")
+    override suspend fun hold(buttons: List<String>, frames: Int) = error("not called")
     override suspend fun sequence(buttons: List<String>) = error("not called")
 }
 
@@ -90,7 +91,9 @@ class DispatchableToolsTest : FunSpec({
     test("the dispatchable set matches what the Advisor may plan") {
         ExecutorAgent.DISPATCHABLE shouldBe setOf(
             "boot", "walkTo", "interactAt", "useMenu",
-            "restAtInn", "battleFightAll", "approachSprite", "sequence",
+            // `hold` is not for Final Fantasy: it keeps buttons down for a span of frames,
+            // which is how a goal steers Mario, where the length of a press is the decision.
+            "restAtInn", "battleFightAll", "approachSprite", "sequence", "hold",
         )
     }
 

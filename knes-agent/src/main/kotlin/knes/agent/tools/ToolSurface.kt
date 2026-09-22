@@ -30,6 +30,18 @@ interface ToolSurface {
     suspend fun battleFightAll(): ToolOutcome
     suspend fun approachSprite(kind: String): ToolOutcome
     suspend fun sequence(buttons: List<String>): ToolOutcome
+
+    /**
+     * Hold buttons down for a span of frames, then let go.
+     *
+     * A tap does not steer Mario. `sequence` presses for five frames and then settles for
+     * six to thirty more, which suits a game where the world waits for you and a dialog
+     * needs time to draw; it is the wrong shape for one where the world keeps moving and
+     * the length of the press is the decision. Holding Right for eight frames is a step;
+     * holding A for sixteen is a jump; the same buttons for different spans mean different
+     * things.
+     */
+    suspend fun hold(buttons: List<String>, frames: Int): ToolOutcome
 }
 
 class DefaultToolSurface(
@@ -513,6 +525,41 @@ class DefaultToolSurface(
      * before the next press. The whole sequence is committed in one ToolOutcome
      * (Ok with summary message) so the next turn picks up post-sequence state.
      */
+    override suspend fun hold(buttons: List<String>, frames: Int): ToolOutcome {
+        if (frames !in 1..600) return ToolOutcome.Reject("hold: frames must be 1..600, got $frames")
+        val normalized = buttons.map { normaliseButton(it) }
+        val unknown = normalized.zip(buttons).filter { it.first == null }.map { it.second }
+        if (unknown.isNotEmpty()) {
+            return ToolOutcome.Reject("hold: unknown buttons [${unknown.joinToString(",")}] — allowed: Up,Down,Left,Right,A,B,START,SELECT")
+        }
+        val held = normalized.filterNotNull()
+        val screenBefore = runCatching { toolset.getScreen().base64 }.getOrNull()
+        toolset.step(buttons = held, frames = frames)
+        val post = toolset.getState().ram
+        writeLiveSnapshot()
+        val screenAfter = runCatching { toolset.getScreen().base64 }.getOrNull()
+        val screenNote = when {
+            screenBefore == null || screenAfter == null -> ""
+            screenBefore != screenAfter -> " screen=changed"
+            else -> " screen=unchanged"
+        }
+        val label = if (held.isEmpty()) "nothing" else held.joinToString("+")
+        return ToolOutcome.Ok(
+            "hold: $label for $frames frames; sm=${formatCoord(semantics.localPosition(post))} " +
+                "world=${formatCoord(semantics.worldPosition(post))}$screenNote",
+        )
+    }
+
+    /** The viewer reads this file; rewriting it after every press is what makes it live. */
+    private fun writeLiveSnapshot() {
+        livePngFile?.let { path ->
+            runCatching {
+                val b64 = toolset.getScreen().base64
+                java.nio.file.Files.write(path, java.util.Base64.getDecoder().decode(b64))
+            }
+        }
+    }
+
     override suspend fun sequence(buttons: List<String>): ToolOutcome {
         if (buttons.isEmpty()) return ToolOutcome.Reject("sequence: empty buttons list")
         val normalized = buttons.map { normaliseButton(it) }

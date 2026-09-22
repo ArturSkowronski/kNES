@@ -18,6 +18,8 @@ class DecisionModelsTest : FunSpec({
         DecisionModels.select(" SemIf ") shouldBe DecisionModels.Kind.SemIf
         DecisionModels.select("jev") shouldBe DecisionModels.Kind.SemIf
         DecisionModels.select("order") shouldBe DecisionModels.Kind.DeclaredOrder
+        DecisionModels.select("pixels") shouldBe DecisionModels.Kind.Pixels
+        DecisionModels.select("vision") shouldBe DecisionModels.Kind.Pixels
         DecisionModels.select("priority") shouldBe DecisionModels.Kind.DeclaredOrder
     }
 
@@ -35,6 +37,15 @@ class DecisionModelsTest : FunSpec({
         command shouldContainInOrder listOf("/venv/bin/python", "tools/semif_sidecar.py")
         command shouldContainInOrder listOf("--revision", "a".repeat(40))
         command shouldContainInOrder listOf("--backend", "mlx")
+    }
+
+    test("the pixel backend never asks for quantization — it loads the whole model, ViT and all") {
+        val pixels = DecisionModels.semIfCommand(
+            python = "python3", sidecar = "s.py", model = "m", revision = "r", backend = "pixels",
+            bits = null, semifSrc = null,
+        )
+        pixels shouldContainInOrder listOf("--backend", "pixels")
+        pixels.contains("--bits") shouldBe false
     }
 
     test("quantization and a source path are only passed when they were asked for") {

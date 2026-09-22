@@ -9,9 +9,15 @@ class SnapshotDumper(
     private val run: RunDirectory,
 ) {
     /** Dump per-iter screenshot. Idempotent — overwrites if same turn called twice. */
-    fun dump(turn: Int): String {
-        val b64 = toolset.getScreen().base64
-        val bytes = Base64.getDecoder().decode(b64)
+    /**
+     * [b64] lets a caller that already grabbed the frame hand it over.
+     *
+     * The turn loop grabs one anyway for the agents to look at, and grabbing a second is
+     * a whole extra frame encode for a picture that is identical to the first.
+     */
+    fun dump(turn: Int, b64: String? = null): String {
+        val frame = b64 ?: toolset.getScreen().base64
+        val bytes = Base64.getDecoder().decode(frame)
         val out = run.turnSnapshot(turn)
         Files.write(out, bytes)
         return run.root.relativize(out).toString()

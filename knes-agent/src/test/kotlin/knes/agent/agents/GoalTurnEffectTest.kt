@@ -43,6 +43,8 @@ private class SilentToolSurface : ToolSurface {
     override suspend fun battleFightAll() = ToolOutcome.Ok()
     override suspend fun approachSprite(kind: String) = ToolOutcome.Ok()
     override suspend fun sequence(buttons: List<String>) = ToolOutcome.Ok("sequence: tapped ${buttons.size} buttons")
+    override suspend fun hold(buttons: List<String>, frames: Int) =
+        ToolOutcome.Ok("hold: ${buttons.joinToString("+")} for $frames frames")
 }
 
 /** Always picks the plan, and keeps the state it was shown so the test can read it back. */

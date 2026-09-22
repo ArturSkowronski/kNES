@@ -49,6 +49,17 @@ class ExecutorAgent(
     private val goals: GoalSelector? = null,
     /** Only read when [goals] is set; the selector needs the phase its goals filter on. */
     private val phaseProvider: () -> Phase = { Phase.Unknown },
+    /**
+     * Where the player is, per the active profile.
+     *
+     * `smPlayerX` is a Final Fantasy field name. Telling whether a turn moved anything has
+     * to work for any game the emulator has a profile for, and each profile already
+     * declares which of its own addresses hold the position.
+     */
+    private val positionOf: (Map<String, Int>) -> Pair<Int, Int>? = { ram ->
+        val x = ram["smPlayerX"]; val y = ram["smPlayerY"]
+        if (x == null || y == null) null else x to y
+    },
 ) {
     /** Weapons the party held last turn, to notice them going away. */
     private var lastHeldWeapons: Int? = null
@@ -81,8 +92,8 @@ class ExecutorAgent(
         val started = System.currentTimeMillis()
         currentTurn = turn
         run?.markActive("executor", turn)
-        val preRam = parseSmFromRamDigest(ramDigest)
         val ram = WorldSnapshot.parseRam(ramDigest)
+        val preRam = positionOf(ram) ?: parseSmFromRamDigest(ramDigest)
         val preWorld = (ram["worldX"] ?: 0) to (ram["worldY"] ?: 0)
         correctPreviousTurnsEffect(preRam, preWorld)
         val plan = memory.currentPlan
@@ -105,7 +116,7 @@ class ExecutorAgent(
         // down before the model was asked, so it cannot name a tool that does not exist.
         // It declines (null) when no goal applies, and any failure falls through to the
         // chat model rather than costing the turn.
-        val selection = selectGoal(plan, ram, turn)
+        val selection = selectGoal(plan, ram, turn, screenshotB64)
         val (tool, args, reasoning) = selection?.let {
             Triple(it.action.tool, it.action.args, "goal:${it.goal.id} — ${it.ranking.summary()}")
         } ?: askLlm(plan, screenshotB64, ramDigest)
@@ -254,12 +265,14 @@ class ExecutorAgent(
      * is written to the turn's prompt file either way, so a run can be read back and the
      * ranking checked against what actually happened.
      */
-    private suspend fun selectGoal(plan: Plan?, ram: Map<String, Int>, turn: Int): Selection? {
+    private suspend fun selectGoal(plan: Plan?, ram: Map<String, Int>, turn: Int, screenB64: String): Selection? {
         val selector = goals ?: return null
         val world = WorldSnapshot(
             turn = turn,
             phase = phaseProvider(),
             ram = ram,
+            position = positionOf(ram),
+            screenB64 = screenB64.takeIf { it.isNotBlank() },
             planStep = plan?.steps?.getOrNull(plan.cursor),
             milestone = memory.campaign.milestones.firstOrNull { it.status == "in_progress" }?.id ?: "(none)",
             // Move history rather than the outcome list: a tool can report Ok having moved
@@ -498,12 +511,16 @@ class ExecutorAgent(
         "battleFightAll"  -> tools.battleFightAll()
         "approachSprite"  -> tools.approachSprite(args.getValue("kind"))
         "sequence"        -> tools.sequence(args.getValue("buttons").split(",").map { it.trim() })
+        "hold"            -> tools.hold(
+            args.getValue("buttons").split(",").map { it.trim() }.filter { it.isNotEmpty() },
+            args["frames"]?.toIntOrNull() ?: 8,
+        )
         // Naming the alternatives matters: a plan step once asked for
         // "armCharsViaMenu", which does not exist, and every fallback turn
         // rejected with no hint of what would have worked.
         else              -> ToolOutcome.Reject(
             "unknown tool '$tool'. Dispatchable tools: boot, walkTo, interactAt, " +
-                "useMenu, restAtInn, battleFightAll, approachSprite, sequence. " +
+                "useMenu, restAtInn, battleFightAll, approachSprite, sequence, hold. " +
                 "Shopping and equipping are done with `sequence` taps."
         )
     }
@@ -532,7 +549,7 @@ class ExecutorAgent(
         /** Tool names [dispatch] understands. A plan may name only these. */
         internal val DISPATCHABLE = setOf(
             "boot", "walkTo", "interactAt", "useMenu",
-            "restAtInn", "battleFightAll", "approachSprite", "sequence",
+            "restAtInn", "battleFightAll", "approachSprite", "sequence", "hold",
         )
 
         private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
