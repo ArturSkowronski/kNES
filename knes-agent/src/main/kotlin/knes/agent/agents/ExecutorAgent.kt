@@ -36,6 +36,9 @@ class ExecutorAgent(
     private val vision: VisionLlm? = null,
     private val campaign: Campaign = NoCampaign,
 ) {
+    /** Weapons the party held last turn, to notice them going away. */
+    private var lastHeldWeapons: Int? = null
+
     private val recentOutcomes = ArrayDeque<String>(4)
     private val recentMoves = ArrayDeque<MoveEntry>(8)
     private var lastPlanCreatedAt: Int = -1
@@ -159,6 +162,8 @@ class ExecutorAgent(
         val hand = ram["menuHandX"] to ram["menuHandY"]
         val heldCount = campaign.countHolding(ram)
         val equippedCount = campaign.countEquipped(ram)
+        val lost = lastHeldWeapons?.let { it > heldCount } ?: false
+        lastHeldWeapons = heldCount
         return buildString {
             append("party sm=(${ram["smPlayerX"]},${ram["smPlayerY"]}) ")
             append("world=(${ram["worldX"]},${ram["worldY"]}) ")
@@ -166,6 +171,15 @@ class ExecutorAgent(
             append("            menuCursor=$cursor hand=(${hand.first},${hand.second}) ")
             append("screenState=${ram["screenState"]}\n")
             append("            weapons: $heldCount/4 chars hold one, $equippedCount/4 equipped\n")
+            if (lost) {
+                // Verified by experiment: from a shop dialog, a single A confirmed a
+                // sale and emptied every weapon slot — gold went UP by 40. Mashing A at
+                // a shop counter can undo the whole shopping trip.
+                append("            !! WEAPONS WENT DOWN since last turn. In a shop, A can confirm a\n")
+                append("               SALE, not a purchase — one A has emptied every slot before.\n")
+                append("               Read the dialog before pressing A; press B to back out if it\n")
+                append("               says Sell or shows your own items.\n")
+            }
             append("            menuCursor counts Down presses since the last A and resets on A ")
             append("(observed, FF1). Treat it as how far you have moved in the open list, ")
             append("not as a proven index into the shop's item order — and note the item ")
@@ -478,6 +492,15 @@ class ExecutorAgent(
             - Coneria trap: a short north-pointing stub ends at the INN
               door. From that dead-end, back SOUTH two tiles to the trunk,
               then continue N — the WEAPON shop is via a different branch.
+
+            === THE SHOP CAN SELL WHAT YOU JUST BOUGHT ===
+            An FF1 shop dialog offers Buy AND Sell. Pressing A blindly at a
+            counter has confirmed a SALE and emptied every weapon slot in one
+            tap — gold went UP, the shopping trip was undone, and arm_party
+            became impossible. Verified by experiment, not guessed.
+            Before any A at a counter: read the dialog. If it lists YOUR items
+            or says Sell, press B. Watch the weapons line in AT A GLANCE — if
+            the count drops, you just sold something.
 
             === ACCIDENTAL-DIALOG TRAP ===
             If the screenshot shows a Yes/No prompt or speech-bubble window
