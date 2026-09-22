@@ -80,7 +80,7 @@ fun main(args: Array<String>) {
                 val toolCallLog = ToolCallLog()
 
                 // v2 runtime
-                val memory = Memory(run)
+                val memory = Memory(run, Campaign.of(cfg.profile))
                 if (cfg.resumeDir != null) {
                     require(cfg.remoteUrl == null) {
                         "--resume is not supported with --remote (no save/load over REST yet)"
@@ -131,7 +131,7 @@ fun main(args: Array<String>) {
                 )
 
                 // Agents
-                val campaign = Campaign.of(cfg.profile)
+                val campaign = memory.campaignRules
                 val advisor = AdvisorAgent(vision, memory, run, landmarks, campaign, semantics)
                 // Off unless KNES_DECISION says otherwise; see DecisionModels.
                 val decisionModel = knes.agent.decision.DecisionModels.fromEnvironment()
