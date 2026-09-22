@@ -160,6 +160,15 @@ fun main(args: Array<String>) {
                     // The profile knows which of its addresses hold the position; `smPlayerX`
                     // is a Final Fantasy name and Mario has no such field.
                     positionOf = { semantics.localPosition(it) },
+                    // The level's geometry is too numerous to name one address at a time, so
+                    // the profile describes the buffer and the agent reads a window of it.
+                    mapAt = { x, y ->
+                        if (agentConfig?.hasMap == true) {
+                            agentConfig.mapLines({ start, length -> toolset.readRange(start, length) }, x, y)
+                        } else {
+                            emptyList()
+                        }
+                    },
                 )
                 Log.llm("models: advisor/cart=${vision.model} executor=${executorVision.model} fast=${chat.fastModel}")
                 Log.llm("decisions: ${decisionModel?.name ?: "chat model (KNES_DECISION off)"}")

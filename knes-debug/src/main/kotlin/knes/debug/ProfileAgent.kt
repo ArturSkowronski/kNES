@@ -45,6 +45,19 @@ data class ProfileAgent(
 
     /** Everything the agent may choose between, before any of them are filtered. */
     val goals: List<GoalRule> = emptyList(),
+
+    /**
+     * How to read the level's collision geometry out of memory, when the game keeps one.
+     *
+     * A profile names the handful of addresses a game turns on, which is the right shape for
+     * a coordinate and the wrong one for a map. Without this the agent is told where the
+     * player is and nothing about what is in front of him — which is exactly how a decision
+     * model walks into a pit while ranking "walk right" at 0.92.
+     */
+    val map: TileMap? = null,
+
+    /** Where the moving hazards are, for games that keep them in fixed slots. */
+    val sprites: SpriteTable? = null,
 ) {
     /** The state lines this snapshot can actually fill in; a missing field says nothing. */
     fun stateLines(ram: Map<String, Int>): List<String> = state.mapNotNull { it.render(ram) }
@@ -107,6 +120,91 @@ data class StateLine(
         if (say.isNotEmpty()) return say[value.toString()] ?: say["*"]
         return "${label ?: field}: $value"
     }
+}
+
+/**
+ * A window on the level's collision geometry, rendered as a small ASCII map.
+ *
+ * Super Mario Bros keeps the screen's tiles in a buffer of [pages] pages, each [rows] by
+ * [cols], one byte a tile: non-zero means something solid. Everything here is addresses and
+ * shape, so another game with a tile buffer is another JSON block rather than another class.
+ *
+ * The window is given in tiles around the player, and the map is drawn with the player at a
+ * fixed spot in it, so the model reads the same picture from turn to turn.
+ */
+@Serializable
+data class TileMap(
+    /** First byte of the buffer, as `"0x0500"`. */
+    val base: String,
+    val cols: Int,
+    val rows: Int,
+    val pages: Int = 1,
+    /** Pixels a tile covers, in both directions. */
+    val tile: Int = 16,
+    /** Screen pixels above the first row of the buffer — the status bar, usually. */
+    val originY: Int = 0,
+    /** Tiles left, right, up and down of the player that the window covers. */
+    val left: Int = 2,
+    val right: Int = 8,
+    val up: Int = 4,
+    val down: Int = 4,
+    /**
+     * Whether to put the map in the state the decision model reads.
+     *
+     * Off for Super Mario Bros, and the reason is measured rather than assumed. A correct
+     * map made a vision model *worse*: 440 turns reached 1662 px with the screen alone and
+     * 817 px with the screen plus the map, because a model given two descriptions of the
+     * same thing has to reconcile them. The same map with no screen at all — the shape the
+     * reference Jev harness uses — reached 296 px and spent 331 of 440 turns standing still.
+     *
+     * The map stays declared because it is verified correct (`MarioTileMapTest`) and because
+     * a model trained for structured decisions would want it. This switch is which.
+     */
+    val inState: Boolean = true,
+    val solid: String = "#",
+    val empty: String = ".",
+    val player: String = "M",
+    val enemy: String = "E",
+) {
+    val width: Int get() = left + right + 1
+    val height: Int get() = up + down + 1
+    val baseAddress: Int get() = Integer.decode(base)
+
+    /** Where in the buffer a screen pixel lands, or null when it is off the buffer. */
+    fun addressOf(x: Int, y: Int): Int? {
+        val page = if (pages <= 1) 0 else (x / (cols * tile)) % pages
+        val column = (x % (cols * tile)) / tile
+        val row = (y - originY) / tile
+        if (row < 0 || row >= rows) return null
+        return baseAddress + page * rows * cols + row * cols + column
+    }
+}
+
+/**
+ * Enemies kept in a fixed number of slots, the way the NES era did it.
+ *
+ * A count of active enemies says a hazard exists; where it is and which way it is heading is
+ * what decides whether to jump.
+ */
+@Serializable
+data class SpriteTable(
+    val count: Int,
+    /** Non-zero while the slot holds something. */
+    val active: String,
+    /** The slot's kind; zero means empty even when [active] is set. */
+    val kind: String,
+    /** Position, high byte and low byte of x. */
+    val xHigh: String,
+    val xLow: String,
+    val y: String,
+) {
+    private fun at(spec: String, slot: Int) = Integer.decode(spec) + slot
+
+    fun activeAddress(slot: Int) = at(active, slot)
+    fun kindAddress(slot: Int) = at(kind, slot)
+    fun xHighAddress(slot: Int) = at(xHigh, slot)
+    fun xLowAddress(slot: Int) = at(xLow, slot)
+    fun yAddress(slot: Int) = at(y, slot)
 }
 
 /**

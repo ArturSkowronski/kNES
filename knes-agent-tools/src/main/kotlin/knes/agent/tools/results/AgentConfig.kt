@@ -25,6 +25,55 @@ class AgentConfig private constructor(private val agent: ProfileAgent) {
     /** The state lines this snapshot can fill in; a field the game lacks says nothing. */
     fun stateLines(ram: Map<String, Int>): List<String> = agent.stateLines(ram)
 
+    /** Whether this game keeps a map, and wants it in the state. */
+    val hasMap: Boolean get() = agent.map?.inState == true
+
+    /**
+     * A small ASCII picture of what is around the player, with the hazards marked.
+     *
+     * `#` is something solid, `.` is open air, `M` is the player and `E` is an enemy. The
+     * player sits at a fixed spot in the window so the picture reads the same from one turn
+     * to the next, and the window reaches further ahead than behind, because that is where
+     * the decision is.
+     *
+     * Empty when the profile declares no map, or when the position is unknown. [read] takes
+     * a start address and a length and hands back that many bytes.
+     */
+    fun mapLines(read: (Int, Int) -> List<Int>, x: Int, y: Int): List<String> {
+        val map = agent.map ?: return emptyList()
+        val buffer = runCatching { read(map.baseAddress, map.pages * map.rows * map.cols) }
+            .getOrElse { return emptyList() }
+
+        val grid = MutableList(map.height) { MutableList(map.width) { map.empty } }
+        for (row in 0 until map.height) {
+            for (column in 0 until map.width) {
+                val sampleX = x + (column - map.left) * map.tile
+                val sampleY = y + (row - map.up) * map.tile
+                val address = map.addressOf(sampleX, sampleY) ?: continue
+                val index = address - map.baseAddress
+                if (index in buffer.indices && buffer[index] != 0) grid[row][column] = map.solid
+            }
+        }
+
+        agent.sprites?.let { sprites ->
+            for (slot in 0 until sprites.count) {
+                val active = read(sprites.activeAddress(slot), 1).firstOrNull() ?: 0
+                val kind = read(sprites.kindAddress(slot), 1).firstOrNull() ?: 0
+                if (active == 0 || kind == 0) continue
+                val enemyX = (read(sprites.xHighAddress(slot), 1).firstOrNull() ?: 0) * 256 +
+                    (read(sprites.xLowAddress(slot), 1).firstOrNull() ?: 0)
+                val enemyY = read(sprites.yAddress(slot), 1).firstOrNull() ?: 0
+                val column = map.left + Math.round((enemyX - x) / map.tile.toFloat())
+                val row = map.up + Math.round((enemyY - y) / map.tile.toFloat())
+                if (row in 0 until map.height && column in 0 until map.width) {
+                    grid[row][column] = map.enemy
+                }
+            }
+        }
+        grid[map.up][map.left] = map.player
+        return grid.map { it.joinToString("") }
+    }
+
     companion object {
         /** Null when the profile declares no agent section, which is not an error. */
         fun of(profileId: String?): AgentConfig? =

@@ -282,6 +282,27 @@
         },
         "description": "Press nothing and let the moment pass \u2014 an enemy walks by, a platform comes back."
       }
-    ]
+    ],
+    "map": {
+      "base": "0x0500",
+      "cols": 16,
+      "rows": 13,
+      "pages": 2,
+      "tile": 16,
+      "originY": 16,
+      "left": 2,
+      "right": 8,
+      "up": 4,
+      "down": 4,
+      "inState": false
+    },
+    "sprites": {
+      "count": 5,
+      "active": "0x000F",
+      "kind": "0x0016",
+      "xHigh": "0x006E",
+      "xLow": "0x0087",
+      "y": "0x00CF"
+    }
   }
 }

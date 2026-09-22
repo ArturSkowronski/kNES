@@ -10,6 +10,16 @@ interface EmulatorToolset {
     fun tap(button: String, count: Int = 1, pressFrames: Int = 5, gapFrames: Int = 15, screenshot: Boolean = false): StepResult
     fun sequence(steps: List<StepEntry>, screenshot: Boolean = false): StepResult
     fun getState(): StateSnapshot
+
+    /**
+     * Raw CPU memory, for facts too numerous to name one at a time.
+     *
+     * A profile names the handful of addresses a game turns on, which is the right shape
+     * for a coordinate or a counter and the wrong one for a map: Super Mario Bros keeps the
+     * level's collision geometry as 416 bytes of tile buffer, and the agent needs a window
+     * into it every turn.
+     */
+    fun readRange(start: Int, length: Int): List<Int>
     fun getScreen(): ScreenPng
     fun observe(profileId: String? = null, screenshot: Boolean = false): AgentObservation {
         val state = getState()

@@ -40,6 +40,8 @@ class RemoteEmulatorToolset(
     override fun saveSavestate(): ByteArray = error("saveSavestate not supported in remote mode")
     override fun loadSavestate(bytes: ByteArray): Boolean = error("loadSavestate not supported in remote mode")
     override fun advanceFrames(count: Int) = error("advanceFrames not supported in remote mode")
+    override fun readRange(start: Int, length: Int): List<Int> =
+        error("readRange not supported in remote mode; the REST API exposes watched state only")
 
     private val http: HttpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(5))

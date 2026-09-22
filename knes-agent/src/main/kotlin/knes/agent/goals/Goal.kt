@@ -57,6 +57,14 @@ data class WorldSnapshot(
     val position: Pair<Int, Int>? = null,
     /** The current frame, for a decision model that can look at it. */
     val screenB64: String? = null,
+    /**
+     * A small ASCII picture of what is around the player, when the profile declares a map.
+     *
+     * `#` solid, `.` open, `M` the player, `E` an enemy. Goals may read it; mostly it is
+     * there so the decision model is told what is in front of the player rather than left
+     * to infer it from a position.
+     */
+    val map: List<String> = emptyList(),
 ) {
     val sm: Pair<Int, Int> get() = position ?: ((ram["smPlayerX"] ?: 0) to (ram["smPlayerY"] ?: 0))
 
