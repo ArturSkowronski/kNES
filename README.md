@@ -166,6 +166,12 @@ edit rather than a code change.
 
 ### A local 4B model plays, without writing a word
 
+[![A local 4B model plays Super Mario Bros and then Final Fantasy, with the goal ranking and the buttons visible](docs/media/knes-system-one-poster.png)](https://github.com/ArturSkowronski/kNES/raw/master/docs/media/knes-system-one.mp4)
+
+*100 seconds — Super Mario Bros, then Final Fantasy. Same agent, same model, same
+interface. On the right: the goals that could run, how the model ranked them, and the
+button that came out. Click to play.*
+
 The agent can also decide a turn as a **typed decision** — a choice over options declared
 before the model is asked — instead of by generating JSON. That is the interface pattern
 Jev introduced and [SemIf](https://github.com/TheoLeeCJ/SemIf) (formerly OpenJev)
@@ -183,7 +189,8 @@ into a video in the same windows.
 
 Measured on an M5 Pro with the pixel backend — the screen itself as the evidence, no RAM
 digest: **~400 ms a decision**, and the same agent plays both games from their own
-profiles. The structure is Minecraft's `GoalSelector`: goals say whether they can run, and
+profiles. Across the 900 decisions in the video above it never once answered with
+something that was not on the menu. The structure is Minecraft's `GoalSelector`: goals say whether they can run, and
 the ones that can become the declared options. Full notes in
 [docs/typed-decisions.md](docs/typed-decisions.md).
 
