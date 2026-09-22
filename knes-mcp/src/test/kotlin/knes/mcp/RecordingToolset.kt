@@ -19,6 +19,8 @@ internal class RecordingToolset : EmulatorToolset {
     override fun sequence(steps: List<StepEntry>, screenshot: Boolean) =
         record("sequence(${steps.size})") { StepResult(frame = 3, ram = emptyMap(), heldButtons = emptyList()) }
     /** A plausible FF1 overworld snapshot, so phase classification has something to chew on. */
+    override fun readRange(start: Int, length: Int): List<Int> = List(length) { 0 }
+
     override fun getState() = record("getState") {
         StateSnapshot(
             frame = 7,
@@ -59,6 +61,8 @@ internal class FailingToolset : EmulatorToolset {
         StepResult(frame = 0, ram = emptyMap(), heldButtons = emptyList())
     override fun sequence(steps: List<StepEntry>, screenshot: Boolean) =
         StepResult(frame = 0, ram = emptyMap(), heldButtons = emptyList())
+    override fun readRange(start: Int, length: Int): List<Int> = List(length) { 0 }
+
     override fun getState() = StateSnapshot(frame = 0, ram = emptyMap(), cpu = emptyMap(), heldButtons = emptyList())
     override fun getScreen() = ScreenPng(base64 = "")
     override fun applyProfile(id: String) = StatusResult(false, "unknown profile: $id")

@@ -60,6 +60,13 @@ class ExecutorAgent(
         val x = ram["smPlayerX"]; val y = ram["smPlayerY"]
         if (x == null || y == null) null else x to y
     },
+    /**
+     * What is around the player, as rows of tiles, for a game whose profile declares a map.
+     *
+     * Empty for a game that does not. Position in, picture out — the Executor does not know
+     * how the picture is made and the profile does not know who is looking at it.
+     */
+    private val mapAt: (Int, Int) -> List<String> = { _, _ -> emptyList() },
 ) {
     /** Weapons the party held last turn, to notice them going away. */
     private var lastHeldWeapons: Int? = null
@@ -297,6 +304,7 @@ class ExecutorAgent(
             ram = ram,
             position = positionOf(ram),
             screenB64 = screenB64.takeIf { it.isNotBlank() },
+            map = positionOf(ram)?.let { (x, y) -> mapAt(x, y) }.orEmpty(),
             planStep = plan?.steps?.getOrNull(plan.cursor),
             milestone = memory.campaign.milestones.firstOrNull { it.status == "in_progress" }?.id ?: "(none)",
             // Move history rather than the outcome list: a tool can report Ok having moved

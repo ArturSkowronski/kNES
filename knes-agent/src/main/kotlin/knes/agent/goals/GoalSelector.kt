@@ -108,13 +108,21 @@ class GoalSelector(
         appendLine("player position: ${world.sm.first},${world.sm.second}")
         world.world?.let { appendLine("position on the overworld: ${it.first},${it.second}") }
         gameState(world.ram).forEach { appendLine(it) }
+        if (world.map.isNotEmpty()) {
+            appendLine("what is around the player, one character a tile — # solid, . open air, M the player, E an enemy:")
+            world.map.forEach { appendLine(it) }
+        }
         val step = world.planStep
         appendLine(
             if (step == null) "the plan has no step for this turn"
             else "the plan suggests: ${step.intentTool}(${step.intentArgs ?: emptyMap()}) — ${step.description}",
         )
-        if (world.recentTurns.isNotEmpty()) {
-            appendLine("the last ${world.recentTurns.size} turns went: ${world.recentTurns.joinToString(", ")}")
+        // The stall rule needs a long memory; the model does not. Twenty-four entries of
+        // "walk_right: Ok (somewhere new)" is the longest line in the prompt and the least
+        // informative — the reference Jev harness sends the last action and its outcome.
+        val shown = world.recentTurns.takeLast(SHOWN_TURNS)
+        if (shown.isNotEmpty()) {
+            appendLine("the last ${shown.size} turns went: ${shown.joinToString(", ")}")
         }
         if (world.scene.isNotBlank()) appendLine("on screen: ${world.scene}")
     }.trim()
@@ -128,5 +136,8 @@ class GoalSelector(
          * something else.
          */
         const val DEFAULT_QUESTION = "Which of these should the player do on this turn?"
+
+        /** How much of the history the model is shown. The stall rule keeps far more. */
+        const val SHOWN_TURNS = 6
     }
 }

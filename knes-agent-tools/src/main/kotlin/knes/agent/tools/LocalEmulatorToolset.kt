@@ -56,6 +56,11 @@ open class LocalEmulatorToolset(
         return StatusResult(true, "reset")
     }
 
+    override fun readRange(start: Int, length: Int): List<Int> {
+        require(length in 1..4096) { "length must be 1..4096, got $length" }
+        return (0 until length).map { session.readMemory((start + it) and 0xFFFF) }
+    }
+
     @Tool
     @LLMDescription("Advance emulation by N frames while holding specified buttons. Returns frame count, watched RAM values, and optionally a screenshot.")
     override fun step(buttons: List<String>, frames: Int, screenshot: Boolean): StepResult {

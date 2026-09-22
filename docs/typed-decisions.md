@@ -366,6 +366,70 @@ exactly one applicable goal, the one that presses START; it took a few turns to 
 stalled itself out, and twenty turns went to a chat-model fallback a reactive run does not
 have. When nothing is left, the selector forgets the recent past instead of declining.
 
+### Why the reference Jev demos play Mario better
+
+Compared against [`typesafe-mario`](https://github.com/alexdong/typesafe-mario), the
+TypeSafe/Jev harness. Two things are identical and are not the difference: **one decision
+every 8 emulator frames**, and an action set of seven macros that matches ours almost
+name for name.
+
+What differs:
+
+**Their harness does the perception and the timing; the model confirms.** Jev is never
+shown a screenshot. The harness turns RAM into object-centric JSON — `terrain` with
+obstacle and gap geometry, `hazard` with up to three enemies at *projected* positions and
+contact timing, `trajectory` with `crossing_known_gap`, `reaction_timing` measuring
+observation-to-action latency. Its own prompt says it outright: *"Code has already
+accounted for inference delay, action cadence, and the frames needed to clear an enemy. If
+`jump_must_start_this_decision` is true, choose a forward jump now."* The model is asked to
+agree with an answer the harness computed. Ours is asked to work it out from a picture.
+
+**Jumps are held across decisions.** `RIGHT_JUMP` releases to `RIGHT`, and the instructions
+say to keep holding while rising. Jump height in this game is a function of how long A is
+held, so a jump there is a state the model steers. Ours is a fixed 28-frame commitment
+decided once.
+
+**Three typed questions per call, not one:** a Choice over the actions, a Noul (0–1) for
+"should a jump begin or stay held", and a Score for danger. Ours asks one Choice.
+
+**And the model is purpose-built.** That one is not a configuration we can match, and it
+turns out to matter most — measured, below.
+
+### Porting their perception, and what it did
+
+`profiles/<id>.json` can now declare a tile buffer and a sprite table, and the agent
+renders a window of it as a small ASCII map — `#` solid, `.` open, `M` the player, `E` an
+enemy. `EmulatorToolset.readRange` exists for facts too numerous to name one address at a
+time: Super Mario Bros keeps the level's collision geometry as 416 bytes at `$0500`.
+
+The addresses came from the reference harness rather than from probing, but its `originY`
+of 32 did not transfer — its y comes from a gym `info` dict and ours is raw `$00CE`.
+Standing on the floor of World 1-1, the floor rendered two rows below Mario instead of
+one. `MarioTileMapTest` boots the ROM, stands him on the ground and checks the ground is
+under him; calibrated against it, the origin is 16.
+
+Then four configurations, 440 turns each:
+
+| what the model gets | best | per life |
+|---|---|---|
+| **the screen only** | **1662 px** | **1544, 1552, 1662** |
+| screen + a miscalibrated map | 1222 px | 296, 295, 1222 |
+| screen + the correct map | 817 px | 295, 282, 295, 817 |
+| the map only, no screen — their shape | 296 px | 296, 257, 86 |
+
+A correct map made a vision model **worse**: given two descriptions of the same thing it
+has to reconcile them. And their shape — structured state, no pixels — collapsed outright:
+331 of 440 turns spent standing still.
+
+So the gap is not mainly the pipeline. A general 4B reading structured JSON sits on its
+hands where a model trained for typed decisions acts. What a thin port of their perception
+buys us is nothing; what would buy something is the part we did not port — the computed
+deadlines, `jump_must_start_this_decision` and the rest, which turn a judgement into a
+confirmation.
+
+The map stays declared and verified, switched off in the state by `map.inState`. It is
+correct, it is cheap, and it is waiting for a model that wants it.
+
 ## Running it live
 
 ```bash
