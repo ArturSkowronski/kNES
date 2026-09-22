@@ -38,6 +38,23 @@ already cost this project a smoke run — Gemini Flash-Lite put the party "near 
 while it stood on the centre path, then confused Coneria Castle for Coneria Town. Set
 `OPENAI_FAST_MODEL` if the cost matters more than the reading.
 
+## Typed decisions (optional)
+
+The Executor can decide a turn by picking from goals that were written down first,
+instead of by generating JSON. The goals that apply this turn become the declared
+options of a [SemIf](https://github.com/TheoLeeCJ/SemIf) decision — the open
+implementation of Jev's System-One interface — and a local 4B model ranks them in about
+100 ms. A tool that does not exist cannot be picked, because it was never on the menu.
+The structure is Minecraft's `GoalSelector`; see **[docs/typed-decisions.md](../docs/typed-decisions.md)**.
+
+Off by default:
+
+```bash
+KNES_DECISION=order ./gradlew :knes-agent:run -PappArgs="--fresh"   # no model, priority order
+KNES_DECISION=semif SEMIF_PYTHON=~/GitHub/SemIf/.venv/bin/python \
+  SEMIF_SRC=~/GitHub/SemIf/src SEMIF_BITS=4 ./gradlew :knes-agent:run -PappArgs="--fresh"
+```
+
 ## Environment
 
 | Variable | Meaning |
@@ -50,6 +67,8 @@ while it stood on the centre path, then confused Coneria Castle for Coneria Town
 | `KNES_LLM` | force a provider: `openai`, `gemini` or `anthropic+gemini` |
 | `GEMINI_API_KEY` | enables the Gemini provider, which also covers every role alone |
 | `ANTHROPIC_API_KEY` | only for the older `anthropic+gemini` pairing, which needs both keys |
+| `KNES_DECISION` | `off`, `order` or `semif` — see [typed decisions](../docs/typed-decisions.md) |
+| `SEMIF_*` | where the local SemIf model lives, when `KNES_DECISION=semif` |
 
 Two OpenAI details worth knowing, because both fail quietly otherwise: the budget is
 `max_completion_tokens` and it **also covers reasoning tokens**, so a ceiling sized for

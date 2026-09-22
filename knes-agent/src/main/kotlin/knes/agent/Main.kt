@@ -133,8 +133,20 @@ fun main(args: Array<String>) {
                 // Agents
                 val campaign = Campaign.of(cfg.profile)
                 val advisor = AdvisorAgent(vision, memory, run, landmarks, campaign, semantics)
-                val executor = ExecutorAgent(sonnet, haiku, tools, memory, run, vision = executorVision, campaign = campaign)
+                // Off unless KNES_DECISION says otherwise; see DecisionModels.
+                val decisionModel = knes.agent.decision.DecisionModels.fromEnvironment()
+                val goalSelector = decisionModel?.let {
+                    knes.agent.goals.GoalSelector(knes.agent.goals.Ff1Goals.all(), it)
+                }
+                val executor = ExecutorAgent(
+                    sonnet, haiku, tools, memory, run,
+                    vision = executorVision,
+                    campaign = campaign,
+                    goals = goalSelector,
+                    phaseProvider = { Phase.fromRam(toolset.getState().ram, cfg.profile) },
+                )
                 Log.llm("models: advisor/cart=${vision.model} executor=${executorVision.model} fast=${chat.fastModel}")
+                Log.llm("decisions: ${decisionModel?.name ?: "chat model (KNES_DECISION off)"}")
                 val reviewer = ReviewerAgent(haiku, memory, run, campaign)
                 val cartographer = CartographerAgent(
                     vision, toolset, memory, snapshotDumper, overworldMap, fog, landmarks,
