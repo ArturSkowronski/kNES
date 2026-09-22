@@ -2,6 +2,10 @@ package knes.agent.agents
 
 import knes.agent.campaign.Campaign
 import knes.agent.campaign.NoCampaign
+import knes.agent.goals.GoalSelector
+import knes.agent.goals.Selection
+import knes.agent.goals.WorldSnapshot
+import knes.agent.runtime.Phase
 
 import knes.agent.llm.VisionLlm
 import knes.agent.llm.HaikuClient
@@ -35,6 +39,16 @@ class ExecutorAgent(
     private val run: RunDirectory? = null,
     private val vision: VisionLlm? = null,
     private val campaign: Campaign = NoCampaign,
+    /**
+     * The goal selector, when one is configured (`KNES_DECISION`).
+     *
+     * Null is the default and means the turn is decided the way it always was, by asking
+     * the chat model for JSON. When it is present it gets first refusal on every turn and
+     * the chat model becomes the fallback — see [act].
+     */
+    private val goals: GoalSelector? = null,
+    /** Only read when [goals] is set; the selector needs the phase its goals filter on. */
+    private val phaseProvider: () -> Phase = { Phase.Unknown },
 ) {
     /** Weapons the party held last turn, to notice them going away. */
     private var lastHeldWeapons: Int? = null
@@ -52,6 +66,10 @@ class ExecutorAgent(
         val postSm: Pair<Int, Int>,
         val outcome: String,
         val screen: ScreenEffect,
+        /** The goal that chose this turn, when one did. Lets a goal notice itself looping. */
+        val goalId: String? = null,
+        /** Whether the party is anywhere different now, in either coordinate space. */
+        val moved: Boolean = false,
     )
 
     /** Whether a turn's taps changed the picture, for turns where the party cannot move. */
@@ -62,6 +80,8 @@ class ExecutorAgent(
         currentTurn = turn
         run?.markActive("executor", turn)
         val preRam = parseSmFromRamDigest(ramDigest)
+        val ram = WorldSnapshot.parseRam(ramDigest)
+        val preWorld = (ram["worldX"] ?: 0) to (ram["worldY"] ?: 0)
         val plan = memory.currentPlan
         val planCreatedAt = plan?.createdAtTurn ?: -1
         if (planCreatedAt != lastPlanCreatedAt) {
@@ -78,7 +98,14 @@ class ExecutorAgent(
         // from Overworld → walkOverworldTo(11,10) walked NW into Coneria
         // CASTLE; Sonnet was never consulted until 2 fails, by which time
         // party was already trapped in mapId=24 throne room).
-        val (tool, args, reasoning) = askLlm(plan, screenshotB64, ramDigest)
+        // The goal selector, when configured, decides from options that were written
+        // down before the model was asked, so it cannot name a tool that does not exist.
+        // It declines (null) when no goal applies, and any failure falls through to the
+        // chat model rather than costing the turn.
+        val selection = selectGoal(plan, ram, turn)
+        val (tool, args, reasoning) = selection?.let {
+            Triple(it.action.tool, it.action.args, "goal:${it.goal.id} — ${it.ranking.summary()}")
+        } ?: askLlm(plan, screenshotB64, ramDigest)
 
         val outcome = dispatch(tool, args)
         recentOutcomes.addLast(outcome.javaClass.simpleName)
@@ -87,13 +114,17 @@ class ExecutorAgent(
         // Read post-state straight from outcome message (sequence/townWalk both
         // include sm coords in their Ok messages) — not bullet-proof but cheap
         // and avoids another toolset.getState() round-trip.
+        val message = if (outcome is ToolOutcome.Ok) outcome.message else ""
         val postRam = if (outcome is ToolOutcome.Ok) partyPositionIn(outcome.message) ?: preRam else preRam
+        val postWorld = worldPositionIn(message)
         recentMoves.addLast(MoveEntry(
             turn = turn, preSm = preRam, tool = tool,
             argsSummary = args.entries.joinToString(",") { "${it.key}=${it.value.take(40)}" },
             postSm = postRam,
             outcome = outcome.javaClass.simpleName,
-            screen = screenEffectIn(if (outcome is ToolOutcome.Ok) outcome.message else ""),
+            screen = screenEffectIn(message),
+            goalId = selection?.goal?.id,
+            moved = postRam != preRam || (postWorld != null && postWorld != preWorld),
         ))
         if (recentMoves.size > 8) recentMoves.removeFirst()
 
@@ -193,6 +224,50 @@ class ExecutorAgent(
         return sx to sy
     }
 
+
+    /**
+     * Ask the goal selector what to do, if there is one.
+     *
+     * Returns null when no selector is configured, when nothing applies, or when the
+     * decision failed — all three mean "let the chat model have the turn". The decision
+     * is written to the turn's prompt file either way, so a run can be read back and the
+     * ranking checked against what actually happened.
+     */
+    private suspend fun selectGoal(plan: Plan?, ram: Map<String, Int>, turn: Int): Selection? {
+        val selector = goals ?: return null
+        val world = WorldSnapshot(
+            turn = turn,
+            phase = phaseProvider(),
+            ram = ram,
+            planStep = plan?.steps?.getOrNull(plan.cursor),
+            milestone = memory.campaign.milestones.firstOrNull { it.status == "in_progress" }?.id ?: "(none)",
+            // Move history rather than the outcome list: a tool can report Ok having moved
+            // nothing, and a goal that gives up on a step needs to know the difference.
+            recentTurns = recentMoves.map {
+                knes.agent.goals.TurnEffect(it.outcome, it.moved, it.goalId ?: it.tool)
+            },
+        )
+        return try {
+            val selection = selector.select(world)
+            runCatching {
+                run?.promptFile(turn, "executor-goals")?.toFile()?.writeText(
+                    "=== STATE ===\n${selector.describe(world)}\n\n" +
+                        "=== OPTIONS ===\n" +
+                        (selection?.considered?.joinToString("\n") { "- ${it.id}: ${it.describe(world)}" }
+                            ?: "(none applied)") +
+                        "\n\n=== RANKING ===\n" +
+                        (selection?.ranking?.scores?.joinToString("\n") { "${it.first} ${String.format(java.util.Locale.ROOT, "%.4f", it.second)}" }
+                            ?: "(no decision)")
+                )
+            }
+            selection
+        } catch (e: Exception) {
+            knes.agent.runtime.Log.error(
+                "goal selector failed: ${e.message?.take(160)} — falling back to the chat model",
+            )
+            null
+        }
+    }
 
     /**
      * Sonnet decides every turn. Sees screenshot + Haiku digest + RAM digest +
@@ -686,6 +761,19 @@ class ExecutorAgent(
  */
 internal fun partyPositionIn(message: String): Pair<Int, Int>? {
     val match = Regex("""sm=\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)""").find(message) ?: return null
+    return match.groupValues[1].toInt() to match.groupValues[2].toInt()
+}
+
+/**
+ * The overworld coordinate in a tool's Ok message, when it carried one.
+ *
+ * `sm` alone is not enough to tell whether a turn moved anything: on the overworld it
+ * stayed at (0,6) through twenty-one turns of walking while `world` was the coordinate
+ * that would have changed. A goal that gives up when nothing is happening has to be able
+ * to see that either of them moved.
+ */
+internal fun worldPositionIn(message: String): Pair<Int, Int>? {
+    val match = Regex("""world=\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)""").find(message) ?: return null
     return match.groupValues[1].toInt() to match.groupValues[2].toInt()
 }
 

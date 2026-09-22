@@ -1,0 +1,72 @@
+package knes.agent.goals
+
+import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.shouldBe
+import knes.agent.runtime.Phase
+
+class WorldSnapshotTest : FunSpec({
+
+    test("the RAM digest the turn loop already builds is read straight back") {
+        val ram = WorldSnapshot.parseRam("smPlayerX=18,smPlayerY=14,gold=400,menuCursor=0")
+        ram["smPlayerX"] shouldBe 18
+        ram["gold"] shouldBe 400
+        ram.size shouldBe 4
+    }
+
+    test("a field that is not an integer is dropped, not guessed at as zero") {
+        val ram = WorldSnapshot.parseRam("smPlayerX=18,mode=town,broken,worldY=")
+        ram shouldBe mapOf("smPlayerX" to 18)
+    }
+
+    test("negative values survive — some watched fields are signed") {
+        WorldSnapshot.parseRam("delta=-3")["delta"] shouldBe -3
+    }
+
+    test("a missing position reads as the origin rather than throwing mid-turn") {
+        val world = WorldSnapshot(1, Phase.Town, emptyMap(), null, "m", emptyList())
+        world.sm shouldBe (0 to 0)
+        world.world shouldBe (0 to 0)
+    }
+
+    test("recentFailures counts the turns that moved the game no further") {
+        val world = WorldSnapshot(
+            1, Phase.Town, emptyMap(), null, "m",
+            listOf(TurnEffect("Ok", true), TurnEffect("Fail", false), TurnEffect("Reject", false), TurnEffect("Ok", true)),
+        )
+        world.recentFailures shouldBe 2
+    }
+})
+
+private fun moved(vararg outcomes: Pair<String, Boolean>) = WorldSnapshot(
+    1, Phase.Town, emptyMap(), null, "m", outcomes.map { TurnEffect(it.first, it.second) },
+)
+
+class TurnEffectTest : FunSpec({
+
+    test("the count is the unbroken run up to now, not the total") {
+        moved("Fail" to false, "Fail" to false, "Ok" to true, "Fail" to false).turnsWithoutProgress shouldBe 1
+        moved("Ok" to true, "Fail" to false, "Fail" to false, "Fail" to false).turnsWithoutProgress shouldBe 3
+    }
+
+    test("a turn that moved the party resets it") {
+        moved("Fail" to false, "Fail" to false, "Ok" to true).turnsWithoutProgress shouldBe 0
+    }
+
+    test("an Ok that moved nothing is not progress — the whole reason this counts effect") {
+        moved("Ok" to false, "Ok" to false).turnsWithoutProgress shouldBe 2
+    }
+
+    test("a Reject counts too — it moved the game no further than a Fail did") {
+        moved("Reject" to false, "Reject" to false).turnsWithoutProgress shouldBe 2
+    }
+
+    test("no history at all is no failures") {
+        WorldSnapshot(1, Phase.Town, emptyMap(), null, "m", emptyList()).turnsWithoutProgress shouldBe 0
+    }
+
+    test("the state reads out whether anything moved, so the model can see nothing is happening") {
+        TurnEffect("Ok", moved = false).toString() shouldBe "Ok (nothing moved)"
+        TurnEffect("Ok", moved = true).toString() shouldBe "Ok (moved)"
+        TurnEffect("Fail", moved = false).toString() shouldBe "Fail"
+    }
+})
