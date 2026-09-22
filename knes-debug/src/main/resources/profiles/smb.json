@@ -189,7 +189,7 @@
           "buttons": "Right",
           "frames": "8"
         },
-        "description": "Walk right without sprinting \u2014 slower, and easier to stop before an edge."
+        "description": "Walk right without sprinting, for an eighth of a second."
       },
       {
         "id": "jump_right",
