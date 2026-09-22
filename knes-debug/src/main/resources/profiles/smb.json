@@ -86,6 +86,9 @@
       "localX": [
         "playerX"
       ],
+      "localXHigh": [
+        "screenPage"
+      ],
       "localY": [
         "playerY"
       ]
@@ -211,9 +214,9 @@
         "tool": "hold",
         "args": {
           "buttons": "Right,A,B",
-          "frames": "18"
+          "frames": "28"
         },
-        "description": "Jump forward: hold A and Right together, clearing a gap or an enemy ahead."
+        "description": "Jump forward: hold A and Right together, clearing a gap in the floor, an enemy in the way, or a pipe or wall too tall to walk through."
       },
       {
         "id": "jump_up",
@@ -235,7 +238,7 @@
         "tool": "hold",
         "args": {
           "buttons": "A",
-          "frames": "18"
+          "frames": "28"
         },
         "description": "Jump straight up without moving forward \u2014 for a block directly overhead."
       },

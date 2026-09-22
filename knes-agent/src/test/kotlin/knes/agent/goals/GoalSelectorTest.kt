@@ -96,13 +96,13 @@ class GoalSelectorTest : FunSpec({
                 phase = Phase.Indoors,
                 ram = mapOf("smPlayerX" to 18, "smPlayerY" to 14),
                 planStep = PlanStep(3, "walk to the weapon counter", "walkTo", mapOf("x" to "18", "y" to "12")),
-                outcomes = listOf(TurnEffect("Ok", moved = true), TurnEffect("Fail", moved = false)),
+                outcomes = listOf(TurnEffect("Ok", newGround = true), TurnEffect("Fail", newGround = false)),
             ),
         )
         described shouldContain "phase: Indoors"
         described shouldContain "18,14"
         described shouldContain "walk to the weapon counter"
-        described shouldContain "Ok (moved), Fail"
+        described shouldContain "Ok (somewhere new), Fail"
     }
 
     test("what the game itself counts comes from the profile, not from this class") {
@@ -126,5 +126,41 @@ class GoalSelectorTest : FunSpec({
         val selection = GoalSelector(listOf(goal("a", 1), goal("b", 2), goal("c", 3)), FakeModel("c")).select(world())
         selection!!.considered.map { it.id } shouldBe listOf("a", "b", "c")
         selection.ranking shouldNotBe null
+    }
+})
+
+/**
+ * Giving up on everything is not an option the selector may take.
+ *
+ * After a game over, Super Mario Bros sits on its title screen and the only goal that
+ * applies is the one that presses START. It took several turns to land, stalled itself out
+ * under its own retry limit, and left an empty menu — twenty turns went to a chat-model
+ * fallback that a reactive run does not have.
+ */
+class EmptyMenuTest : FunSpec({
+
+    fun stalling(id: String, limit: Int) = object : Goal {
+        override val id = id
+        override val priority = 0
+        override fun canUse(world: WorldSnapshot) = world.stalledOn(id) < limit
+        override fun describe(world: WorldSnapshot) = "press on"
+        override fun act(world: WorldSnapshot) = GoalAction("sequence", mapOf("buttons" to "START"))
+    }
+
+    val worn = List(4) { TurnEffect("Ok", newGround = false, action = "only") }
+
+    test("the last goal standing stays on the menu however long it has been failing") {
+        val selector = GoalSelector(listOf(stalling("only", 3)), DeclaredOrder)
+        selector.select(world(outcomes = worn))!!.goal.id shouldBe "only"
+    }
+
+    test("a goal still stalls while something else is left to try") {
+        val selector = GoalSelector(listOf(stalling("only", 3), goal("other", 9)), DeclaredOrder)
+        selector.select(world(outcomes = worn))!!.goal.id shouldBe "other"
+    }
+
+    test("nothing applicable at all is still a decline — that is not the stall rule's doing") {
+        val selector = GoalSelector(listOf(goal("a", 1, applies = false)), DeclaredOrder)
+        selector.select(world()).shouldBeNull()
     }
 })

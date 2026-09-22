@@ -330,6 +330,42 @@ Executor can dispatch.
 is an independent project by its own authors, not affiliated with either; kNES is not
 affiliated with any of them, and this integration is written against SemIf's interface.*
 
+### Getting past the pipe
+
+The first live run stood against a pipe in World 1-1 for **155 turns**, pressing Right.
+Four things were wrong, and only the last one was about the game:
+
+- **Mario's position was the byte on screen.** `playerX` resets as the screen scrolls, so
+  walking right across a scroll read as standing still, and a rule that gives up when
+  nothing moves gave up on a goal that was working. A profile can now declare a second byte
+  for a coordinate — `"localXHigh": ["screenPage"]` — and the pair is the position.
+- **The history was too short for the rule to fire.** Eight turns remembered, seven goals on
+  the menu, and a retry limit of six: no single goal ever accumulated. The goal selector now
+  sees 24 turns; the chat prompt still shows 8, which is what it was written for.
+- **A jump counted as progress.** It changes Mario's position and puts him back exactly
+  where he started, which rescued the very goal that was about to be taken away. Progress
+  now means ending the turn somewhere the player has not been in recent memory — which also
+  covers walking back and forth between two tiles.
+- **The jump was too short, and the description did not mention pipes.** `jump_right` listed
+  a gap and an enemy, not the third thing a jump is for: something solid in the way.
+
+| | best | per life | longest block |
+|---|---|---|---|
+| as reported | 722 px | 295, 297, 594 | **155 turns** |
+| absolute position + longer history | 898 px | 898, 296, 722 | 155 |
+| progress = somewhere new | 722 px | 722 (no deaths in 440 turns) | 40 |
+| + "a pipe or wall too tall to walk through" | 723 px | 723 | 43 |
+| **+ jump held 28 frames, not 18** | **1662 px** | **1544, 1552, 1662** | 77 |
+
+The jump length was tested earlier and looked like it made no difference — because jumps
+were too rare to measure. Fixing the description first is what made the second test
+readable.
+
+The stall rule also learned not to empty the menu. After a game over the title screen leaves
+exactly one applicable goal, the one that presses START; it took a few turns to land,
+stalled itself out, and twenty turns went to a chat-model fallback a reactive run does not
+have. When nothing is left, the selector forgets the recent past instead of declining.
+
 ## Running it live
 
 ```bash

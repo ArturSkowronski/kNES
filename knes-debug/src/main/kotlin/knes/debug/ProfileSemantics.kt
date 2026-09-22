@@ -97,21 +97,35 @@ data class RamField(val field: String, val mask: Int? = null, val default: Int =
     }
 }
 
-/** Which RAM fields carry position, in priority order — the first field present wins. */
+/**
+ * Which RAM fields carry position, in priority order — the first field present wins.
+ *
+ * The `*High` lists supply a second byte for a coordinate the console keeps in two places.
+ * Super Mario Bros stores Mario's x on screen and the page the screen has scrolled to, and
+ * only the pair says where he actually is: walking right across a scroll leaves `playerX`
+ * where it was, and anything watching that byte alone concludes he did not move.
+ */
 @Serializable
 data class PositionMapping(
     @SerialName("worldX") val worldXFields: List<String> = emptyList(),
     @SerialName("worldY") val worldYFields: List<String> = emptyList(),
     @SerialName("localX") val localXFields: List<String> = emptyList(),
-    @SerialName("localY") val localYFields: List<String> = emptyList()
+    @SerialName("localY") val localYFields: List<String> = emptyList(),
+    @SerialName("worldXHigh") val worldXHighFields: List<String> = emptyList(),
+    @SerialName("worldYHigh") val worldYHighFields: List<String> = emptyList(),
+    @SerialName("localXHigh") val localXHighFields: List<String> = emptyList(),
+    @SerialName("localYHigh") val localYHighFields: List<String> = emptyList()
 ) {
-    fun worldX(ram: Map<String, Int>): Int? = pick(worldXFields, ram)
-    fun worldY(ram: Map<String, Int>): Int? = pick(worldYFields, ram)
-    fun localX(ram: Map<String, Int>): Int? = pick(localXFields, ram)
-    fun localY(ram: Map<String, Int>): Int? = pick(localYFields, ram)
+    fun worldX(ram: Map<String, Int>): Int? = pick(worldXFields, worldXHighFields, ram)
+    fun worldY(ram: Map<String, Int>): Int? = pick(worldYFields, worldYHighFields, ram)
+    fun localX(ram: Map<String, Int>): Int? = pick(localXFields, localXHighFields, ram)
+    fun localY(ram: Map<String, Int>): Int? = pick(localYFields, localYHighFields, ram)
 
-    private fun pick(fields: List<String>, ram: Map<String, Int>): Int? =
-        fields.firstNotNullOfOrNull { ram[it] }
+    private fun pick(fields: List<String>, highFields: List<String>, ram: Map<String, Int>): Int? {
+        val low = fields.firstNotNullOfOrNull { ram[it] } ?: return null
+        val high = highFields.firstNotNullOfOrNull { ram[it] } ?: return low
+        return low + (high shl 8)
+    }
 }
 
 /** A named phase plus the RAM conditions that identify it. All conditions must hold. */

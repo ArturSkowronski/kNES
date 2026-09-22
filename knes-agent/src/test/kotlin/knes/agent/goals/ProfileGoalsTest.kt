@@ -26,7 +26,7 @@ private fun world(
 private fun applicable(profile: String, world: WorldSnapshot) =
     Goals.of(profile).filter { it.canUse(world) }.map { it.id }
 
-private fun stuck(goal: String, n: Int) = List(n) { TurnEffect("Ok", moved = false, action = goal) }
+private fun stuck(goal: String, n: Int) = List(n) { TurnEffect("Ok", newGround = false, action = goal) }
 
 private val WALK = PlanStep(0, "walk to the counter", "walkTo", mapOf("x" to "11", "y" to "11"))
 
@@ -162,15 +162,18 @@ class Ff1ProfileGoalsTest : FunSpec({
         left shouldContain "step_south"
     }
 
-    test("a turn that moved the player puts the direction back") {
-        val history = stuck("step_north", 3) + TurnEffect("Ok", moved = true, action = "step_north")
+    test("a turn that reached somewhere new puts the direction back") {
+        val history = stuck("step_north", 3) + TurnEffect("Ok", newGround = true, action = "step_north")
         applicable("ff1", world(Phase.Overworld, outcomes = history)) shouldContain "step_north"
     }
 
-    test("when every goal that applies has fallen silent the selector declines the turn") {
+    test("when every goal has fallen silent the selector forgets, rather than giving up the turn") {
+        // The stall rule may not empty the menu: an agent with nothing to choose from hands
+        // the turn to a chat model that a reactive run does not have.
         val two = Goals.of("ff1").filter { it.id == "step_north" || it.id == "step_east" }
         val history = two.flatMap { stuck(it.id, 3) }
-        GoalSelector(two, DeclaredOrder).select(world(Phase.Overworld, outcomes = history)).shouldBeNull()
+        val selection = GoalSelector(two, DeclaredOrder).select(world(Phase.Overworld, outcomes = history))
+        selection!!.goal.id shouldBe "step_north"
     }
 })
 
