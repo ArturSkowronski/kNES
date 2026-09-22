@@ -166,8 +166,10 @@ class ExecutorAgent(
             append("            menuCursor=$cursor hand=(${hand.first},${hand.second}) ")
             append("screenState=${ram["screenState"]}\n")
             append("            weapons: $heldCount/4 chars hold one, $equippedCount/4 equipped\n")
-            append("            menuCursor is the highlighted ROW INDEX in whatever list is open ")
-            append("(0 = top). Use it instead of guessing which row the hand points at.")
+            append("            menuCursor counts Down presses since the last A and resets on A ")
+            append("(observed, FF1). Treat it as how far you have moved in the open list, ")
+            append("not as a proven index into the shop's item order — and note the item ")
+            append("ID that lands in a weapon slot is NOT the shop row number.")
         }
     }
 
