@@ -3,37 +3,282 @@
   "id": "smb",
   "description": "Super Mario Bros (1985) memory map",
   "addresses": {
-    "gameState": {"address": "0x0770", "description": "Game engine state (0=title/demo)"},
-    "playerX": {"address": "0x0086", "description": "Mario X position on screen"},
-    "playerY": {"address": "0x00CE", "description": "Mario Y position on screen"},
-    "playerState": {"address": "0x000E", "description": "Player state (0=small, 1=big, 2=fire)"},
-    "playerMoving": {"address": "0x0057", "description": "Horizontal speed"},
-    "world": {"address": "0x075F", "description": "Current world (0-indexed)"},
-    "level": {"address": "0x0760", "description": "Current level (0-indexed)"},
-    "lives": {"address": "0x075A", "description": "Lives remaining"},
-    "coins": {"address": "0x075E", "description": "Coin count"},
-    "score1": {"address": "0x07DD", "description": "Score digit 1 (ten-thousands)"},
-    "score2": {"address": "0x07DE", "description": "Score digit 2 (thousands)"},
-    "score3": {"address": "0x07DF", "description": "Score digit 3 (hundreds)"},
-    "timer1": {"address": "0x07F8", "description": "Timer digit 1 (hundreds)"},
-    "timer2": {"address": "0x07F9", "description": "Timer digit 2 (tens)"},
-    "timer3": {"address": "0x07FA", "description": "Timer digit 3 (ones)"},
-    "screenPage": {"address": "0x006D", "description": "Current screen page (horizontal scroll)"},
-    "enemyActive": {"address": "0x000F", "description": "Number of active enemies on screen"}
+    "gameState": {
+      "address": "0x0770",
+      "description": "Game engine state (0=title/demo)"
+    },
+    "playerX": {
+      "address": "0x0086",
+      "description": "Mario X position on screen"
+    },
+    "playerY": {
+      "address": "0x00CE",
+      "description": "Mario Y position on screen"
+    },
+    "playerState": {
+      "address": "0x000E",
+      "description": "Player state (0=small, 1=big, 2=fire)"
+    },
+    "playerMoving": {
+      "address": "0x0057",
+      "description": "Horizontal speed"
+    },
+    "world": {
+      "address": "0x075F",
+      "description": "Current world (0-indexed)"
+    },
+    "level": {
+      "address": "0x0760",
+      "description": "Current level (0-indexed)"
+    },
+    "lives": {
+      "address": "0x075A",
+      "description": "Lives remaining"
+    },
+    "coins": {
+      "address": "0x075E",
+      "description": "Coin count"
+    },
+    "score1": {
+      "address": "0x07DD",
+      "description": "Score digit 1 (ten-thousands)"
+    },
+    "score2": {
+      "address": "0x07DE",
+      "description": "Score digit 2 (thousands)"
+    },
+    "score3": {
+      "address": "0x07DF",
+      "description": "Score digit 3 (hundreds)"
+    },
+    "timer1": {
+      "address": "0x07F8",
+      "description": "Timer digit 1 (hundreds)"
+    },
+    "timer2": {
+      "address": "0x07F9",
+      "description": "Timer digit 2 (tens)"
+    },
+    "timer3": {
+      "address": "0x07FA",
+      "description": "Timer digit 3 (ones)"
+    },
+    "screenPage": {
+      "address": "0x006D",
+      "description": "Current screen page (horizontal scroll)"
+    },
+    "enemyActive": {
+      "address": "0x000F",
+      "description": "Number of active enemies on screen"
+    },
+    "playerFloatState": {
+      "address": "0x001D",
+      "description": "0 while Mario stands on something. Verified over a 160-turn run: y held still on 103 of 106 turns at 0, and moved on 50 of 53 at 1"
+    },
+    "verticalVelocity": {
+      "address": "0x009F",
+      "description": "Signed vertical speed: 0 grounded, 4 while falling, 252-255 (-4..-1) while rising. Verified over the same run"
+    }
   },
   "semantics": {
     "version": 1,
     "position": {
-      "localX": ["playerX"],
-      "localY": ["playerY"]
+      "localX": [
+        "playerX"
+      ],
+      "localY": [
+        "playerY"
+      ]
     },
     "phases": [
-      {"phase": "Boot", "when": [
-        {"field": "gameState", "equals": 0, "default": 0}
-      ]},
-      {"phase": "Overworld", "when": [
-        {"field": "gameState", "notEquals": 0}
-      ]}
+      {
+        "phase": "Boot",
+        "when": [
+          {
+            "field": "gameState",
+            "equals": 0,
+            "default": 0
+          }
+        ]
+      },
+      {
+        "phase": "Overworld",
+        "when": [
+          {
+            "field": "gameState",
+            "notEquals": 0
+          }
+        ]
+      }
+    ]
+  },
+  "agent": {
+    "question": "Which of these should Mario do right now?",
+    "frame": "512x480",
+    "state": [
+      {
+        "field": "lives",
+        "label": "lives left"
+      },
+      {
+        "field": "coins",
+        "label": "coins"
+      },
+      {
+        "field": "enemyActive",
+        "label": "enemies on screen"
+      },
+      {
+        "field": "playerFloatState",
+        "say": {
+          "0": "Mario is standing on solid ground",
+          "*": "Mario is in the air"
+        }
+      }
+    ],
+    "goals": [
+      {
+        "id": "start_game",
+        "priority": 0,
+        "phases": [
+          "Boot"
+        ],
+        "tool": "hold",
+        "args": {
+          "buttons": "START",
+          "frames": "8"
+        },
+        "retryLimit": 6,
+        "description": "Press START to leave the title screen and begin the level."
+      },
+      {
+        "id": "run_right",
+        "priority": 10,
+        "notPhases": [
+          "Boot"
+        ],
+        "when": [
+          {
+            "field": "gameState",
+            "notEquals": 0
+          }
+        ],
+        "retryLimit": 6,
+        "tool": "hold",
+        "args": {
+          "buttons": "Right,B",
+          "frames": "8"
+        },
+        "description": "Run right: hold B to sprint and Right to move, for an eighth of a second."
+      },
+      {
+        "id": "walk_right",
+        "priority": 11,
+        "notPhases": [
+          "Boot"
+        ],
+        "when": [
+          {
+            "field": "gameState",
+            "notEquals": 0
+          }
+        ],
+        "retryLimit": 6,
+        "tool": "hold",
+        "args": {
+          "buttons": "Right",
+          "frames": "8"
+        },
+        "description": "Walk right without sprinting \u2014 slower, and easier to stop before an edge."
+      },
+      {
+        "id": "jump_right",
+        "priority": 12,
+        "notPhases": [
+          "Boot"
+        ],
+        "when": [
+          {
+            "field": "gameState",
+            "notEquals": 0
+          },
+          {
+            "field": "playerFloatState",
+            "equals": 0
+          }
+        ],
+        "retryLimit": 6,
+        "tool": "hold",
+        "args": {
+          "buttons": "Right,A,B",
+          "frames": "18"
+        },
+        "description": "Jump forward: hold A and Right together, clearing a gap or an enemy ahead."
+      },
+      {
+        "id": "jump_up",
+        "priority": 13,
+        "notPhases": [
+          "Boot"
+        ],
+        "when": [
+          {
+            "field": "gameState",
+            "notEquals": 0
+          },
+          {
+            "field": "playerFloatState",
+            "equals": 0
+          }
+        ],
+        "retryLimit": 6,
+        "tool": "hold",
+        "args": {
+          "buttons": "A",
+          "frames": "18"
+        },
+        "description": "Jump straight up without moving forward \u2014 for a block directly overhead."
+      },
+      {
+        "id": "back_off",
+        "priority": 20,
+        "notPhases": [
+          "Boot"
+        ],
+        "when": [
+          {
+            "field": "gameState",
+            "notEquals": 0
+          }
+        ],
+        "retryLimit": 6,
+        "tool": "hold",
+        "args": {
+          "buttons": "Left",
+          "frames": "8"
+        },
+        "description": "Move left, away from whatever is ahead, to make room for a run-up."
+      },
+      {
+        "id": "wait",
+        "priority": 30,
+        "notPhases": [
+          "Boot"
+        ],
+        "when": [
+          {
+            "field": "gameState",
+            "notEquals": 0
+          }
+        ],
+        "retryLimit": 6,
+        "tool": "hold",
+        "args": {
+          "buttons": "",
+          "frames": "8"
+        },
+        "description": "Press nothing and let the moment pass \u2014 an enemy walks by, a platform comes back."
+      }
     ]
   }
 }

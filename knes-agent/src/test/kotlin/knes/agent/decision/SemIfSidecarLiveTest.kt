@@ -6,7 +6,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.string.shouldContain
-import knes.agent.goals.Ff1Goals
+import knes.agent.goals.Goals
 import knes.agent.goals.GoalSelector
 import knes.agent.goals.WorldSnapshot
 import knes.agent.runtime.Phase
@@ -54,7 +54,7 @@ class SemIfSidecarLiveTest : FunSpec({
 
     test("the goal selector drives a real model end to end").config(enabled = configured) {
         SemIfProcess(DecisionModels.semIfCommand()).start().use { model ->
-            val selector = GoalSelector(Ff1Goals.all(), model)
+            val selector = GoalSelector(Goals.of("ff1"), model)
             val selection = selector.select(
                 WorldSnapshot(
                     turn = 12,

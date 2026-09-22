@@ -94,16 +94,26 @@ class GoalSelectorTest : FunSpec({
         val described = selector.describe(
             world(
                 phase = Phase.Indoors,
-                ram = mapOf("smPlayerX" to 18, "smPlayerY" to 14, "gold" to 400),
+                ram = mapOf("smPlayerX" to 18, "smPlayerY" to 14),
                 planStep = PlanStep(3, "walk to the weapon counter", "walkTo", mapOf("x" to "18", "y" to "12")),
                 outcomes = listOf(TurnEffect("Ok", moved = true), TurnEffect("Fail", moved = false)),
             ),
         )
         described shouldContain "phase: Indoors"
         described shouldContain "18,14"
-        described shouldContain "gold: 400"
         described shouldContain "walk to the weapon counter"
         described shouldContain "Ok (moved), Fail"
+    }
+
+    test("what the game itself counts comes from the profile, not from this class") {
+        // Gold is Final Fantasy's; lives are Mario's. Naming either here is how the state
+        // ends up half full of nulls whichever game is running.
+        val selector = GoalSelector(
+            listOf(goal("a", 1), goal("b", 2)), FakeModel("a"),
+            gameState = { ram -> ram["gold"]?.let { listOf("gold: $it") }.orEmpty() },
+        )
+        selector.describe(world(ram = mapOf("gold" to 400))) shouldContain "gold: 400"
+        selector.describe(world(ram = emptyMap())).contains("gold") shouldBe false
     }
 
     test("the state leaves out RAM fields the digest did not carry, rather than inventing zeroes") {

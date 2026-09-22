@@ -84,3 +84,27 @@ class SidecarPathTest : FunSpec({
         empty.deleteRecursively()
     }
 })
+
+class FrameSizeTest : FunSpec({
+
+    test("the pixel backend is told how large a frame to look at, when asked") {
+        DecisionModels.semIfCommand(
+            python = "p", sidecar = "s.py", model = "m", revision = "r", backend = "pixels",
+            bits = null, semifSrc = null, imageSize = "512x480",
+        ) shouldContainInOrder listOf("--image-width", "512", "--image-height", "480")
+    }
+
+    test("the text backend has no frame, so the size is not passed to it") {
+        DecisionModels.semIfCommand(
+            python = "p", sidecar = "s.py", model = "m", revision = "r", backend = "mlx",
+            bits = null, semifSrc = null, imageSize = "512x480",
+        ).contains("--image-width") shouldBe false
+    }
+
+    test("a size that is not WxH is ignored rather than passed through broken") {
+        DecisionModels.semIfCommand(
+            python = "p", sidecar = "s.py", model = "m", revision = "r", backend = "pixels",
+            bits = null, semifSrc = null, imageSize = "big",
+        ).contains("--image-width") shouldBe false
+    }
+})

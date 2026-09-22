@@ -72,7 +72,7 @@ fun main(args: Array<String>) {
                 val semantics = GameSemantics.of(cfg.profile)
 
                 // Perception (shared with v1)
-                val overworldMap = OverworldMap.fromRom(File(cfg.rom))
+                val overworldMap = OverworldMap.forProfile(cfg.profile, File(cfg.rom))
                 val fog = FogOfWar()
                 val mapSession = MapSession(InteriorMapLoader(File(cfg.rom).readBytes()), fog)
                 val landmarks = LandmarkMemory()
@@ -134,13 +134,22 @@ fun main(args: Array<String>) {
                 val campaign = memory.campaignRules
                 val advisor = AdvisorAgent(vision, memory, run, landmarks, campaign, semantics)
                 // Off unless KNES_DECISION says otherwise; see DecisionModels.
-                val decisionModel = knes.agent.decision.DecisionModels.fromEnvironment()
+                val decisionModel = knes.agent.decision.DecisionModels.fromEnvironment(
+                    frame = knes.agent.tools.results.AgentConfig.of(cfg.profile)?.frame,
+                )
+                // What the agent may want, what it is asked, and what it is told about the
+                // game all come from profiles/<id>.json — see ProfileAgent.
+                val agentConfig = knes.agent.tools.results.AgentConfig.of(cfg.profile)
                 val profileGoals = knes.agent.goals.Goals.of(cfg.profile)
-                val goalSelector = decisionModel?.takeIf { profileGoals.isNotEmpty() }?.let {
-                    knes.agent.goals.GoalSelector(profileGoals, it)
+                val goalSelector = decisionModel?.takeIf { profileGoals.isNotEmpty() }?.let { model ->
+                    knes.agent.goals.GoalSelector(
+                        profileGoals, model,
+                        question = agentConfig?.question ?: knes.agent.goals.GoalSelector.DEFAULT_QUESTION,
+                        gameState = { ram -> agentConfig?.stateLines(ram).orEmpty() },
+                    )
                 }
                 if (decisionModel != null && profileGoals.isEmpty()) {
-                    Log.warn("no goals written for profile '${cfg.profile}' — the chat model keeps deciding turns")
+                    Log.warn("profile '${cfg.profile}' declares no goals — the chat model keeps deciding turns")
                 }
                 val executor = ExecutorAgent(
                     sonnet, haiku, tools, memory, run,
