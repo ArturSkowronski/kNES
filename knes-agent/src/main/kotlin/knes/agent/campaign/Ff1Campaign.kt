@@ -12,6 +12,21 @@ import kotlin.math.roundToInt
  */
 object Ff1Campaign : Campaign {
 
+    override val scope = "coneria_buy_equip_grind"
+
+    /**
+     * Buy, equip, leave, grind — the opening the whole harness was built around.
+     *
+     * `enter_weapon_shop` is an event checkpoint: it latches when the party reaches the
+     * counter tile and is never re-verified, because the party naturally steps off that
+     * tile during the buy menu. `buy_weapons` and `arm_party` stay separate so that
+     * holding a weapon and having one equipped cannot be confused for each other.
+     */
+    override val initialMilestones = listOf(
+        "boot", "enter_coneria", "enter_weapon_shop",
+        "buy_weapons", "arm_party", "exit_coneria", "grind",
+    )
+
     private const val PARTY_SIZE = 4
     private val WEAPON_SLOTS = 0..3
 

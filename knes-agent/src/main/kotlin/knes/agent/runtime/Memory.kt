@@ -8,7 +8,17 @@ import java.time.OffsetDateTime
 import kotlin.io.path.exists
 import kotlin.io.path.readText
 
-class Memory(val run: RunDirectory) {
+class Memory(
+    val run: RunDirectory,
+    /**
+     * Which game's goal list a fresh run starts with.
+     *
+     * The list used to be written out here, so every run opened with Final Fantasy's
+     * milestones whatever it was playing — a Super Mario Bros run began with
+     * `buy_weapons` pending.
+     */
+    val campaignRules: knes.agent.campaign.Campaign = knes.agent.campaign.NoCampaign,
+) {
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true; encodeDefaults = true }
 
     var campaign: Campaign = loadOrInitCampaign()
@@ -47,29 +57,10 @@ class Memory(val run: RunDirectory) {
         } else {
             Campaign(
                 startedAt = OffsetDateTime.now().toString(),
-                scope = "coneria_buy_equip_grind",
-                milestones = mutableListOf(
-                    Milestone(id = "boot",          status = "in_progress"),
-                    Milestone(id = "enter_coneria", status = "pending"),
-                    // Event-type checkpoint: party reaches the Coneria
-                    // weapon-shop counter tile. Latches once and is NOT
-                    // re-verified (party will naturally leave the tile
-                    // during the buy menu — we don't want regression).
-                    Milestone(id = "enter_weapon_shop", status = "pending"),
-                    // Split-out checkpoint: ≥1 char holds ≥1 weapon. This
-                    // separates "we entered the shop and a buy succeeded"
-                    // from "weapons are equipped" — the Advisor replans on
-                    // each advance and the audit-hysteresis counter resets,
-                    // so the equipping phase doesn't suffer noise from
-                    // mid-buy navigation observations. (Reverses 2026-05-12
-                    // merge, but with a tighter predicate: arm_party still
-                    // requires ≥2 EQUIPPED so a single buy can't falsely
-                    // satisfy the armed-up goal.)
-                    Milestone(id = "buy_weapons",   status = "pending"),
-                    Milestone(id = "arm_party",     status = "pending"),
-                    Milestone(id = "exit_coneria", status = "pending"),
-                    Milestone(id = "grind",         status = "pending"),
-                ),
+                scope = campaignRules.scope,
+                milestones = campaignRules.initialMilestones
+                    .mapIndexed { i, id -> Milestone(id = id, status = if (i == 0) "in_progress" else "pending") }
+                    .toMutableList(),
             ).also { c ->
                 atomicWrite(run.campaignJson, json.encodeToString(Campaign.serializer(), c))
             }

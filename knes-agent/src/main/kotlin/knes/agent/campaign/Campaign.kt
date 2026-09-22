@@ -20,6 +20,21 @@ import knes.agent.runtime.Phase
  */
 interface Campaign {
     /**
+     * A one-word name for what this campaign is trying to do, for the run record.
+     */
+    val scope: String
+
+    /**
+     * The goal list this game starts with, in order.
+     *
+     * It belongs here rather than in the runtime: the list was hardcoded where every run
+     * shared it, so playing Super Mario Bros opened with `buy_weapons` pending. A game
+     * with no campaign written for it starts with none, which is honest — better an empty
+     * quest window than someone else's quest.
+     */
+    val initialMilestones: List<String>
+
+    /**
      * Milestones describing a transient state that legitimately stops holding once it
      * has fired. The Reviewer must not re-verify these or it regresses a real
      * achievement back to in_progress.
@@ -58,6 +73,8 @@ interface Campaign {
  * than guessing, so a milestone can never latch by accident on an unknown game.
  */
 object NoCampaign : Campaign {
+    override val scope = "none"
+    override val initialMilestones: List<String> = emptyList()
     override val eventTypeMilestones: Set<String> = emptySet()
     override fun isSatisfied(id: String, phase: Phase, ram: Map<String, Int>, prereqDone: Map<String, Boolean>) = false
     override fun countHolding(ram: Map<String, Int>) = 0

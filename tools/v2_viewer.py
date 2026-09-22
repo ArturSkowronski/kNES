@@ -204,14 +204,16 @@ BUTTONS = ("Up", "Down", "Left", "Right", "B", "A", "SELECT", "START")
 
 
 def live_payload(run: Path) -> dict:
-    """Everything the demo page redraws, small enough to poll several times a second.
+    """Everything the HUD redraws, small enough to poll several times a second.
 
     The screen comes from `live.png`, which the tool surface rewrites after every single
     button press — not from the per-turn dump, which would only move once a turn and make
     a 5 Hz agent look like a 1 Hz one.
     """
-    decisions = sorted((run / "decisions").glob("turn-*.json")) if (run / "decisions").exists() else []
-    decision = read_json(decisions[-1]) if decisions else {}
+    folder = run / "decisions"
+    files = sorted(folder.glob("turn-*.json")) if folder.exists() else []
+    recent = [read_json(f) or {} for f in files[-6:]]
+    decision = recent[-1] if recent else {}
     executor = decision.get("executor", {}) or {}
     pressed = [b.strip() for b in (executor.get("args", {}) or {}).get("buttons", "").split(",") if b.strip()]
 
@@ -221,6 +223,44 @@ def live_payload(run: Path) -> dict:
     frame = live_png if live_png.exists() else turn_png
 
     ram = decision.get("ram", {}) or {}
+    campaign = read_json(run / "campaign.json") or {}
+    milestones = [
+        {"id": m.get("id", "?"), "status": m.get("status", "?")}
+        for m in campaign.get("milestones", [])
+    ]
+
+    def gold(r):
+        lo, hi = r.get("goldLow"), r.get("goldHigh")
+        if lo is None:
+            return r.get("gold")
+        return lo + 256 * (hi or 0)
+
+    def digits(r, prefix, count):
+        """SMB keeps its score and timer as one decimal digit per address."""
+        parts = [r.get(f"{prefix}{i}") for i in range(1, count + 1)]
+        if any(p is None for p in parts):
+            return None
+        return "".join(str(p) for p in parts)
+
+    # The status window shows what this game actually has. Final Fantasy counts gold and
+    # milestones; Mario counts lives, coins and how far into the world he is. Naming both
+    # in one fixed list would leave half of it reading "None" whichever game is running.
+    rows = []
+    if gold(ram) is not None:
+        rows.append(["zloto", f"{gold(ram)} G"])
+    if ram.get("lives") is not None:
+        rows.append(["zycia", ram["lives"]])
+    if ram.get("coins") is not None:
+        rows.append(["monety", ram["coins"]])
+    if ram.get("world") is not None and ram.get("level") is not None:
+        rows.append(["swiat", f"{ram['world'] + 1}-{ram['level'] + 1}"])
+    if digits(ram, "timer", 3) is not None:
+        rows.append(["czas", digits(ram, "timer", 3)])
+    if digits(ram, "score", 3) is not None:
+        rows.append(["wynik", digits(ram, "score", 3) + "00"])
+    if ram.get("enemyActive") is not None:
+        rows.append(["wrogowie", ram["enemyActive"]])
+
     return {
         "turn": decision.get("turn", 0),
         "phase": decision.get("phase", "?"),
@@ -229,102 +269,197 @@ def live_payload(run: Path) -> dict:
         "pressed": pressed,
         "outcome": executor.get("outcome", ""),
         "ms": executor.get("ms", 0),
-        "model": (goals.get("ranking") and executor.get("reasoningSummary", "").split(" via ")[-1]) or "",
+        "model": executor.get("reasoningSummary", "").split(" via ")[-1],
         "ranking": goals.get("ranking", []),
         "options": goals.get("options", {}),
         "screen": b64_png(frame),
-        "sm": [ram.get("smPlayerX"), ram.get("smPlayerY")],
+        "position": [ram.get("smPlayerX"), ram.get("smPlayerY")],
+        "world": [ram.get("worldX"), ram.get("worldY")],
+        "rows": rows,
+        "milestones": milestones,
+        "log": [
+            {
+                "turn": d.get("turn", 0),
+                "text": ((d.get("executor", {}) or {}).get("message", "") or
+                         (d.get("executor", {}) or {}).get("tool", ""))[:90],
+                "outcome": (d.get("executor", {}) or {}).get("outcome", ""),
+            }
+            for d in reversed(recent)
+        ],
     }
 
 
 LIVE_PAGE = """<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>kNES live</title>
+<html><head><meta charset="utf-8"><title>kNES — na żywo</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap">
 <style>
-  :root { color-scheme: dark; }
-  body { margin:0; background:#0b0e13; color:#dfe6ee;
-         font:14px ui-monospace,SFMono-Regular,Menlo,monospace; }
-  .wrap { display:flex; gap:24px; padding:24px; flex-wrap:wrap; align-items:flex-start; }
-  h1 { font-size:15px; letter-spacing:.14em; text-transform:uppercase; color:#7f93a8;
-       margin:0 0 12px; font-weight:600; }
-  #screen { image-rendering:pixelated; width:512px; max-width:100%; display:block;
-            border:1px solid #1d2733; border-radius:4px; background:#000; }
-  .pad { display:grid; grid-template-columns:repeat(3,34px); gap:4px; margin-top:16px; }
-  .key { height:34px; border-radius:4px; background:#141b24; border:1px solid #222d3a;
-         display:flex; align-items:center; justify-content:center; font-size:12px;
-         color:#54636f; transition:background .05s, color .05s, border-color .05s; }
-  .key.on { background:#4caf50; color:#06210c; border-color:#7fe08a; }
-  .face { display:flex; gap:8px; margin-top:12px; }
-  .face .key { width:46px; border-radius:23px; }
-  .meta { color:#7f93a8; font-size:12px; margin-top:14px; line-height:1.7; }
-  .bar { height:9px; background:#111820; border-radius:3px; overflow:hidden; }
-  .bar > div { height:100%; background:#33506b; transition:width .12s; }
-  .row.win .bar > div { background:#4caf50; }
-  .row { margin-bottom:9px; }
-  .row .hd { display:flex; justify-content:space-between; font-size:12px; color:#8fa3b5; }
-  .row.win .hd { color:#dff3e2; }
-  .row .desc { font-size:11px; color:#5b6a78; margin-top:2px; }
-  .col { min-width:340px; flex:1; }
-  .note { color:#5b6a78; font-size:11px; margin-top:6px; }
+  /* One visual world: a Final Fantasy screen. Each kind of information gets its own
+     window, the way FF1 splits the party, the command menu and the message box. */
+  :root {
+    --ground:#000; --edge:#f8f8f8; --ink:#f8f8f8; --dim:#9c9c9c;
+    --gold:#f8b800; --blue:#0058f8; --red:#f83800; --green:#58d854;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin:0; padding:18px; background:var(--ground); color:var(--ink);
+    font-family:"VT323",ui-monospace,monospace; font-size:20px; line-height:1.35;
+  }
+  .hud { display:grid; gap:18px; grid-template-columns:minmax(0,1fr) 380px;
+         align-items:start; max-width:1180px; margin:0 auto; }
+  .stack { display:flex; flex-direction:column; gap:18px; min-width:0; }
+  @media (max-width: 900px) { .hud { grid-template-columns:minmax(0,1fr); } }
+
+  .win { border:4px solid var(--edge); background:var(--ground);
+         box-shadow: inset 0 0 0 4px var(--ground), inset 0 0 0 6px var(--edge);
+         padding:16px 16px 14px; min-width:0; }
+  .win h2 { font-family:"Press Start 2P",monospace; font-size:10px; font-weight:400;
+            letter-spacing:.06em; color:var(--gold); margin:0 0 12px; text-transform:uppercase; }
+
+  #screen { display:block; width:100%; height:auto; image-rendering:pixelated; border:4px solid var(--edge); }
+  .screenwin { padding:10px; }
+
+  /* Command window: the cursor marks what won, exactly as FF1 marks a choice. */
+  .cmd { display:flex; flex-direction:column; gap:7px; }
+  .opt { display:grid; grid-template-columns:1.3em 1fr auto; gap:0 6px; align-items:baseline; color:var(--dim); }
+  .opt.chosen { color:var(--ink); }
+  .opt .cur { color:var(--gold); visibility:hidden; }
+  .opt.chosen .cur { visibility:visible; }
+  .opt .p { font-variant-numeric:tabular-nums; }
+  .opt.chosen .p { color:var(--gold); }
+  .meter { grid-column:2 / -1; height:6px; background:#202020; margin-top:2px; }
+  .meter > i { display:block; height:100%; background:var(--blue); transition:width .1s linear; }
+  .opt.chosen .meter > i { background:var(--green); }
+
+  /* Status window: label left, value right, like HP/MP rows. */
+  .rows { display:grid; grid-template-columns:1fr auto; gap:7px 14px; margin:0; }
+  .rows dt { color:var(--dim); }
+  .rows dd { margin:0; text-align:right; color:var(--gold); font-variant-numeric:tabular-nums; }
+
+  /* Controller: NES pad, lit while a button is down. */
+  .pad { display:grid; grid-template-columns:repeat(3,34px); gap:5px; }
+  .face { display:flex; gap:8px; margin-top:10px; }
+  .key { height:34px; border:3px solid var(--dim); color:var(--dim);
+         display:flex; align-items:center; justify-content:center;
+         font-family:"Press Start 2P",monospace; font-size:9px; }
+  .face .key { width:48px; }
+  .face .key.wide { width:76px; }
+  .key.on { border-color:var(--gold); color:var(--ground); background:var(--gold); }
+
+  .log { display:flex; flex-direction:column; gap:4px; }
+  .log div { color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .log div:first-child { color:var(--ink); }
+  .log .t { color:var(--blue); }
+  .log .bad { color:var(--red); }
+
+  .ms { list-style:none; margin:0; padding:0; display:flex; flex-wrap:wrap; gap:6px 14px; }
+  .ms li { color:var(--dim); }
+  .ms li.done { color:var(--green); }
+  .ms li.now { color:var(--gold); }
+  .ms li.done::before { content:"\2714 "; }
+  .ms li.now::before { content:"\25B6 "; }
+
+  .foot { color:var(--dim); font-size:18px; margin:6px 0 0; }
 </style></head><body>
-<div class="wrap">
-  <div>
-    <h1>Screen</h1>
-    <img id="screen" alt="NES screen">
-    <div class="pad">
-      <div></div><div class="key" data-b="Up">&#9650;</div><div></div>
-      <div class="key" data-b="Left">&#9664;</div><div></div><div class="key" data-b="Right">&#9654;</div>
-      <div></div><div class="key" data-b="Down">&#9660;</div><div></div>
+<div class="hud">
+  <div class="stack">
+    <div class="win screenwin"><img id="screen" alt="ekran NES"></div>
+    <div class="win">
+      <h2>Dziennik</h2>
+      <div class="log" id="log"></div>
     </div>
-    <div class="face">
-      <div class="key" data-b="SELECT">SEL</div>
-      <div class="key" data-b="START">STA</div>
-      <div class="key" data-b="B">B</div>
-      <div class="key" data-b="A">A</div>
-    </div>
-    <div class="meta" id="meta"></div>
   </div>
-  <div class="col">
-    <h1>The decision</h1>
-    <div id="ranking"></div>
-    <div class="note" id="note"></div>
+
+  <div class="stack">
+    <div class="win">
+      <h2>Komenda</h2>
+      <div class="cmd" id="cmd"></div>
+      <p class="foot" id="note"></p>
+    </div>
+
+    <div class="win">
+      <h2>Pad</h2>
+      <div class="pad">
+        <span></span><div class="key" data-b="Up">&#9650;</div><span></span>
+        <div class="key" data-b="Left">&#9664;</div><span></span><div class="key" data-b="Right">&#9654;</div>
+        <span></span><div class="key" data-b="Down">&#9660;</div><span></span>
+      </div>
+      <div class="face">
+        <div class="key wide" data-b="SELECT">SEL</div>
+        <div class="key wide" data-b="START">START</div>
+        <div class="key" data-b="B">B</div>
+        <div class="key" data-b="A">A</div>
+      </div>
+    </div>
+
+    <div class="win">
+      <h2>Stan</h2>
+      <dl class="rows" id="rows"></dl>
+    </div>
+
+    <div class="win" id="questwin">
+      <h2>Wyprawa</h2>
+      <ul class="ms" id="ms"></ul>
+    </div>
   </div>
 </div>
 <script>
 const KEYS = document.querySelectorAll('.key');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const el = id => document.getElementById(id);
 
 async function tick() {
-  try {
-    const d = await (await fetch('/api/live', {cache:'no-store'})).json();
-    if (d.screen) document.getElementById('screen').src = 'data:image/png;base64,' + d.screen;
+  let d;
+  try { d = await (await fetch('/api/live', {cache:'no-store'})).json(); }
+  catch (e) { return; }   // the run may be mid-write; try again next tick
 
-    const down = new Set(d.pressed || []);
-    KEYS.forEach(k => k.classList.toggle('on', down.has(k.dataset.b)));
+  if (d.screen) el('screen').src = 'data:image/png;base64,' + d.screen;
 
-    document.getElementById('meta').innerHTML =
-      'turn <b>' + d.turn + '</b> &middot; ' + esc(d.phase) +
-      ' &middot; tile ' + d.sm[0] + ',' + d.sm[1] + '<br>' +
-      esc(d.tool) + ' &rarr; ' + esc(d.outcome) + ' &middot; ' + d.ms + ' ms';
+  const down = new Set(d.pressed || []);
+  KEYS.forEach(k => k.classList.toggle('on', down.has(k.dataset.b)));
 
-    const rank = d.ranking || [];
-    const top = rank.length ? (rank[0][1] || 1) : 1;
-    document.getElementById('ranking').innerHTML = rank.map(([id, p], i) =>
-      '<div class="row' + (i === 0 ? ' win' : '') + '">' +
-        '<div class="hd"><span>' + (i === 0 ? '&#9654; ' : '') + esc(id) + '</span>' +
-          '<span>' + p.toFixed(4) + '</span></div>' +
-        '<div class="bar"><div style="width:' + Math.max(1, p / top * 100).toFixed(1) + '%"></div></div>' +
-        '<div class="desc">' + esc((d.options || {})[id] || '') + '</div>' +
-      '</div>').join('') || '<i style="color:#5b6a78">waiting for a decision…</i>';
+  const rank = d.ranking || [];
+  const top = rank.length ? (rank[0][1] || 1) : 1;
+  el('cmd').innerHTML = rank.map(([id, p], i) =>
+    '<div class="opt' + (i === 0 ? ' chosen' : '') + '" title="' + esc((d.options||{})[id] || '') + '">' +
+      '<span class="cur">&#9654;</span>' +
+      '<span>' + esc(id) + '</span>' +
+      '<span class="p">' + p.toFixed(2) + '</span>' +
+      '<span class="meter"><i style="width:' + Math.max(2, p/top*100).toFixed(1) + '%"></i></span>' +
+    '</div>').join('') || '<div class="opt"><span></span><span>czekam na decyzję…</span><span></span></div>';
 
-    document.getElementById('note').textContent = rank.length
-      ? rank.length + ' goals said they could run. The model ranked them. Nothing else was possible to answer.'
-      : '';
-  } catch (e) { /* the run may be between writes; try again next tick */ }
+  el('note').textContent = rank.length
+    ? rank.length + ' celów mogło ruszyć. Jeden musiał wygrać.' : '';
+
+  const world = (d.world || []).filter(v => v !== null);
+  const LABEL = {zloto:'złoto', zycia:'życia', monety:'monety', swiat:'świat',
+                 czas:'czas', wynik:'wynik', wrogowie:'wrogowie'};
+  el('rows').innerHTML =
+    row('tura', d.turn) +
+    row('faza', d.phase) +
+    row('pozycja', (d.position || []).join(',')) +
+    (world.length ? row('mapa świata', world.join(',')) : '') +
+    (d.rows || []).map(([k, v]) => row(LABEL[k] || k, v)).join('') +
+    row('decyzja', d.ms + ' ms') +
+    row('model', (d.model || '').replace('semif/', ''));
+
+  const ms = d.milestones || [];
+  el('questwin').hidden = ms.length === 0;   // Mario has no campaign to show
+  el('ms').innerHTML = ms.map(m =>
+    '<li class="' + (m.status === 'done' ? 'done' : m.status === 'in_progress' ? 'now' : '') + '">' +
+    esc(m.id) + '</li>').join('');
+
+  el('log').innerHTML = (d.log || []).map(l =>
+    '<div><span class="t">T' + String(l.turn).padStart(4,'0') + '</span> ' +
+    '<span class="' + (l.outcome && l.outcome !== 'ok' ? 'bad' : '') + '">' + esc(l.text) + '</span></div>'
+  ).join('');
 }
+function row(k, v) { return '<dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd>'; }
+
 tick();
 setInterval(tick, 120);
 </script>
 </body></html>"""
+
 
 
 def render_html(run: Path) -> str:
