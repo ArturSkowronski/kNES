@@ -55,7 +55,7 @@ The project is organized into the following modules:
 - **knes-api**: REST API server for AI agents, TAS tools, and automation ([docs](knes-api/README.md)).
 - **knes-mcp**: MCP server — an LLM drives the emulator over the Model Context Protocol, in-process or through the REST API.
 - **knes-agent-tools**: the `EmulatorToolset` port both MCP modes and the agent share.
-- **knes-agent**: an LLM plays Final Fantasy on the emulator ([docs](knes-agent/README.md)). Needs one `OPENAI_API_KEY`.
+- **knes-agent**: an LLM plays Final Fantasy and Super Mario Bros on the emulator ([docs](knes-agent/README.md)). One `OPENAI_API_KEY`, or a local 4B model through [SemIf](docs/typed-decisions.md).
 - **knes-applet-ui**: Java Applet-based UI (legacy).
 
 https://github.com/user-attachments/assets/9036ae9a-3be8-43ec-8050-3a47b29d1648
@@ -163,6 +163,29 @@ campaign milestones with no human input. Details and the model roles in
 Game knowledge lives in `profiles/<id>.json`, not in the agent: phase rules, landmark
 anchors and the signals tools ask about are data, so teaching it another game is a JSON
 edit rather than a code change.
+
+### A local 4B model plays, without writing a word
+
+The agent can also decide a turn as a **typed decision** — a choice over options declared
+before the model is asked — instead of by generating JSON. That is the interface pattern
+Jev introduced and [SemIf](https://github.com/TheoLeeCJ/SemIf) (formerly OpenJev)
+implements openly; kNES is wired against SemIf, running **Qwen3.5-4B locally**. A tool
+that does not exist cannot be picked, because it was never on the menu.
+
+```bash
+tools/live_demo.sh smb      # Super Mario Bros
+tools/live_demo.sh ff1      # Final Fantasy
+```
+
+Then **http://localhost:9876/live**: the screen, a controller lighting each button as it
+goes down, and the ranking the model produced. `tools/record_run.py` turns a finished run
+into a video in the same windows.
+
+Measured on an M5 Pro with the pixel backend — the screen itself as the evidence, no RAM
+digest: **~400 ms a decision**, and the same agent plays both games from their own
+profiles. The structure is Minecraft's `GoalSelector`: goals say whether they can run, and
+the ones that can become the declared options. Full notes in
+[docs/typed-decisions.md](docs/typed-decisions.md).
 
 ## Architecture
 
