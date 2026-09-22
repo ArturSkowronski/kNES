@@ -65,7 +65,19 @@ class ExecutorAgent(
     private var lastHeldWeapons: Int? = null
 
     private val recentOutcomes = ArrayDeque<String>(4)
-    private val recentMoves = ArrayDeque<MoveEntry>(8)
+    /**
+     * Turns kept, for the stall rule and for the chat prompt.
+     *
+     * Long enough that a goal can actually reach its retry limit: with seven goals on the
+     * menu and a limit of six, eight turns of history is never enough for any one of them
+     * to accumulate, and Mario pressed Right into the same pipe indefinitely because
+     * nothing ever counted far enough to take the option away. The chat prompt still reads
+     * only the last [PROMPT_MOVES], which is what it was written for.
+     */
+    private val recentMoves = ArrayDeque<MoveEntry>(HISTORY)
+
+    /** Where the player stood at the start of each remembered turn — the ground already covered. */
+    private val recentPositions = ArrayDeque<Pair<Int, Int>>(HISTORY)
     private var lastPlanCreatedAt: Int = -1
     private var currentTurn: Int = 0
 
@@ -81,8 +93,8 @@ class ExecutorAgent(
         val screen: ScreenEffect,
         /** The goal that chose this turn, when one did. Lets a goal notice itself looping. */
         val goalId: String? = null,
-        /** Whether the party is anywhere different now, in either coordinate space. */
-        val moved: Boolean = false,
+        /** Whether the turn ended somewhere the player had not been in recent memory. */
+        val newGround: Boolean = false,
     )
 
     /** Whether a turn's taps changed the picture, for turns where the party cannot move. */
@@ -95,7 +107,7 @@ class ExecutorAgent(
         val ram = WorldSnapshot.parseRam(ramDigest)
         val preRam = positionOf(ram) ?: parseSmFromRamDigest(ramDigest)
         val preWorld = (ram["worldX"] ?: 0) to (ram["worldY"] ?: 0)
-        correctPreviousTurnsEffect(preRam, preWorld)
+        correctPreviousTurnsEffect(preRam)
         val plan = memory.currentPlan
         val planCreatedAt = plan?.createdAtTurn ?: -1
         if (planCreatedAt != lastPlanCreatedAt) {
@@ -138,9 +150,11 @@ class ExecutorAgent(
             outcome = outcome.javaClass.simpleName,
             screen = screenEffectIn(message),
             goalId = selection?.goal?.id,
-            moved = postRam != preRam || (postWorld != null && postWorld != preWorld),
+            // Provisional: settled at the top of the next turn, once where the player
+            // actually ended up is known. See correctPreviousTurnsEffect.
+            newGround = postRam != preRam || (postWorld != null && postWorld != preWorld),
         ))
-        if (recentMoves.size > 8) recentMoves.removeFirst()
+        if (recentMoves.size > HISTORY) recentMoves.removeFirst()
 
         // Only advance the plan cursor when the EXECUTED tool matches the
         // tool the current plan step intended. Previously any Ok outcome
@@ -242,19 +256,29 @@ class ExecutorAgent(
     /**
      * Settle what the previous turn actually did, now that its result is on the floor.
      *
-     * A tool's Ok message does not always carry a coordinate to compare: `walkTo` reports
-     * "reached (147,155) in 3 steps" and nothing in it matches the `sm=`/`world=` shapes,
-     * so a turn that walked three tiles read as having moved nothing — and a goal that
-     * gives up when nothing is happening gave up on a step that was working.
+     * Two readings were tried and discarded. A tool's Ok message does not always carry a
+     * coordinate — `walkTo` reports "reached (11,11) in 19 steps" and nothing in it matches
+     * a coordinate shape — so reading the message made every successful town walk look like
+     * a turn that changed nothing. Comparing positions between turns fixed that and broke
+     * something else: at a pipe, a jump changes Mario's position and puts him back exactly
+     * where he started, which counted as progress and rescued the very goal that was about
+     * to be taken off the menu. He pressed Right into the same pipe for 155 turns.
      *
-     * Where the party stands when the next turn begins is the honest measure, and it costs
-     * nothing: the turn loop hands over a fresh RAM digest anyway. Only the current turn's
-     * entry is ever provisional, and this runs before any goal reads the history.
+     * So a turn counts when it ends on ground the player has not been standing on in recent
+     * memory. Bobbing in place is not progress, and neither is walking back and forth
+     * between two tiles. It costs nothing to measure: the turn loop hands over a fresh RAM
+     * digest anyway, and this runs before any goal reads the history.
      */
-    private fun correctPreviousTurnsEffect(preSm: Pair<Int, Int>, preWorld: Pair<Int, Int>) {
-        val last = recentMoves.lastOrNull() ?: return
-        val moved = last.preSm != preSm || last.preWorld != preWorld
-        if (moved != last.moved) recentMoves[recentMoves.size - 1] = last.copy(moved = moved)
+    private fun correctPreviousTurnsEffect(position: Pair<Int, Int>) {
+        val last = recentMoves.lastOrNull()
+        if (last != null) {
+            val newGround = position !in recentPositions
+            if (newGround != last.newGround) {
+                recentMoves[recentMoves.size - 1] = last.copy(newGround = newGround)
+            }
+        }
+        recentPositions.addLast(position)
+        if (recentPositions.size > HISTORY) recentPositions.removeFirst()
     }
 
     /**
@@ -278,7 +302,7 @@ class ExecutorAgent(
             // Move history rather than the outcome list: a tool can report Ok having moved
             // nothing, and a goal that gives up on a step needs to know the difference.
             recentTurns = recentMoves.map {
-                knes.agent.goals.TurnEffect(it.outcome, it.moved, it.goalId ?: it.tool)
+                knes.agent.goals.TurnEffect(it.outcome, it.newGround, it.goalId ?: it.tool)
             },
         )
         return try {
@@ -362,8 +386,9 @@ class ExecutorAgent(
             }
         }
         val recent = if (recentOutcomes.isEmpty()) "(none)" else recentOutcomes.joinToString(",")
-        val movesBlock = if (recentMoves.isEmpty()) "(no prior moves yet)" else {
-            recentMoves.joinToString("\n") { mv ->
+        val promptMoves = recentMoves.takeLast(PROMPT_MOVES)
+        val movesBlock = if (promptMoves.isEmpty()) "(no prior moves yet)" else {
+            promptMoves.joinToString("\n") { mv ->
                 val moved = mv.preSm != mv.postSm
                 // A menu tap never moves the party, so NO-MOVEMENT alone would brand
                 // every correct menu step a failure. Only a tap that changed neither the
@@ -380,11 +405,11 @@ class ExecutorAgent(
         // Detect oscillation: same postSm in last 3+ moves means walls are
         // blocking the issued direction — agent should take a longer detour
         // around obstacles, not retry the same tap.
-        val stuckSm = recentMoves.takeLast(3)
+        val stuckSm = promptMoves.takeLast(3)
             .takeIf { it.size >= 3 }
             ?.let { window -> if (window.all { it.postSm == window.first().postSm }) window.first().postSm else null }
         val antiOscillation = if (stuckSm != null) {
-            "\n  *** ANTI-OSCILLATION: party stuck at sm=$stuckSm for ${recentMoves.takeLast(8).count { it.postSm == stuckSm }} of last ${recentMoves.size} moves. " +
+            "\n  *** ANTI-OSCILLATION: party stuck at sm=$stuckSm for ${promptMoves.count { it.postSm == stuckSm }} of last ${promptMoves.size} moves. " +
             "The directions you've been trying are BLOCKED. Walk AROUND the obstacle (perpendicular axis, longer detour) — do NOT repeat the same tile-blocked taps. ***"
         } else ""
         // Parse RAM digest into a map for the party-weapon helper.
@@ -408,7 +433,7 @@ class ExecutorAgent(
             RAM digest:
             $ramDigest
 
-            Recent moves (last ${recentMoves.size}, oldest first):
+            Recent moves (last ${promptMoves.size}, oldest first):
             $movesBlock$antiOscillation
 
             Current plan context (Advisor SUGGESTION — verify against screenshot):
@@ -546,6 +571,18 @@ class ExecutorAgent(
     )
 
     companion object {
+        /**
+         * Turns of history the goal selector can see.
+         *
+         * A goal gives up after its own retry limit of turns that changed nothing, counted
+         * across the whole run of such turns — so the history has to outlast a stretch in
+         * which several goals take it in turns to achieve nothing.
+         */
+        private const val HISTORY = 24
+
+        /** What the chat prompt shows, unchanged: more would just be a longer prompt. */
+        private const val PROMPT_MOVES = 8
+
         /** Tool names [dispatch] understands. A plan may name only these. */
         internal val DISPATCHABLE = setOf(
             "boot", "walkTo", "interactAt", "useMenu",

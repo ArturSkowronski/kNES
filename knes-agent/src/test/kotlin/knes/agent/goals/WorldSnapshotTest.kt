@@ -63,11 +63,11 @@ class TurnEffectTest : FunSpec({
         moved("Ok" to true, "Fail" to false, "Fail" to false, "Fail" to false).turnsWithoutProgress shouldBe 3
     }
 
-    test("a turn that moved the party resets it") {
+    test("a turn that reached somewhere new resets it") {
         moved("Fail" to false, "Fail" to false, "Ok" to true).turnsWithoutProgress shouldBe 0
     }
 
-    test("an Ok that moved nothing is not progress — the whole reason this counts effect") {
+    test("an Ok that reached nowhere new is not progress — the whole reason this counts effect") {
         moved("Ok" to false, "Ok" to false).turnsWithoutProgress shouldBe 2
     }
 
@@ -79,9 +79,9 @@ class TurnEffectTest : FunSpec({
         WorldSnapshot(1, Phase.Town, emptyMap(), null, "m", emptyList()).turnsWithoutProgress shouldBe 0
     }
 
-    test("the state reads out whether anything moved, so the model can see nothing is happening") {
-        TurnEffect("Ok", moved = false).toString() shouldBe "Ok (nothing moved)"
-        TurnEffect("Ok", moved = true).toString() shouldBe "Ok (moved)"
-        TurnEffect("Fail", moved = false).toString() shouldBe "Fail"
+    test("the state reads out whether the turn reached anywhere, so the model can see nothing is happening") {
+        TurnEffect("Ok", newGround = false).toString() shouldBe "Ok (nowhere new)"
+        TurnEffect("Ok", newGround = true).toString() shouldBe "Ok (somewhere new)"
+        TurnEffect("Fail", newGround = false).toString() shouldBe "Fail"
     }
 })

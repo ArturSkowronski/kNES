@@ -56,7 +56,7 @@ class GoalSelector(
     }
 
     suspend fun select(world: WorldSnapshot): Selection? {
-        val applicable = goals.filter { it.canUse(world) }
+        val applicable = goals.filter { it.canUse(world) }.ifEmpty { unstalled(world) }
         if (applicable.isEmpty()) return null
         // The readout maps one answer token per option and has sixteen of them. When more
         // goals apply than that, the lowest priority numbers are the ones worth ranking.
@@ -78,6 +78,21 @@ class GoalSelector(
         val winner = shown.first { it.id == ranking.best }
         return Selection(winner, winner.act(world), ranking, shown)
     }
+
+    /**
+     * Everything that would apply if the recent past were forgotten.
+     *
+     * The stall rule must never empty the menu. After a game over, Super Mario Bros sits on
+     * its title screen and the only goal that applies is the one that presses START — which
+     * took several turns to land, stalled itself out, and left nothing at all to choose
+     * from. Twenty turns then went to the chat-model fallback, which in a reactive run is
+     * not configured, so each one was a rejected no-op.
+     *
+     * Forgetting is the right answer rather than exempting a goal by name: if nothing is
+     * left, whatever the history said is no longer useful.
+     */
+    private fun unstalled(world: WorldSnapshot): List<Goal> =
+        goals.filter { it.canUse(world.copy(recentTurns = emptyList())) }
 
     /**
      * The state the model reads.

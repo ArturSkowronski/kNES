@@ -6,22 +6,26 @@ import knes.agent.runtime.PlanStep
 /**
  * What a turn actually amounted to.
  *
- * Not the same thing as whether the tool returned Ok, which is the distinction that
- * matters here: the first smoke run of the selector watched `sequence(Up)` report Ok four
- * times while the party stood on the same overworld tile throughout. A goal that gives up
- * after "failures" would have counted those as progress and started over.
+ * Not whether the tool returned Ok, and not even whether the player moved — whether the
+ * turn reached ground the player had not been standing on. Both weaker readings were tried
+ * and both failed in the same way: `sequence(Up)` reports Ok four times while the party
+ * stands on one overworld tile, and a jump at a pipe changes Mario's position and puts him
+ * back exactly where he started. A rule that gives up when nothing is happening has to
+ * count arrival somewhere new, or the goal that was about to be taken away keeps being
+ * rescued by a jump that achieved nothing.
  */
 data class TurnEffect(
     val outcome: String,
-    val moved: Boolean,
+    /** Whether the player ended the turn somewhere they had not been in recent memory. */
+    val newGround: Boolean,
     /** What was tried — the goal's id when a goal chose it, so a goal can spot itself looping. */
     val action: String = "",
 ) {
-    val progressed: Boolean get() = outcome == "Ok" && moved
+    val progressed: Boolean get() = outcome == "Ok" && newGround
 
-    /** How the state reads it out: `step_north: Ok (nothing moved)`. */
+    /** How the state reads it out: `step_north: Ok (nowhere new)`. */
     override fun toString(): String {
-        val effect = if (outcome == "Ok") "Ok (${if (moved) "moved" else "nothing moved"})" else outcome
+        val effect = if (outcome == "Ok") "Ok (${if (newGround) "somewhere new" else "nowhere new"})" else outcome
         return if (action.isBlank()) effect else "$action: $effect"
     }
 }

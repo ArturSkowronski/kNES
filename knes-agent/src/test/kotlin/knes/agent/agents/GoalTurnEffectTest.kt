@@ -73,7 +73,7 @@ private fun digest(smX: Int, smY: Int, worldX: Int, worldY: Int) =
  */
 class GoalTurnEffectTest : FunSpec({
 
-    test("a walk whose message carries no coordinates still counts as movement") {
+    test("a walk whose message carries no coordinates still counts, if it ended somewhere new") {
         val run = RunDirectory(createTempDirectory("knes-goal-effect")).also { it.ensure() }
         val memory = Memory(run)
         memory.setPlan(
@@ -95,13 +95,13 @@ class GoalTurnEffectTest : FunSpec({
         // The party is somewhere else now, which is the only honest evidence the walk worked.
         executor.act(screenshotB64 = "", ramDigest = digest(11, 11, 147, 155), turn = 2)
 
-        picker.states.last() shouldContain "follow_plan_step: Ok (moved)"
-        picker.states.last() shouldNotContain "nothing moved"
+        picker.states.last() shouldContain "follow_plan_step: Ok (somewhere new)"
+        picker.states.last() shouldNotContain "nowhere new"
 
         run.root.toFile().deleteRecursively()
     }
 
-    test("a walk that ended where it started is still no movement") {
+    test("a walk that ended where it started reached nowhere new") {
         val run = RunDirectory(createTempDirectory("knes-goal-effect")).also { it.ensure() }
         val memory = Memory(run)
         memory.setPlan(
@@ -118,8 +118,41 @@ class GoalTurnEffectTest : FunSpec({
         executor.act(screenshotB64 = "", ramDigest = digest(16, 23, 147, 155), turn = 1)
         executor.act(screenshotB64 = "", ramDigest = digest(16, 23, 147, 155), turn = 2)
 
-        picker.states.last() shouldContain "follow_plan_step: Ok (nothing moved)"
+        picker.states.last() shouldContain "follow_plan_step: Ok (nowhere new)"
 
+        run.root.toFile().deleteRecursively()
+    }
+})
+
+/**
+ * Bobbing in place is not progress.
+ *
+ * At a pipe, a jump changes Mario's position and puts him back exactly where he started.
+ * Counting any movement as progress rescued the very goal that was about to be taken off
+ * the menu, and he pressed Right into the same pipe for 155 turns.
+ */
+class ReturningToTheSameSpotTest : FunSpec({
+
+    test("coming back to a tile already visited is not somewhere new") {
+        val run = RunDirectory(createTempDirectory("knes-bob")).also { it.ensure() }
+        val memory = Memory(run)
+        memory.setPlan(Plan(0, "m", listOf(PlanStep(0, "walk", "walkTo", mapOf("x" to "1", "y" to "1")))))
+        val picker = PlanPicker()
+        val chat = UnusedChat()
+        val executor = ExecutorAgent(
+            SonnetClient(chat), HaikuClient(chat), SilentToolSurface(), memory, run,
+            goals = GoalSelector(Goals.of("ff1"), picker),
+            phaseProvider = { Phase.Town },
+        )
+
+        // Out to a new tile, then straight back to the one before it.
+        executor.act(screenshotB64 = "", ramDigest = digest(10, 10, 0, 0), turn = 1)
+        executor.act(screenshotB64 = "", ramDigest = digest(10, 11, 0, 0), turn = 2)
+        executor.act(screenshotB64 = "", ramDigest = digest(10, 10, 0, 0), turn = 3)
+
+        val state = picker.states.last()
+        state shouldContain "Ok (somewhere new)"   // turn 1 reached 10,11
+        state shouldContain "Ok (nowhere new)"     // turn 2 came back to 10,10
         run.root.toFile().deleteRecursively()
     }
 })

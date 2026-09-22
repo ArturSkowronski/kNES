@@ -63,8 +63,8 @@ class SemIfSidecarLiveTest : FunSpec({
                     planStep = PlanStep(3, "walk to the weapon shop counter", "walkTo", mapOf("x" to "18", "y" to "12")),
                     milestone = "buy_weapons",
                     recentTurns = listOf(
-                        knes.agent.goals.TurnEffect("Ok", moved = true),
-                        knes.agent.goals.TurnEffect("Ok", moved = true),
+                        knes.agent.goals.TurnEffect("Ok", newGround = true),
+                        knes.agent.goals.TurnEffect("Ok", newGround = true),
                     ),
                 ),
             )
