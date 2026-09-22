@@ -48,102 +48,88 @@ description}]}` — so a decision serialises with no translation layer and the s
 runs through SemIf's own CLI. The 2..16 bound is SemIf's too: it maps one answer token
 per option, and there are sixteen letters in its answer alphabet.
 
-## The goals
+## The goals live in the profile
 
-`Ff1Goals` is deliberately small, and every goal is applicable from the `Phase` the
-profile's semantics already classify from RAM, or from the plan the Advisor wrote.
-Nothing here guesses at FF1 internals the project has not established — the shop
-row-to-item mapping and the EQUIP sub-header layout are still open, and a goal that
-pretended to know them would only be a confident way to be wrong.
+Nothing about a game is written in Kotlin. `profiles/<id>.json` already said which phase
+the RAM means, where the player is and which landmark is nearby; it now also says what the
+agent may want, what it is asked, and what it is told:
+
+```json
+"agent": {
+  "question": "Which of these should Mario do right now?",
+  "frame": "512x480",
+  "state": [
+    { "field": "lives", "label": "lives left" },
+    { "field": "playerFloatState",
+      "say": { "0": "Mario is standing on solid ground", "*": "Mario is in the air" } }
+  ],
+  "goals": [
+    { "id": "jump_right", "priority": 12, "retryLimit": 6,
+      "description": "Jump forward: hold A and Right together, clearing a gap or an enemy ahead.",
+      "tool": "hold", "args": { "buttons": "Right,A,B", "frames": "18" },
+      "notPhases": ["Boot"],
+      "when": [ { "field": "gameState", "notEquals": 0 },
+                { "field": "playerFloatState", "equals": 0 } ] }
+  ]
+}
+```
+
+The `when` clauses are the same `RamCondition` language the phase rules already use. Three
+things are per game because they genuinely differ:
+
+- **the question.** Final Fantasy's "the party" was being asked in front of a picture of
+  Mario.
+- **the frame.** Final Fantasy is a grid of 16x16 tiles and reads fine at the NES's own
+  256x240; a gap in Mario's floor two tiles ahead is a handful of pixels there, and
+  doubling it took him from zero jumps to six.
+- **the retry limit.** Final Fantasy's world waits, so three tries that moved nothing means
+  blocked. Mario's moves on its own, and a press that changed nothing is often just a press
+  made mid-air.
+
+The state lines name only what the game has — gold and a menu cursor, or lives and coins —
+so nothing reads `null` whichever cartridge is in. A number the console keeps across
+several addresses is put back together first: `goldLow: 144` tells a model nothing about
+whether the party can afford a sword.
+
+### Final Fantasy
 
 | priority | goal | applies when | does |
 |---|---|---|---|
 | 0 | `boot` | `Boot` | `boot` |
 | 0 | `fight_battle` | `Battle` | `battleFightAll` |
-| 5 | `back_out_of_menu` | `Town`, `Indoors`, `MenuStuck`, or nothing has moved for 3 turns | `sequence(B)` |
+| 5 | `back_out_of_menu` | `Town`, `Indoors`, `MenuStuck`, or nothing moved for 3 turns | `sequence(B)` |
 | 10 | `follow_plan_step` | the plan step names a dispatchable tool | that step |
 | 20 | `press_a` | `Town`, `Indoors`, `MenuStuck` | `sequence(A)` |
 | 30-33 | `step_north` … `step_east` | `Town`, `Indoors`, `Overworld` | `sequence(Up\|Down\|Left\|Right)` |
 
-Every goal also takes itself off the menu once it has been tried three times inside a run
-of turns that changed nothing — Minecraft asks a running goal `canContinueToUse()` every
-tick, and ceasing to be an option is the only way a goal can say no here. Counting is by
-effect, not by outcome: a tool can report `Ok` having moved nothing, which is how the
-second smoke run below cycled. If everything applicable falls silent the selector declines
-the turn and the chat-model Executor takes it.
+### Super Mario Bros
 
-Two more details are load-bearing. `follow_plan_step` is one option among several rather than
-a fast path around the decision, because a plan written for the overworld has walked the
-party north-west into Coneria Castle before now — and it drops off the menu entirely
-when its tool is not dispatchable, so a plan naming something that does not exist costs
-nothing instead of a turn. And `press_a` carries a warning in its own description that in
-a shop, A can confirm a **sale**: one blind A at the Coneria weapon counter emptied every
-weapon slot and put the gold back up.
+| priority | goal | holds | frames |
+|---|---|---|---|
+| 0 | `start_game` | START | 8 |
+| 10 | `run_right` | Right + B | 8 |
+| 11 | `walk_right` | Right | 8 |
+| 12 | `jump_right` | Right + A + B | 18 |
+| 13 | `jump_up` | A | 18 |
+| 20 | `back_off` | Left | 8 |
+| 30 | `wait` | nothing | 8 |
 
-Movement is one tile per goal rather than a run of taps, because FF1's town NPCs wander
-every frame: a tile that was blocked last turn may be open this one, and a four-tap run
-commits to a route through a world that moved underneath it.
+Every Mario goal *holds* buttons for a span of frames rather than tapping them, because
+there the length of a press is part of the decision: the same A is a hop or a full jump
+depending on how long it is held. That is what `ToolSurface.hold` is for.
 
-## Running it
+Two rules stay in code, because a snapshot of RAM cannot express them. Every goal takes
+itself off the menu once it has been tried `retryLimit` times inside a run of turns that
+changed nothing — Minecraft asks a running goal `canContinueToUse()` every tick, and
+ceasing to be an option is the only way a goal can say no here. Counting is by effect, not
+by outcome: a tool can report `Ok` having moved nothing. And `follow_plan_step` is the one
+goal that is code rather than data, because it dispatches whatever the Advisor wrote; the
+profile still guards it, naming the tools that make sense only in one phase.
 
-Off by default. The agent has a working chat-model Executor, and a second decision path
-earns its place by being switched on deliberately.
-
-```bash
-# No model at all: the selector runs, lowest priority number wins. Useful for seeing
-# which goals apply each turn without spending anything.
-KNES_DECISION=order ./gradlew :knes-agent:run -PappArgs="--fresh --max-turns=40"
-
-# A local SemIf model.
-KNES_DECISION=semif \
-SEMIF_PYTHON=~/GitHub/SemIf/.venv/bin/python \
-SEMIF_SRC=~/GitHub/SemIf/src \
-SEMIF_BITS=4 \
-./gradlew :knes-agent:run -PappArgs="--fresh --max-turns=40"
-```
-
-| Variable | Default | Meaning |
-|---|---|---|
-| `KNES_DECISION` | `off` | `off`, `order`, `semif` (RAM digest) or `pixels` (the screen) |
-| `SEMIF_VLM_PYTHON` | — | interpreter with `mlx-vlm`, for `pixels` — SemIf keeps it in its own venv |
-| `SEMIF_PYTHON` | `python3` | an interpreter with `semif_phase1` importable |
-| `SEMIF_SRC` | — | SemIf's `src/`, when it is not installed in that interpreter |
-| `SEMIF_MODEL` | `Qwen/Qwen3.5-4B` | checkpoint id or a local directory |
-| `SEMIF_REVISION` | pinned 40-hex | SemIf refuses a remote model without one |
-| `SEMIF_BACKEND` | `mlx` | `mlx` (Apple Silicon) or `torch` |
-| `SEMIF_BITS` | — | `4` or `8`, MLX in-memory quantization |
-| `SEMIF_SIDECAR` | found by walking up | path to `tools/semif_sidecar.py` |
-
-Each turn writes `executor-goals` into the run's prompt directory: the state the model
-read, every option it was shown, and the full ranking — so a run can be read back and the
-decision checked against what actually happened.
-
-## What it does in a run
-
-Five smoke runs from a cold boot, `KNES_DECISION=semif` with Qwen3.5-4B at 4 bits and
-Gemini still doing the planning. Each run found a bug in the goal *policy* — never in the
-decision itself, which never once answered with something that was not on the menu:
-
-| run | what happened | what it showed |
-|---|---|---|
-| 1 | `follow_plan_step` won all 12 turns at 0.94-1.00, after the same `walkTo` had failed five times | a plan step reads sensible no matter how the last attempt went; goals need Minecraft's `canContinueToUse` |
-| 2 | dropped the plan after 3 failures, then cycled: plan, plan, plan, one tap, plan… | `sequence(Up)` returns **Ok** having moved nothing, and that was resetting the counter |
-| 3 | counted effect instead of outcome — then tapped Up into the same wall for 21 turns | the rule has to apply per goal, not only to the plan |
-| 4 | rotated Up→Down→Left→Right→Up correctly, party still never moved | the turn-1 `boot` had opened the main menu on an already-booted game; every later turn read as `Overworld` while Up and Down moved a cursor |
-| 5 | `boot` T1, `enter_coneria` T3, `enter_weapon_shop` T6 | matches the chat-model baseline's T1/T2/T4, at ~100 ms a turn instead of seconds |
-
-Run 5 then sat at the weapon counter pressing A, Up, Down and B without buying. That is
-the known `buy_weapons` difficulty, and the chat-model Executor needs a long shopping
-playbook in its prompt to get through it — eight generic goals and a 4B readout do not
-replace that. The selector gets the party there; it does not yet do the shopping.
-
-The fourth run is the one worth keeping in mind. The Advisor's opening plan always starts
-with `boot`, and the turn loop has already booted by the time it runs. The chat-model
-Executor sees the screenshot and quietly ignores that step. The selector took the plan at
-its word — so `Ff1Goals.PHASE_GUARDS` now stops a plan step from routing around a guard
-its own goal already carries, and `back_out_of_menu` is offered whenever nothing has moved
-for a while, whatever the phase claims. A menu the classifier does not recognise looks
-exactly like that from the outside: the screen keeps changing and the party never does.
+Nothing here guesses at game internals the project has not established. Where a byte is
+used, it was verified: `playerFloatState` (`$001D`) is 0 on the ground because over a
+160-turn run Mario's y held still on 103 of the 106 turns where it read 0 and moved on 50
+of the 53 where it read 1.
 
 ## Making it fast enough to watch
 

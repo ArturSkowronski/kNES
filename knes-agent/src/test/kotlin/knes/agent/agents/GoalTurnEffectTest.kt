@@ -6,7 +6,7 @@ import io.kotest.matchers.string.shouldNotContain
 import knes.agent.decision.Choice
 import knes.agent.decision.DecisionModel
 import knes.agent.decision.Ranking
-import knes.agent.goals.Ff1Goals
+import knes.agent.goals.Goals
 import knes.agent.goals.GoalSelector
 import knes.agent.llm.ChatLlm
 import knes.agent.llm.HaikuClient
@@ -87,7 +87,7 @@ class GoalTurnEffectTest : FunSpec({
         val chat = UnusedChat()
         val executor = ExecutorAgent(
             SonnetClient(chat), HaikuClient(chat), SilentToolSurface(), memory, run,
-            goals = GoalSelector(Ff1Goals.all(), picker),
+            goals = GoalSelector(Goals.of("ff1"), picker),
             phaseProvider = { Phase.Town },
         )
 
@@ -111,7 +111,7 @@ class GoalTurnEffectTest : FunSpec({
         val chat = UnusedChat()
         val executor = ExecutorAgent(
             SonnetClient(chat), HaikuClient(chat), SilentToolSurface(), memory, run,
-            goals = GoalSelector(Ff1Goals.all(), picker),
+            goals = GoalSelector(Goals.of("ff1"), picker),
             phaseProvider = { Phase.Town },
         )
 

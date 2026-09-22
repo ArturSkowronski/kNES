@@ -69,15 +69,24 @@ object DecisionModels {
         }
     }
 
-    /** Builds and starts the model, or returns null when decisions stay with the chat model. */
-    suspend fun fromEnvironment(workingDir: File? = null): DecisionModel? =
+    /**
+     * Builds and starts the model, or returns null when decisions stay with the chat model.
+     *
+     * [frame] is the game's own choice of how large a picture the model should look at,
+     * from its profile; `SEMIF_IMAGE_SIZE` overrides it for a one-off experiment.
+     */
+    suspend fun fromEnvironment(workingDir: File? = null, frame: String? = null): DecisionModel? =
         when (select(env("KNES_DECISION"))) {
             Kind.Off -> null
             Kind.DeclaredOrder -> DeclaredOrder
             Kind.SemIf -> SemIfProcess(semIfCommand(), workingDir = workingDir).start()
             // The vision tower needs mlx-vlm, which SemIf keeps in its own environment.
             Kind.Pixels -> SemIfProcess(
-                semIfCommand(python = env("SEMIF_VLM_PYTHON") ?: env("SEMIF_PYTHON") ?: "python3", backend = "pixels"),
+                semIfCommand(
+                    python = env("SEMIF_VLM_PYTHON") ?: env("SEMIF_PYTHON") ?: "python3",
+                    backend = "pixels",
+                    imageSize = env("SEMIF_IMAGE_SIZE") ?: frame,
+                ),
                 workingDir = workingDir,
             ).start()
         }

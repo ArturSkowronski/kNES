@@ -3,197 +3,799 @@
   "id": "ff1",
   "description": "Final Fantasy (1987) memory map",
   "addresses": {
-    "screenState": {"address": "0x0081", "description": "Screen state (0x68=battle, 0x63=map after battle)"},
-    "locationType": {"address": "0x000D", "description": "Room/altar flag (0xD1=castle/dungeon room). NOT canonical 'in interior' — use mapflags."},
-    "mapflags": {"address": "0x002D", "description": "Disch mapflags: bit 0 = in standard map (town/castle/dungeon), bit 1 = column-drawing"},
-    "currentMapId": {"address": "0x0048", "description": "Disch cur_map: canonical current standard-map ID (town/castle/dungeon)"},
-    "curTileset": {"address": "0x0049", "description": "Disch cur_tileset: tileset for current standard map"},
-    "facing": {"address": "0x0033", "description": "Disch facing: 1=R 2=L 4=D 8=U"},
-    "vehicle": {"address": "0x0042", "description": "Disch vehicle: 1=walk 2=canoe 4=ship 8=airship"},
-    "menuCursor": {"address": "0x0062", "description": "Menu cursor position / finger position"},
-    "menuHandX": {"address": "0x6AE3", "description": "Menu hand cursor screen X coordinate"},
-    "menuHandY": {"address": "0x6AE4", "description": "Menu hand cursor screen Y coordinate"},
-
-    "worldX": {"address": "0x0027", "description": "Disch ow_scroll_x: world map X (tiles)"},
-    "worldY": {"address": "0x0028", "description": "Disch ow_scroll_y: world map Y (tiles)"},
-    "smPlayerX": {"address": "0x0068", "description": "Disch sm_player_x: PARTY X on standard map (canonical party tile)"},
-    "smPlayerY": {"address": "0x0069", "description": "Disch sm_player_y: PARTY Y on standard map"},
-    "localX": {"address": "0x0029", "description": "Disch sm_scroll_x: standard-map CAMERA scroll X (NOT party — use smPlayerX)"},
-    "localY": {"address": "0x002A", "description": "Disch sm_scroll_y: standard-map CAMERA scroll Y"},
-    "scrolling": {"address": "0x0034", "description": "Disch move_speed: pixels to move per frame (map)"},
-
-    "goldLow": {"address": "0x601C", "description": "Gold (low byte)"},
-    "goldMid": {"address": "0x601D", "description": "Gold (middle byte)"},
-    "goldHigh": {"address": "0x601E", "description": "Gold (high byte)"},
-
-    "encounterCounter": {"address": "0x00F5", "description": "Steps until next random encounter (decrements)", "hidden": true},
-    "nextEnemyType": {"address": "0x00F7", "description": "Next battle enemy type index", "hidden": true},
-    "responseRate": {"address": "0x00FA", "description": "Response rate setting (1-8)"},
-    "bootFlag": {"address": "0x00F9", "description": "Boot flag (0x4D=warm boot, skips intro)"},
-
-    "char1_class": {"address": "0x6100", "description": "Char 1 class: 0=FT 1=TH 2=BB 3=RM 4=WM 5=BM (post-promotion: 0=KN 1=NJ 2=MA 3=RW 4=WW 5=BW)"},
-    "char1_status": {"address": "0x6101", "description": "Char 1 status flags (bit0=dead, bit1=stone, bit2=poison, bit3=blind, bit5=sleep, bit6=mute)"},
-    "char1_xpLow": {"address": "0x6107", "description": "Char 1 XP (low byte)"},
-    "char1_xpHigh": {"address": "0x6108", "description": "Char 1 XP (high byte)"},
-    "char1_hpLow": {"address": "0x610A", "description": "Char 1 current HP (low byte)"},
-    "char1_hpHigh": {"address": "0x610B", "description": "Char 1 current HP (high byte)"},
-    "char1_maxHpLow": {"address": "0x610C", "description": "Char 1 max HP (low byte)"},
-    "char1_maxHpHigh": {"address": "0x610D", "description": "Char 1 max HP (high byte)"},
-    "char1_str": {"address": "0x6110", "description": "Char 1 strength"},
-    "char1_agi": {"address": "0x6111", "description": "Char 1 agility"},
-    "char1_int": {"address": "0x6112", "description": "Char 1 intelligence"},
-    "char1_vit": {"address": "0x6113", "description": "Char 1 vitality"},
-    "char1_luck": {"address": "0x6114", "description": "Char 1 luck"},
-    "char1_level": {"address": "0x6126", "description": "Char 1 level (stored as level-1)"},
-
-    "char2_class": {"address": "0x6140", "description": "Char 2 class (see char1_class)"},
-    "char2_status": {"address": "0x6141", "description": "Char 2 status flags"},
-    "char2_xpLow": {"address": "0x6147", "description": "Char 2 XP (low byte)"},
-    "char2_xpHigh": {"address": "0x6148", "description": "Char 2 XP (high byte)"},
-    "char2_hpLow": {"address": "0x614A", "description": "Char 2 current HP (low byte)"},
-    "char2_hpHigh": {"address": "0x614B", "description": "Char 2 current HP (high byte)"},
-    "char2_maxHpLow": {"address": "0x614C", "description": "Char 2 max HP (low byte)"},
-    "char2_maxHpHigh": {"address": "0x614D", "description": "Char 2 max HP (high byte)"},
-    "char2_str": {"address": "0x6150", "description": "Char 2 strength"},
-    "char2_agi": {"address": "0x6151", "description": "Char 2 agility"},
-    "char2_int": {"address": "0x6152", "description": "Char 2 intelligence"},
-    "char2_vit": {"address": "0x6153", "description": "Char 2 vitality"},
-    "char2_luck": {"address": "0x6154", "description": "Char 2 luck"},
-    "char2_level": {"address": "0x6166", "description": "Char 2 level (stored as level-1)"},
-
-    "char3_class": {"address": "0x6180", "description": "Char 3 class (see char1_class)"},
-    "char3_status": {"address": "0x6181", "description": "Char 3 status flags"},
-    "char3_xpLow": {"address": "0x6187", "description": "Char 3 XP (low byte)"},
-    "char3_xpHigh": {"address": "0x6188", "description": "Char 3 XP (high byte)"},
-    "char3_hpLow": {"address": "0x618A", "description": "Char 3 current HP (low byte)"},
-    "char3_hpHigh": {"address": "0x618B", "description": "Char 3 current HP (high byte)"},
-    "char3_maxHpLow": {"address": "0x618C", "description": "Char 3 max HP (low byte)"},
-    "char3_maxHpHigh": {"address": "0x618D", "description": "Char 3 max HP (high byte)"},
-    "char3_str": {"address": "0x6190", "description": "Char 3 strength"},
-    "char3_agi": {"address": "0x6191", "description": "Char 3 agility"},
-    "char3_int": {"address": "0x6192", "description": "Char 3 intelligence"},
-    "char3_vit": {"address": "0x6193", "description": "Char 3 vitality"},
-    "char3_luck": {"address": "0x6194", "description": "Char 3 luck"},
-    "char3_level": {"address": "0x61A6", "description": "Char 3 level (stored as level-1)"},
-
-    "char4_class": {"address": "0x61C0", "description": "Char 4 class (see char1_class)"},
-    "char4_status": {"address": "0x61C1", "description": "Char 4 status flags"},
-    "char4_xpLow": {"address": "0x61C7", "description": "Char 4 XP (low byte)"},
-    "char4_xpHigh": {"address": "0x61C8", "description": "Char 4 XP (high byte)"},
-    "char4_hpLow": {"address": "0x61CA", "description": "Char 4 current HP (low byte)"},
-    "char4_hpHigh": {"address": "0x61CB", "description": "Char 4 current HP (high byte)"},
-    "char4_maxHpLow": {"address": "0x61CC", "description": "Char 4 max HP (low byte)"},
-    "char4_maxHpHigh": {"address": "0x61CD", "description": "Char 4 max HP (high byte)"},
-    "char4_str": {"address": "0x61D0", "description": "Char 4 strength"},
-    "char4_agi": {"address": "0x61D1", "description": "Char 4 agility"},
-    "char4_int": {"address": "0x61D2", "description": "Char 4 intelligence"},
-    "char4_vit": {"address": "0x61D3", "description": "Char 4 vitality"},
-    "char4_luck": {"address": "0x61D4", "description": "Char 4 luck"},
-    "char4_level": {"address": "0x61E6", "description": "Char 4 level (stored as level-1)"},
-
-    "char1_weapon0": {"address": "0x6118", "description": "Char 1 weapon slot 0 (high bit=equipped, low 7=weaponId)"},
-    "char1_weapon1": {"address": "0x6119", "description": "Char 1 weapon slot 1"},
-    "char1_weapon2": {"address": "0x611A", "description": "Char 1 weapon slot 2"},
-    "char1_weapon3": {"address": "0x611B", "description": "Char 1 weapon slot 3"},
-
-    "char2_weapon0": {"address": "0x6158", "description": "Char 2 weapon slot 0 (high bit=equipped, low 7=weaponId)"},
-    "char2_weapon1": {"address": "0x6159", "description": "Char 2 weapon slot 1"},
-    "char2_weapon2": {"address": "0x615A", "description": "Char 2 weapon slot 2"},
-    "char2_weapon3": {"address": "0x615B", "description": "Char 2 weapon slot 3"},
-
-    "char3_weapon0": {"address": "0x6198", "description": "Char 3 weapon slot 0 (high bit=equipped, low 7=weaponId)"},
-    "char3_weapon1": {"address": "0x6199", "description": "Char 3 weapon slot 1"},
-    "char3_weapon2": {"address": "0x619A", "description": "Char 3 weapon slot 2"},
-    "char3_weapon3": {"address": "0x619B", "description": "Char 3 weapon slot 3"},
-
-    "char4_weapon0": {"address": "0x61D8", "description": "Char 4 weapon slot 0 (high bit=equipped, low 7=weaponId)"},
-    "char4_weapon1": {"address": "0x61D9", "description": "Char 4 weapon slot 1"},
-    "char4_weapon2": {"address": "0x61DA", "description": "Char 4 weapon slot 2"},
-    "char4_weapon3": {"address": "0x61DB", "description": "Char 4 weapon slot 3"},
-
-    "battleTurn": {"address": "0x6830", "description": "Battle turn indicator (0x55=player turn)"},
-    "battleInitCounter": {"address": "0x685E", "description": "Battle init counter (0-4, counts up during battle start)"},
-    "preemptiveAmbush": {"address": "0x6856", "description": "Pre-emptive/ambush indicator", "hidden": true},
-    "hitCount": {"address": "0x686A", "description": "Hit count for current attack", "hidden": true},
-    "criticalHit": {"address": "0x686B", "description": "Critical hit flag", "hidden": true},
-    "targetDamage": {"address": "0x6876", "description": "Damage value for current target", "hidden": true},
-    "battleOrderIndex": {"address": "0x688E", "description": "Whose turn it is (index into battle order)"},
-    "activeCharacter": {"address": "0x6AA9", "description": "Current active character ID in battle"},
-    "targetedEnemy": {"address": "0x6AAA", "description": "Currently targeted enemy index"},
-    "attackResult": {"address": "0x6B2A", "description": "Hit indicator (0x11=hit, 0x0F=miss)"},
-    "damageDisplay": {"address": "0x6B2B", "description": "Damage result display (0x40/0x64=miss)"},
-    "attackType": {"address": "0x6B3B", "description": "Attack type display (0x2C=critical, 0xF3=kill, 0x21=normal)"},
-    "enemyType1": {"address": "0x6BB7", "description": "Enemy type slot 1 (0xFF=empty)"},
-    "enemyMainType": {"address": "0x6BC9", "description": "Main enemy type in current battle"},
-    "enemy1_hpLow": {"address": "0x6BD5", "description": "Enemy 1 HP (low byte)", "hidden": true},
-    "enemy1_hpHigh": {"address": "0x6BD6", "description": "Enemy 1 HP (high byte)", "hidden": true},
-    "enemy1_dead": {"address": "0x6BD9", "description": "Enemy 1 dead flag"},
-    "enemy2_hpLow": {"address": "0x6BE9", "description": "Enemy 2 HP (low byte)", "hidden": true},
-    "enemy2_hpHigh": {"address": "0x6BEA", "description": "Enemy 2 HP (high byte)", "hidden": true},
-    "enemy2_dead": {"address": "0x6BED", "description": "Enemy 2 dead flag"},
-    "enemyCount": {"address": "0x6C93", "description": "Total enemy count in battle"}
+    "screenState": {
+      "address": "0x0081",
+      "description": "Screen state (0x68=battle, 0x63=map after battle)"
+    },
+    "locationType": {
+      "address": "0x000D",
+      "description": "Room/altar flag (0xD1=castle/dungeon room). NOT canonical 'in interior' \u2014 use mapflags."
+    },
+    "mapflags": {
+      "address": "0x002D",
+      "description": "Disch mapflags: bit 0 = in standard map (town/castle/dungeon), bit 1 = column-drawing"
+    },
+    "currentMapId": {
+      "address": "0x0048",
+      "description": "Disch cur_map: canonical current standard-map ID (town/castle/dungeon)"
+    },
+    "curTileset": {
+      "address": "0x0049",
+      "description": "Disch cur_tileset: tileset for current standard map"
+    },
+    "facing": {
+      "address": "0x0033",
+      "description": "Disch facing: 1=R 2=L 4=D 8=U"
+    },
+    "vehicle": {
+      "address": "0x0042",
+      "description": "Disch vehicle: 1=walk 2=canoe 4=ship 8=airship"
+    },
+    "menuCursor": {
+      "address": "0x0062",
+      "description": "Menu cursor position / finger position"
+    },
+    "menuHandX": {
+      "address": "0x6AE3",
+      "description": "Menu hand cursor screen X coordinate"
+    },
+    "menuHandY": {
+      "address": "0x6AE4",
+      "description": "Menu hand cursor screen Y coordinate"
+    },
+    "worldX": {
+      "address": "0x0027",
+      "description": "Disch ow_scroll_x: world map X (tiles)"
+    },
+    "worldY": {
+      "address": "0x0028",
+      "description": "Disch ow_scroll_y: world map Y (tiles)"
+    },
+    "smPlayerX": {
+      "address": "0x0068",
+      "description": "Disch sm_player_x: PARTY X on standard map (canonical party tile)"
+    },
+    "smPlayerY": {
+      "address": "0x0069",
+      "description": "Disch sm_player_y: PARTY Y on standard map"
+    },
+    "localX": {
+      "address": "0x0029",
+      "description": "Disch sm_scroll_x: standard-map CAMERA scroll X (NOT party \u2014 use smPlayerX)"
+    },
+    "localY": {
+      "address": "0x002A",
+      "description": "Disch sm_scroll_y: standard-map CAMERA scroll Y"
+    },
+    "scrolling": {
+      "address": "0x0034",
+      "description": "Disch move_speed: pixels to move per frame (map)"
+    },
+    "goldLow": {
+      "address": "0x601C",
+      "description": "Gold (low byte)"
+    },
+    "goldMid": {
+      "address": "0x601D",
+      "description": "Gold (middle byte)"
+    },
+    "goldHigh": {
+      "address": "0x601E",
+      "description": "Gold (high byte)"
+    },
+    "encounterCounter": {
+      "address": "0x00F5",
+      "description": "Steps until next random encounter (decrements)",
+      "hidden": true
+    },
+    "nextEnemyType": {
+      "address": "0x00F7",
+      "description": "Next battle enemy type index",
+      "hidden": true
+    },
+    "responseRate": {
+      "address": "0x00FA",
+      "description": "Response rate setting (1-8)"
+    },
+    "bootFlag": {
+      "address": "0x00F9",
+      "description": "Boot flag (0x4D=warm boot, skips intro)"
+    },
+    "char1_class": {
+      "address": "0x6100",
+      "description": "Char 1 class: 0=FT 1=TH 2=BB 3=RM 4=WM 5=BM (post-promotion: 0=KN 1=NJ 2=MA 3=RW 4=WW 5=BW)"
+    },
+    "char1_status": {
+      "address": "0x6101",
+      "description": "Char 1 status flags (bit0=dead, bit1=stone, bit2=poison, bit3=blind, bit5=sleep, bit6=mute)"
+    },
+    "char1_xpLow": {
+      "address": "0x6107",
+      "description": "Char 1 XP (low byte)"
+    },
+    "char1_xpHigh": {
+      "address": "0x6108",
+      "description": "Char 1 XP (high byte)"
+    },
+    "char1_hpLow": {
+      "address": "0x610A",
+      "description": "Char 1 current HP (low byte)"
+    },
+    "char1_hpHigh": {
+      "address": "0x610B",
+      "description": "Char 1 current HP (high byte)"
+    },
+    "char1_maxHpLow": {
+      "address": "0x610C",
+      "description": "Char 1 max HP (low byte)"
+    },
+    "char1_maxHpHigh": {
+      "address": "0x610D",
+      "description": "Char 1 max HP (high byte)"
+    },
+    "char1_str": {
+      "address": "0x6110",
+      "description": "Char 1 strength"
+    },
+    "char1_agi": {
+      "address": "0x6111",
+      "description": "Char 1 agility"
+    },
+    "char1_int": {
+      "address": "0x6112",
+      "description": "Char 1 intelligence"
+    },
+    "char1_vit": {
+      "address": "0x6113",
+      "description": "Char 1 vitality"
+    },
+    "char1_luck": {
+      "address": "0x6114",
+      "description": "Char 1 luck"
+    },
+    "char1_level": {
+      "address": "0x6126",
+      "description": "Char 1 level (stored as level-1)"
+    },
+    "char2_class": {
+      "address": "0x6140",
+      "description": "Char 2 class (see char1_class)"
+    },
+    "char2_status": {
+      "address": "0x6141",
+      "description": "Char 2 status flags"
+    },
+    "char2_xpLow": {
+      "address": "0x6147",
+      "description": "Char 2 XP (low byte)"
+    },
+    "char2_xpHigh": {
+      "address": "0x6148",
+      "description": "Char 2 XP (high byte)"
+    },
+    "char2_hpLow": {
+      "address": "0x614A",
+      "description": "Char 2 current HP (low byte)"
+    },
+    "char2_hpHigh": {
+      "address": "0x614B",
+      "description": "Char 2 current HP (high byte)"
+    },
+    "char2_maxHpLow": {
+      "address": "0x614C",
+      "description": "Char 2 max HP (low byte)"
+    },
+    "char2_maxHpHigh": {
+      "address": "0x614D",
+      "description": "Char 2 max HP (high byte)"
+    },
+    "char2_str": {
+      "address": "0x6150",
+      "description": "Char 2 strength"
+    },
+    "char2_agi": {
+      "address": "0x6151",
+      "description": "Char 2 agility"
+    },
+    "char2_int": {
+      "address": "0x6152",
+      "description": "Char 2 intelligence"
+    },
+    "char2_vit": {
+      "address": "0x6153",
+      "description": "Char 2 vitality"
+    },
+    "char2_luck": {
+      "address": "0x6154",
+      "description": "Char 2 luck"
+    },
+    "char2_level": {
+      "address": "0x6166",
+      "description": "Char 2 level (stored as level-1)"
+    },
+    "char3_class": {
+      "address": "0x6180",
+      "description": "Char 3 class (see char1_class)"
+    },
+    "char3_status": {
+      "address": "0x6181",
+      "description": "Char 3 status flags"
+    },
+    "char3_xpLow": {
+      "address": "0x6187",
+      "description": "Char 3 XP (low byte)"
+    },
+    "char3_xpHigh": {
+      "address": "0x6188",
+      "description": "Char 3 XP (high byte)"
+    },
+    "char3_hpLow": {
+      "address": "0x618A",
+      "description": "Char 3 current HP (low byte)"
+    },
+    "char3_hpHigh": {
+      "address": "0x618B",
+      "description": "Char 3 current HP (high byte)"
+    },
+    "char3_maxHpLow": {
+      "address": "0x618C",
+      "description": "Char 3 max HP (low byte)"
+    },
+    "char3_maxHpHigh": {
+      "address": "0x618D",
+      "description": "Char 3 max HP (high byte)"
+    },
+    "char3_str": {
+      "address": "0x6190",
+      "description": "Char 3 strength"
+    },
+    "char3_agi": {
+      "address": "0x6191",
+      "description": "Char 3 agility"
+    },
+    "char3_int": {
+      "address": "0x6192",
+      "description": "Char 3 intelligence"
+    },
+    "char3_vit": {
+      "address": "0x6193",
+      "description": "Char 3 vitality"
+    },
+    "char3_luck": {
+      "address": "0x6194",
+      "description": "Char 3 luck"
+    },
+    "char3_level": {
+      "address": "0x61A6",
+      "description": "Char 3 level (stored as level-1)"
+    },
+    "char4_class": {
+      "address": "0x61C0",
+      "description": "Char 4 class (see char1_class)"
+    },
+    "char4_status": {
+      "address": "0x61C1",
+      "description": "Char 4 status flags"
+    },
+    "char4_xpLow": {
+      "address": "0x61C7",
+      "description": "Char 4 XP (low byte)"
+    },
+    "char4_xpHigh": {
+      "address": "0x61C8",
+      "description": "Char 4 XP (high byte)"
+    },
+    "char4_hpLow": {
+      "address": "0x61CA",
+      "description": "Char 4 current HP (low byte)"
+    },
+    "char4_hpHigh": {
+      "address": "0x61CB",
+      "description": "Char 4 current HP (high byte)"
+    },
+    "char4_maxHpLow": {
+      "address": "0x61CC",
+      "description": "Char 4 max HP (low byte)"
+    },
+    "char4_maxHpHigh": {
+      "address": "0x61CD",
+      "description": "Char 4 max HP (high byte)"
+    },
+    "char4_str": {
+      "address": "0x61D0",
+      "description": "Char 4 strength"
+    },
+    "char4_agi": {
+      "address": "0x61D1",
+      "description": "Char 4 agility"
+    },
+    "char4_int": {
+      "address": "0x61D2",
+      "description": "Char 4 intelligence"
+    },
+    "char4_vit": {
+      "address": "0x61D3",
+      "description": "Char 4 vitality"
+    },
+    "char4_luck": {
+      "address": "0x61D4",
+      "description": "Char 4 luck"
+    },
+    "char4_level": {
+      "address": "0x61E6",
+      "description": "Char 4 level (stored as level-1)"
+    },
+    "char1_weapon0": {
+      "address": "0x6118",
+      "description": "Char 1 weapon slot 0 (high bit=equipped, low 7=weaponId)"
+    },
+    "char1_weapon1": {
+      "address": "0x6119",
+      "description": "Char 1 weapon slot 1"
+    },
+    "char1_weapon2": {
+      "address": "0x611A",
+      "description": "Char 1 weapon slot 2"
+    },
+    "char1_weapon3": {
+      "address": "0x611B",
+      "description": "Char 1 weapon slot 3"
+    },
+    "char2_weapon0": {
+      "address": "0x6158",
+      "description": "Char 2 weapon slot 0 (high bit=equipped, low 7=weaponId)"
+    },
+    "char2_weapon1": {
+      "address": "0x6159",
+      "description": "Char 2 weapon slot 1"
+    },
+    "char2_weapon2": {
+      "address": "0x615A",
+      "description": "Char 2 weapon slot 2"
+    },
+    "char2_weapon3": {
+      "address": "0x615B",
+      "description": "Char 2 weapon slot 3"
+    },
+    "char3_weapon0": {
+      "address": "0x6198",
+      "description": "Char 3 weapon slot 0 (high bit=equipped, low 7=weaponId)"
+    },
+    "char3_weapon1": {
+      "address": "0x6199",
+      "description": "Char 3 weapon slot 1"
+    },
+    "char3_weapon2": {
+      "address": "0x619A",
+      "description": "Char 3 weapon slot 2"
+    },
+    "char3_weapon3": {
+      "address": "0x619B",
+      "description": "Char 3 weapon slot 3"
+    },
+    "char4_weapon0": {
+      "address": "0x61D8",
+      "description": "Char 4 weapon slot 0 (high bit=equipped, low 7=weaponId)"
+    },
+    "char4_weapon1": {
+      "address": "0x61D9",
+      "description": "Char 4 weapon slot 1"
+    },
+    "char4_weapon2": {
+      "address": "0x61DA",
+      "description": "Char 4 weapon slot 2"
+    },
+    "char4_weapon3": {
+      "address": "0x61DB",
+      "description": "Char 4 weapon slot 3"
+    },
+    "battleTurn": {
+      "address": "0x6830",
+      "description": "Battle turn indicator (0x55=player turn)"
+    },
+    "battleInitCounter": {
+      "address": "0x685E",
+      "description": "Battle init counter (0-4, counts up during battle start)"
+    },
+    "preemptiveAmbush": {
+      "address": "0x6856",
+      "description": "Pre-emptive/ambush indicator",
+      "hidden": true
+    },
+    "hitCount": {
+      "address": "0x686A",
+      "description": "Hit count for current attack",
+      "hidden": true
+    },
+    "criticalHit": {
+      "address": "0x686B",
+      "description": "Critical hit flag",
+      "hidden": true
+    },
+    "targetDamage": {
+      "address": "0x6876",
+      "description": "Damage value for current target",
+      "hidden": true
+    },
+    "battleOrderIndex": {
+      "address": "0x688E",
+      "description": "Whose turn it is (index into battle order)"
+    },
+    "activeCharacter": {
+      "address": "0x6AA9",
+      "description": "Current active character ID in battle"
+    },
+    "targetedEnemy": {
+      "address": "0x6AAA",
+      "description": "Currently targeted enemy index"
+    },
+    "attackResult": {
+      "address": "0x6B2A",
+      "description": "Hit indicator (0x11=hit, 0x0F=miss)"
+    },
+    "damageDisplay": {
+      "address": "0x6B2B",
+      "description": "Damage result display (0x40/0x64=miss)"
+    },
+    "attackType": {
+      "address": "0x6B3B",
+      "description": "Attack type display (0x2C=critical, 0xF3=kill, 0x21=normal)"
+    },
+    "enemyType1": {
+      "address": "0x6BB7",
+      "description": "Enemy type slot 1 (0xFF=empty)"
+    },
+    "enemyMainType": {
+      "address": "0x6BC9",
+      "description": "Main enemy type in current battle"
+    },
+    "enemy1_hpLow": {
+      "address": "0x6BD5",
+      "description": "Enemy 1 HP (low byte)",
+      "hidden": true
+    },
+    "enemy1_hpHigh": {
+      "address": "0x6BD6",
+      "description": "Enemy 1 HP (high byte)",
+      "hidden": true
+    },
+    "enemy1_dead": {
+      "address": "0x6BD9",
+      "description": "Enemy 1 dead flag"
+    },
+    "enemy2_hpLow": {
+      "address": "0x6BE9",
+      "description": "Enemy 2 HP (low byte)",
+      "hidden": true
+    },
+    "enemy2_hpHigh": {
+      "address": "0x6BEA",
+      "description": "Enemy 2 HP (high byte)",
+      "hidden": true
+    },
+    "enemy2_dead": {
+      "address": "0x6BED",
+      "description": "Enemy 2 dead flag"
+    },
+    "enemyCount": {
+      "address": "0x6C93",
+      "description": "Total enemy count in battle"
+    }
   },
   "semantics": {
     "version": 1,
     "position": {
-      "worldX": ["worldX"],
-      "worldY": ["worldY"],
-      "localX": ["smPlayerX", "localX"],
-      "localY": ["smPlayerY", "localY"]
+      "worldX": [
+        "worldX"
+      ],
+      "worldY": [
+        "worldY"
+      ],
+      "localX": [
+        "smPlayerX",
+        "localX"
+      ],
+      "localY": [
+        "smPlayerY",
+        "localY"
+      ]
     },
     "phases": [
-      {"phase": "Boot", "when": [
-        {"field": "char1_hpLow", "equals": 0, "default": 0},
-        {"field": "worldX", "equals": 0, "default": 0}
-      ]},
-      {"phase": "Battle", "when": [
-        {"field": "screenState", "equals": 104}
-      ]},
-      {"phase": "MenuStuck", "when": [
-        {"field": "menuState", "notEquals": 0}
-      ]},
-      {"phase": "Overworld", "when": [
-        {"field": "currentMapId", "equals": 0},
-        {"field": "mapflags", "bitClear": 1, "default": 0}
-      ]},
-      {"phase": "Town", "when": [
-        {"field": "currentMapId", "equals": 0},
-        {"field": "mapflags", "bitSet": 1}
-      ]},
-      {"phase": "Indoors", "when": [
-        {"field": "currentMapId", "atLeast": 0}
-      ]}
+      {
+        "phase": "Boot",
+        "when": [
+          {
+            "field": "char1_hpLow",
+            "equals": 0,
+            "default": 0
+          },
+          {
+            "field": "worldX",
+            "equals": 0,
+            "default": 0
+          }
+        ]
+      },
+      {
+        "phase": "Battle",
+        "when": [
+          {
+            "field": "screenState",
+            "equals": 104
+          }
+        ]
+      },
+      {
+        "phase": "MenuStuck",
+        "when": [
+          {
+            "field": "menuState",
+            "notEquals": 0
+          }
+        ]
+      },
+      {
+        "phase": "Overworld",
+        "when": [
+          {
+            "field": "currentMapId",
+            "equals": 0
+          },
+          {
+            "field": "mapflags",
+            "bitClear": 1,
+            "default": 0
+          }
+        ]
+      },
+      {
+        "phase": "Town",
+        "when": [
+          {
+            "field": "currentMapId",
+            "equals": 0
+          },
+          {
+            "field": "mapflags",
+            "bitSet": 1
+          }
+        ]
+      },
+      {
+        "phase": "Indoors",
+        "when": [
+          {
+            "field": "currentMapId",
+            "atLeast": 0
+          }
+        ]
+      }
     ],
     "signals": {
       "transitioning": [
-        {"field": "mapflags", "bitSet": 2}
+        {
+          "field": "mapflags",
+          "bitSet": 2
+        }
       ],
       "locationIdentity": [
-        {"field": "currentMapId"},
-        {"field": "mapflags", "mask": 1}
+        {
+          "field": "currentMapId"
+        },
+        {
+          "field": "mapflags",
+          "mask": 1
+        }
       ],
       "menuFingerprint": [
-        {"field": "screenState"},
-        {"field": "menuCursor"},
-        {"field": "menuHandX"},
-        {"field": "menuHandY"}
+        {
+          "field": "screenState"
+        },
+        {
+          "field": "menuCursor"
+        },
+        {
+          "field": "menuHandX"
+        },
+        {
+          "field": "menuHandY"
+        }
       ]
     },
     "landmarks": [
       {
-        "id": "ff1.coneria", "name": "Coneria", "phases": ["Town"],
-        "worldX": {"min": 140, "max": 154}, "worldY": {"min": 150, "max": 162},
-        "confidence": 0.90, "reason": "FF1 town overlay near known Coneria world anchor"
+        "id": "ff1.coneria",
+        "name": "Coneria",
+        "phases": [
+          "Town"
+        ],
+        "worldX": {
+          "min": 140,
+          "max": 154
+        },
+        "worldY": {
+          "min": 150,
+          "max": 162
+        },
+        "confidence": 0.9,
+        "reason": "FF1 town overlay near known Coneria world anchor"
       },
       {
-        "id": "ff1.coneria_region", "name": "Coneria region", "phases": ["Overworld", "Battle"],
-        "worldX": {"min": 140, "max": 154}, "worldY": {"min": 150, "max": 162},
-        "confidence": 0.80, "reason": "World coordinates match known Coneria starting region"
+        "id": "ff1.coneria_region",
+        "name": "Coneria region",
+        "phases": [
+          "Overworld",
+          "Battle"
+        ],
+        "worldX": {
+          "min": 140,
+          "max": 154
+        },
+        "worldY": {
+          "min": 150,
+          "max": 162
+        },
+        "confidence": 0.8,
+        "reason": "World coordinates match known Coneria starting region"
       },
       {
-        "id": "ff1.coneria_interior", "name": "Coneria interior", "phases": ["Indoors"],
-        "worldX": {"min": 140, "max": 154}, "worldY": {"min": 150, "max": 162},
-        "confidence": 0.70, "reason": "Interior while world anchor remains near Coneria"
+        "id": "ff1.coneria_interior",
+        "name": "Coneria interior",
+        "phases": [
+          "Indoors"
+        ],
+        "worldX": {
+          "min": 140,
+          "max": 154
+        },
+        "worldY": {
+          "min": 150,
+          "max": 162
+        },
+        "confidence": 0.7,
+        "reason": "Interior while world anchor remains near Coneria"
+      }
+    ]
+  },
+  "agent": {
+    "question": "Which of these should the party do on this turn?",
+    "frame": "256x240",
+    "state": [
+      {
+        "field": "goldLow",
+        "plusBytes": [
+          "goldMid",
+          "goldHigh"
+        ],
+        "label": "gold"
+      },
+      {
+        "field": "menuCursor",
+        "label": "menu cursor (Down presses since the last A)"
+      },
+      {
+        "field": "screenState",
+        "label": "screen state"
+      }
+    ],
+    "goals": [
+      {
+        "id": "boot",
+        "priority": 0,
+        "phases": [
+          "Boot"
+        ],
+        "tool": "boot",
+        "description": "Press through the title and intro screens until the party is standing on the map."
+      },
+      {
+        "id": "fight_battle",
+        "priority": 0,
+        "phases": [
+          "Battle"
+        ],
+        "tool": "battleFightAll",
+        "description": "Attack with every character until the battle is over."
+      },
+      {
+        "id": "back_out_of_menu",
+        "priority": 5,
+        "phases": [
+          "Town",
+          "Indoors",
+          "MenuStuck"
+        ],
+        "alsoWhenStuckFor": 3,
+        "tool": "sequence",
+        "args": {
+          "buttons": "B"
+        },
+        "description": "Press B to close the menu or dialog that is open and get back to the map."
+      },
+      {
+        "id": "follow_plan_step",
+        "priority": 10,
+        "tool": "planStep",
+        "retryLimit": 3,
+        "phaseGuards": {
+          "boot": [
+            "Boot"
+          ],
+          "battleFightAll": [
+            "Battle"
+          ]
+        },
+        "description": "Do what the plan says next."
+      },
+      {
+        "id": "press_a",
+        "priority": 20,
+        "phases": [
+          "Town",
+          "Indoors",
+          "MenuStuck"
+        ],
+        "tool": "sequence",
+        "args": {
+          "buttons": "A"
+        },
+        "description": "Press A to talk to whoever is in front of the party, or to confirm what the open dialog is asking. In a shop this can confirm a SALE rather than a purchase, so only pick it when the dialog has been read."
+      },
+      {
+        "id": "step_north",
+        "priority": 30,
+        "phases": [
+          "Town",
+          "Indoors",
+          "Overworld"
+        ],
+        "tool": "sequence",
+        "args": {
+          "buttons": "Up"
+        },
+        "description": "Walk one tile north."
+      },
+      {
+        "id": "step_south",
+        "priority": 31,
+        "phases": [
+          "Town",
+          "Indoors",
+          "Overworld"
+        ],
+        "tool": "sequence",
+        "args": {
+          "buttons": "Down"
+        },
+        "description": "Walk one tile south."
+      },
+      {
+        "id": "step_west",
+        "priority": 32,
+        "phases": [
+          "Town",
+          "Indoors",
+          "Overworld"
+        ],
+        "tool": "sequence",
+        "args": {
+          "buttons": "Left"
+        },
+        "description": "Walk one tile west."
+      },
+      {
+        "id": "step_east",
+        "priority": 33,
+        "phases": [
+          "Town",
+          "Indoors",
+          "Overworld"
+        ],
+        "tool": "sequence",
+        "args": {
+          "buttons": "Right"
+        },
+        "description": "Walk one tile east."
       }
     ]
   }

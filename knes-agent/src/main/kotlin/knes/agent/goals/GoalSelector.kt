@@ -29,7 +29,16 @@ data class Selection(
 class GoalSelector(
     goals: List<Goal>,
     private val model: DecisionModel,
+    /** What this game asks. Per game, because "the party" was being asked in front of Mario. */
     private val question: String = DEFAULT_QUESTION,
+    /**
+     * The game-specific lines of state, from the profile.
+     *
+     * The turn, the phase and the position are true of any game; gold, lives and whether
+     * the player is airborne are not, and naming them all here would leave half the state
+     * reading "null" whichever game happened to be running.
+     */
+    private val gameState: (Map<String, Int>) -> List<String> = { emptyList() },
 ) {
     /**
      * Sorted once, at construction. Priority decides what the model *sees* when more
@@ -83,23 +92,7 @@ class GoalSelector(
         appendLine("milestone in progress: ${world.milestone}")
         appendLine("player position: ${world.sm.first},${world.sm.second}")
         world.world?.let { appendLine("position on the overworld: ${it.first},${it.second}") }
-        // Only the fields this profile actually watches, named the way it names them.
-        world.ram["gold"]?.let { appendLine("gold: $it") }
-        world.ram["menuCursor"]?.let { appendLine("menu cursor (Down presses since the last A): $it") }
-        world.ram["screenState"]?.let { appendLine("screen state: $it") }
-        world.ram["lives"]?.let { appendLine("lives left: $it") }
-        world.ram["coins"]?.let { appendLine("coins: $it") }
-        world.ram["enemyActive"]?.let { appendLine("enemies on screen: $it") }
-        // Whether the player is airborne changes what the options even mean, so it is
-        // said in words rather than left as a byte for the model to interpret.
-        world.ram["playerFloatState"]?.let { state ->
-            val rising = (world.ram["verticalVelocity"] ?: 0) > 127
-            appendLine(
-                if (state == 0) "the player is standing on solid ground"
-                else if (rising) "the player is in the air, still rising"
-                else "the player is in the air and coming down",
-            )
-        }
+        gameState(world.ram).forEach { appendLine(it) }
         val step = world.planStep
         appendLine(
             if (step == null) "the plan has no step for this turn"
